@@ -1,0 +1,28 @@
+{
+  "overview": "Save Shop System is a comprehensive mobile-first shop management app with ICP backend storage. Features include inventory management with FIFO batching, billing and invoicing, credit/udhaar tracking, staff performance analytics, profit calculations, dead stock alerts, returns management, and a professional 7-section dashboard with real-time business insights.",
+  "features": [
+    "Professional 7-section mobile dashboard with priority layout",
+    "Top Summary bar: Today Sales, Cash, UPI, Today Profit",
+    "Critical Alerts section: High Due Customers, Out of Stock, Over Sell",
+    "Stock Control: Low Stock, Out of Stock, Stock Value",
+    "Payment Control: Udhaar Top Customers with reminder actions",
+    "Smart Insights: Most Selling Products, High Profit Items, Low Price Alerts",
+    "Inventory Health: Expiry Alerts, Dead Stock, Slow Moving Items",
+    "FIFO batch-based inventory system",
+    "Credit/Udhaar tracking with Mark as Paid",
+    "Staff performance and credit risk analytics",
+    "ICP cloud backend — persists across devices",
+    "Smart selling price system with staff bonus"
+  ],
+  "category": "business",
+  "tags": [
+    "shop-management",
+    "inventory",
+    "billing",
+    "dashboard",
+    "mobile-first",
+    "business-analytics",
+    "icp"
+  ],
+  "last_updated": "2026-04-08T03:52:03.294Z"
+}

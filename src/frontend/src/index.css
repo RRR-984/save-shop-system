@@ -1,0 +1,210 @@
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/assets/fonts/PlusJakartaSans.woff2") format("woff2");
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.625rem;
+
+    /* Backgrounds */
+    --background: 0.975 0.006 240;
+    --foreground: 0.16 0.012 264;
+
+    /* Cards */
+    --card: 1 0 0;
+    --card-foreground: 0.16 0.012 264;
+
+    /* Popovers */
+    --popover: 1 0 0;
+    --popover-foreground: 0.16 0.012 264;
+
+    /* Primary: brand blue */
+    --primary: 0.55 0.2 258;
+    --primary-foreground: 1 0 0;
+
+    /* Secondary: light gray */
+    --secondary: 0.96 0.004 264;
+    --secondary-foreground: 0.16 0.012 264;
+
+    /* Muted */
+    --muted: 0.96 0.004 264;
+    --muted-foreground: 0.48 0.012 264;
+
+    /* Accent */
+    --accent: 0.93 0.018 258;
+    --accent-foreground: 0.55 0.2 258;
+
+    /* Destructive: red */
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 1 0 0;
+
+    /* Borders */
+    --border: 0.92 0.008 240;
+    --input: 0.92 0.008 240;
+    --ring: 0.55 0.2 258;
+
+    /* Success: teal */
+    --success: 0.67 0.14 192;
+    --success-foreground: 1 0 0;
+
+    /* Warning: amber */
+    --warning: 0.75 0.18 75;
+    --warning-foreground: 1 0 0;
+
+    /* Chart */
+    --chart-1: 0.55 0.2 258;
+    --chart-2: 0.67 0.14 192;
+    --chart-3: 0.75 0.18 75;
+    --chart-4: 0.577 0.245 27.325;
+    --chart-5: 0.6 0.12 308;
+
+    /* Sidebar: dark navy */
+    --sidebar: 0.18 0.025 250;
+    --sidebar-foreground: 0.86 0.008 264;
+    --sidebar-primary: 0.55 0.2 258;
+    --sidebar-primary-foreground: 1 0 0;
+    --sidebar-accent: 0.22 0.02 250;
+    --sidebar-accent-foreground: 0.86 0.008 264;
+    --sidebar-border: 0.24 0.018 250;
+    --sidebar-ring: 0.55 0.2 258;
+
+    /* Semantic extras */
+    --navy: 0.18 0.025 250;
+    --brand-blue: 0.55 0.2 258;
+    --danger: 0.577 0.245 27.325;
+    --teal: 0.67 0.14 192;
+    --amber: 0.75 0.18 75;
+
+    /* Role-based badges */
+    --role-owner-bg: 0.55 0.2 258;
+    --role-owner-fg: 1 0 0;
+    --role-manager-bg: 0.6 0.12 308;
+    --role-manager-fg: 1 0 0;
+    --role-staff-bg: 0.5 0.01 264;
+    --role-staff-fg: 0.86 0.008 264;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+    font-weight: 700;
+  }
+}
+
+@layer utilities {
+  /* Text helpers */
+  .text-brand-blue {
+    color: oklch(var(--brand-blue));
+  }
+  .text-success {
+    color: oklch(var(--teal));
+  }
+  .text-warning {
+    color: oklch(var(--amber));
+  }
+  .text-danger {
+    color: oklch(var(--danger));
+  }
+
+  /* Background helpers */
+  .bg-success-light {
+    background-color: oklch(var(--teal) / 0.12);
+  }
+  .bg-warning-light {
+    background-color: oklch(var(--amber) / 0.12);
+  }
+  .bg-danger-light {
+    background-color: oklch(var(--danger) / 0.12);
+  }
+  .bg-brand-blue {
+    background-color: oklch(var(--brand-blue));
+  }
+  .bg-sidebar {
+    background-color: oklch(var(--sidebar));
+  }
+
+  /* Shadow helpers */
+  .shadow-card {
+    box-shadow: 0 1px 4px 0 oklch(0 0 0 / 0.06), 0 1px 2px 0 oklch(0 0 0 / 0.04);
+  }
+  .shadow-card-hover {
+    box-shadow: 0 4px 12px 0 oklch(0 0 0 / 0.1), 0 2px 4px 0 oklch(0 0 0 / 0.06);
+  }
+
+  /* Sidebar utilities */
+  .bg-sidebar-accent {
+    background-color: oklch(var(--sidebar-accent));
+  }
+  .border-sidebar-border {
+    border-color: oklch(var(--sidebar-border));
+  }
+  .text-sidebar-foreground {
+    color: oklch(var(--sidebar-foreground));
+  }
+  .text-primary-sidebar {
+    color: oklch(var(--sidebar-primary));
+  }
+
+  /* Role badge utilities */
+  .badge-owner {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold uppercase;
+    background-color: oklch(var(--role-owner-bg) / 0.15);
+    color: oklch(var(--role-owner-bg));
+  }
+  .badge-manager {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold uppercase;
+    background-color: oklch(var(--role-manager-bg) / 0.15);
+    color: oklch(var(--role-manager-bg));
+  }
+  .badge-staff {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold uppercase;
+    background-color: oklch(var(--role-staff-bg) / 0.15);
+    color: oklch(var(--role-staff-bg) / 0.7);
+  }
+
+  /* PIN input utilities */
+  .pin-input {
+    @apply w-12 h-12 text-center text-lg font-bold border-2 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2;
+    border-color: oklch(var(--border));
+    background-color: oklch(var(--card));
+  }
+  .pin-input:focus {
+    border-color: oklch(var(--ring));
+  }
+
+  /* Keypad button */
+  .keypad-btn {
+    @apply w-16 h-16 rounded-lg font-semibold text-lg transition-all active:scale-95;
+    background-color: oklch(var(--secondary));
+    color: oklch(var(--secondary-foreground));
+  }
+  .keypad-btn:active {
+    background-color: oklch(var(--muted));
+  }
+  .keypad-btn-confirm {
+    @apply w-16 h-16 rounded-lg font-semibold text-lg transition-all active:scale-95;
+    background-color: oklch(var(--primary));
+    color: oklch(var(--primary-foreground));
+  }
+}
