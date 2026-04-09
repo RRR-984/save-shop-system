@@ -2,6 +2,8 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeftRight,
   BarChart2,
+  Bell,
+  Building2,
   ClipboardList,
   CreditCard,
   History,
@@ -13,6 +15,7 @@ import {
   RotateCcw,
   Settings,
   ShieldAlert,
+  ShoppingCart,
   SlidersHorizontal,
   Smartphone,
   Store,
@@ -61,6 +64,24 @@ const NAV_ITEMS: NavItem[] = [
     id: "customers",
     label: "Customers",
     icon: Users,
+    roles: ["owner", "manager"],
+  },
+  {
+    id: "vendors",
+    label: "Vendors",
+    icon: Building2,
+    roles: ["owner", "manager"],
+  },
+  {
+    id: "purchase-orders",
+    label: "Purchase Orders",
+    icon: ShoppingCart,
+    roles: ["owner", "manager"],
+  },
+  {
+    id: "customer-orders",
+    label: "Customer Orders",
+    icon: ClipboardList,
     roles: ["owner", "manager"],
   },
   {
@@ -123,6 +144,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Audit Log",
     icon: ClipboardList,
     roles: ["owner"],
+  },
+  {
+    id: "reminder-log",
+    label: "Reminder Log",
+    icon: Bell,
+    roles: ["owner", "manager"],
   },
 ];
 

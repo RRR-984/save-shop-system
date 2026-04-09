@@ -41,6 +41,12 @@ export interface AppConfig {
   ownerPin?: string;
   /** true = Warning mode (allow with warning), false = Lock mode (block unless PIN/admin) */
   allowLowPriceSelling?: boolean;
+  /** Whether staff are allowed to send/request reminders */
+  allowStaffReminders?: boolean;
+  /** "approval" = staff requests, owner/manager approves; "simple" = staff can send directly (max 2/day) */
+  staffReminderMode?: "approval" | "simple";
+  /** Auto update product cost price when vendor rate changes (default OFF) */
+  autoUpdateCostOnVendorRateChange?: boolean;
 }
 
 export interface Product {
@@ -74,6 +80,7 @@ export interface StockBatch {
   billNo?: string;
   transportCharge?: number;
   labourCharge?: number;
+  otherCharges?: number;
   finalPurchaseCost?: number;
   weightQty?: number;
   lengthQty?: number;
@@ -274,4 +281,97 @@ export type NavPage =
   | "settings"
   | "low-price-log"
   | "staff-management"
-  | "audit-log";
+  | "audit-log"
+  | "reminder-log"
+  | "vendors"
+  | "purchase-orders"
+  | "customer-orders"
+  | "cash-counter";
+
+// ─── Vendor & Order System ────────────────────────────────────────────────────
+
+export interface Vendor {
+  id: string;
+  shopId: string;
+  name: string;
+  mobile: string;
+  email: string;
+  address: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  shopId: string;
+  vendorId: string;
+  productId: string;
+  qty: number;
+  rate: number;
+  transportCharge: number;
+  labourCharge: number;
+  otherCharges?: number;
+  status: "pending" | "received" | "partial";
+  receivedQty: number;
+  receivedDate?: number;
+  createdAt: number;
+  createdBy: string;
+}
+
+export interface CustomerOrder {
+  id: string;
+  shopId: string;
+  customerId: string;
+  items: Array<{ productId: string; qty: number; price: number }>;
+  totalAmount: number;
+  status: "pending" | "accepted" | "rejected";
+  rejectionReason?: string;
+  createdAt: number;
+  createdBy: string;
+}
+
+// ─── Vendor Rate History ──────────────────────────────────────────────────────
+
+export interface VendorRateHistory {
+  id: string;
+  shopId: string;
+  vendorId: string;
+  productId: string;
+  oldRate: number;
+  newRate: number;
+  changedAt: string;
+  changedBy: string;
+  notes?: string;
+}
+
+// ─── Role-Based Reminder System ──────────────────────────────────────────────
+
+export interface ReminderLog {
+  id: string;
+  shopId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: "owner" | "manager" | "staff";
+  customerId: string;
+  customerName: string;
+  customerMobile: string;
+  message: string;
+  sentAt: string;
+  status: "sent" | "requested" | "approved" | "rejected";
+  requestId?: string;
+}
+
+export interface ReminderRequest {
+  id: string;
+  shopId: string;
+  staffId: string;
+  staffName: string;
+  customerId: string;
+  customerName: string;
+  customerMobile: string;
+  dueAmount: number;
+  requestedAt: string;
+  approvalStatus: "pending" | "approved" | "rejected";
+  approvedBy?: string;
+  approvedAt?: string;
+}

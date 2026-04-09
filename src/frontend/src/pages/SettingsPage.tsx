@@ -13,7 +13,9 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
   AlertCircle,
+  Bell,
   Check,
+  Download,
   Eye,
   EyeOff,
   Info,
@@ -28,13 +30,15 @@ import {
   Store,
   Tag,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { AppConfig, FeatureFlags } from "../types/store";
+import { STORAGE_KEYS, saveData } from "../utils/localStorage";
 
 interface FeatureItem {
   key: keyof FeatureFlags;
@@ -96,7 +100,9 @@ const DEAD_STOCK_OPTIONS = [
 ];
 
 export function SettingsPage() {
-  const { currentShop } = useAuth();
+  const { currentShop, currentUser } = useAuth();
+  const isOwner =
+    currentUser?.role === "owner" || currentUser?.isOwner === true;
   const {
     appConfig,
     featureFlags,
@@ -110,7 +116,114 @@ export function SettingsPage() {
     addCategory,
     updateCategory,
     deleteCategory,
+    // data for export
+    products,
+    customers,
+    vendors,
+    invoices,
+    batches,
+    payments,
+    returns,
+    purchaseOrders,
+    customerOrders,
+    vendorRateHistory,
+    shopId,
   } = useStore();
+
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importConfirming, setImportConfirming] = useState(false);
+  const [pendingImport, setPendingImport] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+
+  // ── Export all data as JSON ──────────────────────────────────────────────────
+  function handleExport() {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      shopId,
+      appVersion: "1.0",
+      products,
+      customers,
+      vendors,
+      sales: invoices,
+      batches,
+      payments,
+      returns,
+      purchaseOrders,
+      customerOrders,
+      vendorRateHistory,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const date = new Date().toISOString().slice(0, 10);
+    a.download = `saveshop_backup_${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Backup downloaded");
+  }
+
+  // ── Import data from JSON file ───────────────────────────────────────────────
+  function handleImportFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string) as Record<
+          string,
+          unknown
+        >;
+        const hasData =
+          parsed.products || parsed.customers || parsed.vendors || parsed.sales;
+        if (!hasData) {
+          toast.error("Invalid backup file");
+          return;
+        }
+        setPendingImport(parsed);
+        setImportConfirming(true);
+      } catch {
+        toast.error("Invalid backup file");
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be re-imported
+    e.target.value = "";
+  }
+
+  function handleImportConfirm() {
+    if (!pendingImport) return;
+    // Cache all imported arrays into localStorage so the app picks them up on next load
+    const p = pendingImport;
+    if (Array.isArray(p.products)) saveData(STORAGE_KEYS.products, p.products);
+    if (Array.isArray(p.customers))
+      saveData(STORAGE_KEYS.customers, p.customers);
+    if (Array.isArray(p.vendors)) saveData(STORAGE_KEYS.vendors, p.vendors);
+    if (Array.isArray(p.sales)) saveData(STORAGE_KEYS.sales, p.sales);
+    if (Array.isArray(p.batches)) saveData(STORAGE_KEYS.batches, p.batches);
+    if (Array.isArray(p.payments)) saveData(STORAGE_KEYS.payments, p.payments);
+    if (Array.isArray(p.returns)) saveData(STORAGE_KEYS.returns, p.returns);
+    if (Array.isArray(p.purchaseOrders))
+      saveData(STORAGE_KEYS.purchaseOrders, p.purchaseOrders);
+    if (Array.isArray(p.customerOrders))
+      saveData(STORAGE_KEYS.customerOrders, p.customerOrders);
+    if (Array.isArray(p.vendorRateHistory))
+      saveData(STORAGE_KEYS.vendorRateHistory, p.vendorRateHistory);
+
+    setImportConfirming(false);
+    setPendingImport(null);
+    toast.success("Data restore ho gaya — page reload karein");
+    setTimeout(() => window.location.reload(), 1500);
+  }
+
+  function handleImportCancel() {
+    setImportConfirming(false);
+    setPendingImport(null);
+  }
 
   // Units state
   const [newUnit, setNewUnit] = useState("");
@@ -723,6 +836,148 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* ── Section 6: Staff Reminder Control (Owner only) ── */}
+        {isOwner && (
+          <Card data-ocid="settings.staff_reminder_control.panel">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-blue-500" />
+                <CardTitle className="text-base">
+                  Staff Reminder Control
+                </CardTitle>
+              </div>
+              <CardDescription>
+                Staff ke liye WhatsApp reminder system control karein
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Allow Staff Reminders Toggle */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">
+                    Allow Staff Reminders
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    ON karein toh staff customers ko reminders send ya request
+                    kar sakenge
+                  </p>
+                  <div className="mt-2">
+                    {appConfig.allowStaffReminders ? (
+                      <Badge className="bg-green-100 text-green-700 border-green-300 border text-xs">
+                        ✅ Staff Reminders Enabled
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-muted text-muted-foreground text-xs">
+                        🚫 Staff Reminders Disabled
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <Switch
+                  data-ocid="settings.allow_staff_reminders.switch"
+                  checked={!!appConfig.allowStaffReminders}
+                  onCheckedChange={async (val) => {
+                    await saveAppConfig({
+                      allowStaffReminders: val,
+                    } as Partial<AppConfig>);
+                    toast.success(
+                      `Staff reminders ${val ? "enabled" : "disabled"}`,
+                    );
+                  }}
+                />
+              </div>
+
+              {/* Mode selector — shown only when allowStaffReminders is ON */}
+              {appConfig.allowStaffReminders && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Reminder Mode</Label>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        data-ocid="settings.staff_reminder_mode.approval"
+                        onClick={async () => {
+                          await saveAppConfig({
+                            staffReminderMode: "approval",
+                          } as Partial<AppConfig>);
+                          toast.success("Approval Mode set kiya gaya");
+                        }}
+                        className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                          (appConfig.staffReminderMode ?? "approval") ===
+                          "approval"
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:bg-muted/40"
+                        }`}
+                      >
+                        <div
+                          className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            (appConfig.staffReminderMode ?? "approval") ===
+                            "approval"
+                              ? "border-primary"
+                              : "border-muted-foreground"
+                          }`}
+                        >
+                          {(appConfig.staffReminderMode ?? "approval") ===
+                            "approval" && (
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            Approval Mode (Default)
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Staff sends request → Owner/Manager approves →
+                            WhatsApp sent
+                          </p>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        data-ocid="settings.staff_reminder_mode.simple"
+                        onClick={async () => {
+                          await saveAppConfig({
+                            staffReminderMode: "simple",
+                          } as Partial<AppConfig>);
+                          toast.success("Simple Mode set kiya gaya");
+                        }}
+                        className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                          appConfig.staffReminderMode === "simple"
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:bg-muted/40"
+                        }`}
+                      >
+                        <div
+                          className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            appConfig.staffReminderMode === "simple"
+                              ? "border-primary"
+                              : "border-muted-foreground"
+                          }`}
+                        >
+                          {appConfig.staffReminderMode === "simple" && (
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            Simple Mode
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Staff can send directly — max 2 reminders per
+                            customer per day
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Safety Note */}
         <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
           <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
@@ -738,6 +993,95 @@ export function SettingsPage() {
             </p>
           </div>
         </div>
+
+        {/* ── Section 7: Backup & Restore ── */}
+        <Card data-ocid="settings.backup_restore.panel">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Download className="w-4 h-4 text-primary" />
+              <CardTitle className="text-base">Backup &amp; Restore</CardTitle>
+            </div>
+            <CardDescription>
+              Apna data export aur import karein
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Confirm dialog */}
+            {importConfirming && (
+              <div className="p-4 rounded-lg border border-destructive/40 bg-destructive/5 space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+                  <p className="text-sm font-medium text-destructive">
+                    Yeh action existing data overwrite kar dega. Kya aap sure
+                    hain?
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleImportConfirm}
+                    data-ocid="settings.import.confirm_button"
+                  >
+                    <Check className="w-3.5 h-3.5 mr-1" /> Haan, Restore Karein
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleImportCancel}
+                    data-ocid="settings.import.cancel_button"
+                  >
+                    <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Export/Import buttons */}
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleExport}
+                data-ocid="settings.export.button"
+                className="flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export Data (JSON)
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => importFileRef.current?.click()}
+                data-ocid="settings.import.button"
+                className="flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                Import Data (JSON)
+              </Button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={handleImportFileChange}
+                data-ocid="settings.import.file_input"
+              />
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Export: JSON file download hoga &nbsp;|&nbsp; Import: file se data
+              restore hoga
+            </p>
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Import karne se existing data overwrite ho jaata hai. Pehle
+                export zarur karein.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

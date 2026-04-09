@@ -8,7 +8,6 @@ import {
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { TopBar } from "../components/TopBar";
 import { useStore } from "../context/StoreContext";
 import type { Invoice } from "../types/store";
 
@@ -133,8 +132,6 @@ export function StaffCreditReportPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <TopBar title="Staff Credit Report" />
-
       <div className="px-4 md:px-6 space-y-5">
         {/* Date filter tabs */}
         <div className="flex flex-wrap gap-2" data-ocid="staff_credit.tab">

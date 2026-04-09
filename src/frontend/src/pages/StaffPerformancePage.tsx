@@ -17,7 +17,6 @@ import {
   User,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { TopBar } from "../components/TopBar";
 import { useStore } from "../context/StoreContext";
 import type { Invoice } from "../types/store";
 
@@ -70,7 +69,7 @@ const filterColors: Record<DateFilter, string> = {
   today: "bg-blue-100 text-blue-700 border-blue-300",
   week: "bg-violet-100 text-violet-700 border-violet-300",
   month: "bg-green-100 text-green-700 border-green-300",
-  all: "bg-gray-100 text-gray-700 border-gray-300",
+  all: "bg-muted text-muted-foreground border-border",
 };
 
 const paymentBadge: Record<string, string> = {
@@ -106,8 +105,8 @@ export function StaffPerformancePage() {
     >();
 
     for (const inv of filtered) {
-      const key = inv.soldByUserId ?? "unknown";
-      const name = inv.soldByName ?? "Admin";
+      const key = inv.soldByUserId ?? "owner-default";
+      const name = inv.soldByName ?? "Owner";
       if (!map.has(key)) {
         map.set(key, {
           staffName: name,
@@ -142,8 +141,6 @@ export function StaffPerformancePage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8">
-      <TopBar title="Staff Performance" />
-
       <div className="px-4 md:px-6 space-y-5">
         {/* Date filter */}
         <div className="flex flex-wrap gap-2">
@@ -214,8 +211,10 @@ export function StaffPerformancePage() {
         {staffStats.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <BarChart2 className="mx-auto mb-3 opacity-30" size={40} />
-            <p className="font-medium">Koi data nahi mila</p>
-            <p className="text-sm mt-1">Is period mein koi bhi sale nahi hui</p>
+            <p className="font-medium">Is period mein koi invoice nahi</p>
+            <p className="text-sm mt-1">
+              Koi bhi sale karein — yahan dikhai degi
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -385,7 +384,7 @@ export function StaffPerformancePage() {
                                     <span
                                       className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
                                         paymentBadge[inv.paymentMode] ??
-                                        "bg-gray-100 text-gray-600"
+                                        "bg-muted text-muted-foreground"
                                       }`}
                                     >
                                       {inv.paymentMode.toUpperCase()}

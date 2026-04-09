@@ -71,8 +71,8 @@ export function AdminSummaryCard() {
       { name: string; totalSale: number; extraProfit: number; bonus: number }
     >();
     for (const inv of filtered) {
-      const key = inv.soldByUserId ?? inv.soldByName ?? "Admin";
-      const name = inv.soldByName ?? "Admin";
+      const key = inv.soldByUserId ?? inv.soldByName ?? "owner-default";
+      const name = inv.soldByName ?? "Owner";
       const existing = map.get(key);
       if (existing) {
         existing.totalSale += inv.totalAmount;
@@ -184,7 +184,7 @@ export function AdminSummaryCard() {
               data-ocid="admin.staff.empty_state"
               className="text-center py-6 text-sm text-muted-foreground bg-secondary/50 rounded-xl border border-border"
             >
-              No sales data for this period
+              Is period mein koi sale nahi
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border">

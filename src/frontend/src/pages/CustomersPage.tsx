@@ -27,14 +27,15 @@ import {
   IndianRupee,
   MessageCircle,
   Receipt,
+  Search,
   User,
   Users,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { TopBar } from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import { type CustomerLedger, useStore } from "../context/StoreContext";
+import type { AppUser } from "../types/store";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -49,36 +50,289 @@ type LedgerFilter = "all" | "due" | "paid";
 // ── Due Badge helper ───────────────────────────────────────────────────────────────────────────
 function getDueBadge(due: number) {
   if (due <= 0) return null;
+  const base =
+    "text-[10px] px-1.5 whitespace-nowrap flex-shrink-0 inline-flex items-center";
   if (due > 5000) {
     return (
-      <Badge className="bg-red-100 text-red-700 border-red-300 text-[10px] px-1.5">
+      <Badge className={`bg-red-100 text-red-700 border-red-300 ${base}`}>
         🔴 High Due
       </Badge>
     );
   }
   if (due > 500) {
     return (
-      <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 text-[10px] px-1.5">
+      <Badge
+        className={`bg-yellow-100 text-yellow-800 border-yellow-300 ${base}`}
+      >
         🟡 Medium Due
       </Badge>
     );
   }
   return (
-    <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px] px-1.5">
+    <Badge className={`bg-green-100 text-green-700 border-green-300 ${base}`}>
       🟢 Low Due
     </Badge>
   );
 }
 
-// ── WhatsApp Reminder helper ───────────────────────────────────────────────────────────────────
-function buildWhatsAppUrl(
-  mobile: string,
-  customerName: string,
-  dueAmount: number,
-  shopName: string,
-) {
-  const message = `Namaste ${customerName},\nAapka ₹${Math.round(dueAmount).toLocaleString("en-IN")} baki hai.\n\nKripya jaldi payment kare.\n\nDhanyavaad 🙏\n${shopName}`;
-  return `https://wa.me/91${mobile}?text=${encodeURIComponent(message)}`;
+// ── Reminder Confirmation Dialog ───────────────────────────────────────────────────────────────
+function ReminderConfirmDialog({
+  ledger,
+  mode,
+  open,
+  onClose,
+  onConfirm,
+  shopName,
+}: {
+  ledger: CustomerLedger;
+  mode: "send" | "request";
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  shopName: string;
+}) {
+  const preview = `Namaste ${ledger.customerName},\nAapka ₹${Math.round(ledger.totalDue).toLocaleString("en-IN")} baki hai.\n\nKripya jaldi payment kare.\n\nDhanyavaad 🙏\n${shopName}`;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent
+        className="max-w-sm"
+        data-ocid="customers.reminder_confirm.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MessageCircle size={18} className="text-green-600" />
+            {mode === "send" ? "Reminder Bhejo" : "Reminder Request Bhejo"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="rounded-lg bg-secondary/60 p-3 text-sm space-y-1">
+            <div className="font-semibold text-foreground">
+              {ledger.customerName}
+            </div>
+            {ledger.customerMobile && (
+              <div className="text-xs text-muted-foreground">
+                📱 {ledger.customerMobile}
+              </div>
+            )}
+            <div className="flex justify-between mt-2 pt-2 border-t border-border">
+              <span className="text-muted-foreground">Due Amount:</span>
+              <span className="font-bold text-red-600">
+                {fmt(ledger.totalDue)}
+              </span>
+            </div>
+          </div>
+          <div className="rounded-lg bg-green-50 border border-green-200 p-3">
+            <p className="text-xs font-medium text-green-700 mb-1">
+              Message Preview:
+            </p>
+            <p className="text-xs text-green-800 whitespace-pre-line leading-relaxed">
+              {preview}
+            </p>
+          </div>
+          {mode === "request" && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-2">
+              <p className="text-xs text-amber-700">
+                ⏳ Owner/Manager ko approval ke liye request jayegi. Unke
+                approve karne par WhatsApp khulega.
+              </p>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            data-ocid="customers.reminder_confirm.cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className={
+              mode === "send"
+                ? "bg-green-600 hover:bg-green-700 text-white"
+                : "bg-amber-600 hover:bg-amber-700 text-white"
+            }
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+            data-ocid="customers.reminder_confirm.submit"
+          >
+            {mode === "send" ? "Haan, Bhejo" : "Request Bhejo"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Role-based reminder button ─────────────────────────────────────────────────────────────────
+function ReminderButton({
+  ledger,
+  currentUser,
+  shopName,
+  index,
+  compact = false,
+}: {
+  ledger: CustomerLedger;
+  currentUser: AppUser;
+  shopName: string;
+  index: number;
+  compact?: boolean;
+}) {
+  const { appConfig, sendReminder, requestReminder, getReminderCountToday } =
+    useStore();
+  const [confirmMode, setConfirmMode] = useState<"send" | "request" | null>(
+    null,
+  );
+
+  const hasMobile = !!ledger.customerMobile?.trim();
+  const role = currentUser.role;
+
+  if (!hasMobile) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} opacity-40 cursor-not-allowed`}
+        disabled
+        title="Mobile number nahi hai"
+        data-ocid={`customers.reminder.disabled.${index + 1}`}
+      >
+        <MessageCircle size={compact ? 10 : 12} className="mr-1" />
+        Reminder
+      </Button>
+    );
+  }
+
+  // Owner / Manager — direct send
+  if (role === "owner" || role === "manager") {
+    return (
+      <>
+        <Button
+          variant="outline"
+          size="sm"
+          className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} text-green-700 border-green-300 hover:bg-green-50`}
+          onClick={() => setConfirmMode("send")}
+          title="WhatsApp reminder bhejo"
+          data-ocid={`customers.send_reminder.button.${index + 1}`}
+        >
+          <MessageCircle size={compact ? 10 : 12} className="mr-1" />
+          Send Reminder
+        </Button>
+        {confirmMode && (
+          <ReminderConfirmDialog
+            ledger={ledger}
+            mode={confirmMode}
+            open={!!confirmMode}
+            onClose={() => setConfirmMode(null)}
+            shopName={shopName}
+            onConfirm={async () => {
+              await sendReminder(ledger, currentUser);
+              toast.success(`🔔 Reminder bheja gaya ${ledger.customerName} ko`);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // Staff role
+  if (!appConfig.allowStaffReminders) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} opacity-40 cursor-not-allowed`}
+        disabled
+        title="Admin ne staff reminders disable kiya hai"
+        data-ocid={`customers.reminder.staff_disabled.${index + 1}`}
+      >
+        <MessageCircle size={compact ? 10 : 12} className="mr-1" />
+        Reminder
+      </Button>
+    );
+  }
+
+  if (appConfig.staffReminderMode === "simple") {
+    const countToday = getReminderCountToday(
+      currentUser.id,
+      ledger.customerMobile,
+    );
+    const limitReached = countToday >= 2;
+    return (
+      <>
+        <Button
+          variant="outline"
+          size="sm"
+          className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} ${
+            limitReached
+              ? "opacity-40 cursor-not-allowed"
+              : "text-green-700 border-green-300 hover:bg-green-50"
+          }`}
+          disabled={limitReached}
+          onClick={() => !limitReached && setConfirmMode("send")}
+          title={
+            limitReached
+              ? "Aaj ka limit pura ho gaya (2/day)"
+              : "WhatsApp reminder bhejo"
+          }
+          data-ocid={`customers.send_reminder.staff.button.${index + 1}`}
+        >
+          <MessageCircle size={compact ? 10 : 12} className="mr-1" />
+          {limitReached ? "Reminder (Limit Pura)" : "Send Reminder"}
+        </Button>
+        {confirmMode && (
+          <ReminderConfirmDialog
+            ledger={ledger}
+            mode="send"
+            open={!!confirmMode}
+            onClose={() => setConfirmMode(null)}
+            shopName={shopName}
+            onConfirm={async () => {
+              await sendReminder(ledger, currentUser);
+              toast.success(`🔔 Reminder bheja gaya ${ledger.customerName} ko`);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // Approval mode (default for staff)
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} text-amber-700 border-amber-300 hover:bg-amber-50`}
+        onClick={() => setConfirmMode("request")}
+        title="Owner/Manager se approval request karo"
+        data-ocid={`customers.request_reminder.button.${index + 1}`}
+      >
+        <Bell size={compact ? 10 : 12} className="mr-1" />
+        Request Reminder
+      </Button>
+      {confirmMode && (
+        <ReminderConfirmDialog
+          ledger={ledger}
+          mode="request"
+          open={!!confirmMode}
+          onClose={() => setConfirmMode(null)}
+          shopName={shopName}
+          onConfirm={async () => {
+            await requestReminder(ledger, currentUser);
+            toast.success(
+              "✅ Request bheja gaya — Owner/Manager approve karenge",
+            );
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 // ── Receive Payment Dialog ───────────────────────────────────────────────────────────────────────────
@@ -141,19 +395,19 @@ function ReceivePaymentDialog({
     {
       key: "cash",
       label: "💵 Cash",
-      color: "border-gray-300 text-gray-700 hover:bg-gray-50",
+      color: "border-border text-foreground hover:bg-muted",
       activeColor: "bg-green-600 text-white border-green-600",
     },
     {
       key: "upi",
       label: "📱 UPI",
-      color: "border-gray-300 text-gray-700 hover:bg-gray-50",
+      color: "border-border text-foreground hover:bg-muted",
       activeColor: "bg-purple-600 text-white border-purple-600",
     },
     {
       key: "online",
       label: "🌐 Online",
-      color: "border-gray-300 text-gray-700 hover:bg-gray-50",
+      color: "border-border text-foreground hover:bg-muted",
       activeColor: "bg-cyan-600 text-white border-cyan-600",
     },
   ];
@@ -378,24 +632,17 @@ function CustomerCard({
   ledger,
   index,
   shopName,
+  currentUser,
 }: {
   ledger: CustomerLedger;
   index: number;
   shopName: string;
+  currentUser: AppUser;
 }) {
   const [showPayment, setShowPayment] = useState(false);
   const [showInvoices, setShowInvoices] = useState(false);
   const isPaid = ledger.totalDue === 0;
   const dueBadge = getDueBadge(ledger.totalDue);
-  const hasMobile = !!ledger.customerMobile?.trim();
-  const whatsappUrl = hasMobile
-    ? buildWhatsAppUrl(
-        ledger.customerMobile,
-        ledger.customerName,
-        ledger.totalDue,
-        shopName,
-      )
-    : "";
 
   // Latest bill info from most recent invoice
   const latestInvoice =
@@ -464,32 +711,14 @@ function CustomerCard({
 
             {/* Right: Actions */}
             <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-              {/* WhatsApp Reminder button */}
+              {/* Role-based Reminder button */}
               {!isPaid && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={`h-7 text-xs px-2 ${
-                    hasMobile
-                      ? "text-green-700 border-green-300 hover:bg-green-50"
-                      : "text-muted-foreground border-border cursor-not-allowed opacity-50"
-                  }`}
-                  disabled={!hasMobile}
-                  onClick={() => {
-                    if (hasMobile) {
-                      window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-                    }
-                  }}
-                  title={
-                    hasMobile
-                      ? "WhatsApp reminder bhejo"
-                      : "Mobile number nahi hai"
-                  }
-                  data-ocid={`customers.whatsapp_reminder.button.${index + 1}`}
-                >
-                  <MessageCircle size={12} className="mr-1" />
-                  Reminder
-                </Button>
+                <ReminderButton
+                  ledger={ledger}
+                  currentUser={currentUser}
+                  shopName={shopName}
+                  index={index}
+                />
               )}
               <Button
                 variant="ghost"
@@ -590,7 +819,7 @@ function CustomerCard({
 export function CustomersPage() {
   const { invoices, getAllCustomerLedgers, mergeDuplicateCustomers } =
     useStore();
-  const { currentShop } = useAuth();
+  const { currentShop, currentUser } = useAuth();
   const shopName = currentShop?.name ?? "Save Shop System";
 
   const [search, setSearch] = useState("");
@@ -619,14 +848,17 @@ export function CustomersPage() {
   const paidCustomers = allLedgers.filter((l) => l.totalDue === 0);
   const highDueCustomers = dueCustomers.filter((l) => l.totalDue > 5000);
 
+  const user: AppUser = (currentUser as unknown as AppUser) ?? {
+    id: "unknown",
+    name: "Unknown",
+    username: "",
+    password: "",
+    role: "staff" as const,
+    shopId: "",
+  };
+
   return (
     <div className="flex flex-col gap-6">
-      <TopBar
-        title="Customer Ledger"
-        searchValue={search}
-        onSearchChange={setSearch}
-      />
-
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
@@ -732,7 +964,7 @@ export function CustomersPage() {
           </Card>
         </div>
 
-        {/* Payment Reminders with WhatsApp */}
+        {/* Payment Reminders with role-based actions */}
         {dueCustomers.length > 0 && (
           <Card className="border-red-300 bg-red-50/40 shadow-sm">
             <CardHeader className="pb-2">
@@ -743,58 +975,31 @@ export function CustomersPage() {
             </CardHeader>
             <CardContent className="pb-3">
               <div className="flex flex-col gap-1.5">
-                {dueCustomers.slice(0, 8).map((l) => {
-                  const hasMobile = !!l.customerMobile?.trim();
-                  const waUrl = hasMobile
-                    ? buildWhatsAppUrl(
-                        l.customerMobile,
-                        l.customerName,
-                        l.totalDue,
-                        shopName,
-                      )
-                    : "";
+                {dueCustomers.slice(0, 8).map((l, lIdx) => {
                   return (
                     <div
                       key={`${l.customerName}__${l.customerMobile}`}
-                      className="flex items-center justify-between text-sm py-2 px-3 rounded-lg bg-white border border-red-100"
+                      className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg bg-card border border-red-100 max-w-full"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-medium text-foreground truncate">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="font-medium text-foreground truncate text-sm">
                           {l.customerName}
                         </span>
-                        {getDueBadge(l.totalDue)}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="font-bold text-red-600 text-sm">
+                        <span className="flex-shrink-0 whitespace-nowrap">
+                          {getDueBadge(l.totalDue)}
+                        </span>
+                        <span className="text-base font-semibold text-red-600 whitespace-nowrap">
                           {fmt(l.totalDue)}
                         </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className={`h-6 text-[10px] px-2 ${
-                            hasMobile
-                              ? "text-green-700 border-green-300 hover:bg-green-50"
-                              : "opacity-40 cursor-not-allowed"
-                          }`}
-                          disabled={!hasMobile}
-                          onClick={() => {
-                            if (hasMobile) {
-                              window.open(
-                                waUrl,
-                                "_blank",
-                                "noopener,noreferrer",
-                              );
-                            }
-                          }}
-                          title={
-                            hasMobile
-                              ? "WhatsApp reminder bhejo"
-                              : "Mobile number nahi"
-                          }
-                        >
-                          <MessageCircle size={10} className="mr-1" />
-                          Send
-                        </Button>
+                        <ReminderButton
+                          ledger={l}
+                          currentUser={user}
+                          shopName={shopName}
+                          index={lIdx}
+                          compact
+                        />
                       </div>
                     </div>
                   );
@@ -809,36 +1014,51 @@ export function CustomersPage() {
           </Card>
         )}
 
-        {/* Filter + list */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <Tabs
-            value={filter}
-            onValueChange={(v) => setFilter(v as LedgerFilter)}
-          >
-            <TabsList className="h-8">
-              <TabsTrigger
-                data-ocid="customers.all.tab"
-                value="all"
-                className="text-xs h-7 px-3"
-              >
-                All ({allLedgers.length})
-              </TabsTrigger>
-              <TabsTrigger
-                data-ocid="customers.due.tab"
-                value="due"
-                className="text-xs h-7 px-3"
-              >
-                Has Due ({dueCustomers.length})
-              </TabsTrigger>
-              <TabsTrigger
-                data-ocid="customers.paid.tab"
-                value="paid"
-                className="text-xs h-7 px-3"
-              >
-                Fully Paid ({paidCustomers.length})
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+        {/* Search + Filter + list */}
+        <div className="flex flex-col gap-3">
+          <div className="relative max-w-xs">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              size={14}
+            />
+            <Input
+              data-ocid="customers.search.input"
+              placeholder="Search customers..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-8 text-sm"
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+            <Tabs
+              value={filter}
+              onValueChange={(v) => setFilter(v as LedgerFilter)}
+            >
+              <TabsList className="h-8">
+                <TabsTrigger
+                  data-ocid="customers.all.tab"
+                  value="all"
+                  className="text-xs h-7 px-3"
+                >
+                  All ({allLedgers.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  data-ocid="customers.due.tab"
+                  value="due"
+                  className="text-xs h-7 px-3"
+                >
+                  Has Due ({dueCustomers.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  data-ocid="customers.paid.tab"
+                  value="paid"
+                  className="text-xs h-7 px-3"
+                >
+                  Fully Paid ({paidCustomers.length})
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
 
         {/* Customer cards */}
@@ -873,6 +1093,7 @@ export function CustomersPage() {
                 ledger={ledger}
                 index={idx}
                 shopName={shopName}
+                currentUser={user}
               />
             ))}
           </div>

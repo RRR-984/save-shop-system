@@ -160,6 +160,60 @@ actor {
     saveShopCollection(shopId, "auditLogs", data);
   };
 
+  // -- Reminder Logs (who sent reminder, customer, date/time)
+  public query func getReminderLogs(shopId : Text) : async Text {
+    getShopCollection(shopId, "reminderLogs");
+  };
+
+  public shared func saveReminderLogs(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "reminderLogs", data);
+  };
+
+  // -- Reminder Requests (staff requests pending owner/manager approval)
+  public query func getReminderRequests(shopId : Text) : async Text {
+    getShopCollection(shopId, "reminderRequests");
+  };
+
+  public shared func saveReminderRequests(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "reminderRequests", data);
+  };
+
+  // -- Vendors
+  public query func getVendors(shopId : Text) : async Text {
+    getShopCollection(shopId, "vendors");
+  };
+
+  public shared func saveVendors(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "vendors", data);
+  };
+
+  // -- Purchase Orders
+  public query func getPurchaseOrders(shopId : Text) : async Text {
+    getShopCollection(shopId, "purchaseOrders");
+  };
+
+  public shared func savePurchaseOrders(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "purchaseOrders", data);
+  };
+
+  // -- Vendor Rate History
+  public query func getVendorRateHistory(shopId : Text) : async Text {
+    getShopCollection(shopId, "vendorRateHistory");
+  };
+
+  public shared func saveVendorRateHistory(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "vendorRateHistory", data);
+  };
+
+  // -- Customer Orders
+  public query func getCustomerOrders(shopId : Text) : async Text {
+    getShopCollection(shopId, "customerOrders");
+  };
+
+  public shared func saveCustomerOrders(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "customerOrders", data);
+  };
+
   // -- User Profiles (ICP identity-based)
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     userProfiles.get(caller);

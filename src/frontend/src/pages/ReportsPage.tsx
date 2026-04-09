@@ -19,13 +19,14 @@ import {
   FileText,
   IndianRupee,
   Package,
+  Plus,
   Smartphone,
   TrendingUp,
   Wifi,
 } from "lucide-react";
 import { useState } from "react";
-import { TopBar } from "../components/TopBar";
 import { useStore } from "../context/StoreContext";
+import type { NavPage } from "../types/store";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -57,7 +58,9 @@ function formatDateLabel(dateStr: string) {
   });
 }
 
-export function ReportsPage() {
+export function ReportsPage({
+  onNavigate,
+}: { onNavigate?: (page: NavPage) => void }) {
   const {
     invoices,
     products,
@@ -147,14 +150,24 @@ export function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TopBar title="Reports" />
-
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
-        <div>
-          <h1 className="text-xl font-bold">Reports</h1>
-          <p className="text-muted-foreground text-sm">
-            Sales, stock, and profit analytics
-          </p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-xl font-bold">Reports</h1>
+            <p className="text-muted-foreground text-sm">
+              Sales, stock, and profit analytics
+            </p>
+          </div>
+          {onNavigate && (
+            <Button
+              data-ocid="reports.bill_banao.button"
+              onClick={() => onNavigate("billing")}
+              className="gap-2 shrink-0"
+            >
+              <Plus size={16} />
+              Bill Banao
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="daily">
@@ -409,6 +422,18 @@ export function ReportsPage() {
                     <Badge variant="outline" className="ml-auto text-xs">
                       {dailyInvoices.length} invoices
                     </Badge>
+                    {onNavigate && (
+                      <Button
+                        data-ocid="reports.daily.bill_banao.button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1 ml-1"
+                        onClick={() => onNavigate("billing")}
+                      >
+                        <Plus size={12} />
+                        Naya Bill
+                      </Button>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">

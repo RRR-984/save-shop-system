@@ -97,33 +97,45 @@ export interface backendInterface {
     getBatches(shopId: string): Promise<string>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCategories(shopId: string): Promise<string>;
+    getCustomerOrders(shopId: string): Promise<string>;
     getCustomers(shopId: string): Promise<string>;
     getDrafts(shopId: string): Promise<string>;
     getInvoices(shopId: string): Promise<string>;
     getLowPriceAlertLogs(shopId: string): Promise<string>;
     getPayments(shopId: string): Promise<string>;
     getProducts(shopId: string): Promise<string>;
+    getPurchaseOrders(shopId: string): Promise<string>;
+    getReminderLogs(shopId: string): Promise<string>;
+    getReminderRequests(shopId: string): Promise<string>;
     getReturns(shopId: string): Promise<string>;
     getSettings(shopId: string): Promise<string>;
     getShopUnits(shopId: string): Promise<string>;
     getTransactions(shopId: string): Promise<string>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsers(shopId: string): Promise<string>;
+    getVendorRateHistory(shopId: string): Promise<string>;
+    getVendors(shopId: string): Promise<string>;
     saveAuditLogs(shopId: string, data: string): Promise<void>;
     saveBatches(shopId: string, data: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveCategories(shopId: string, data: string): Promise<void>;
+    saveCustomerOrders(shopId: string, data: string): Promise<void>;
     saveCustomers(shopId: string, data: string): Promise<void>;
     saveDrafts(shopId: string, data: string): Promise<void>;
     saveInvoices(shopId: string, data: string): Promise<void>;
     saveLowPriceAlertLogs(shopId: string, data: string): Promise<void>;
     savePayments(shopId: string, data: string): Promise<void>;
     saveProducts(shopId: string, data: string): Promise<void>;
+    savePurchaseOrders(shopId: string, data: string): Promise<void>;
+    saveReminderLogs(shopId: string, data: string): Promise<void>;
+    saveReminderRequests(shopId: string, data: string): Promise<void>;
     saveReturns(shopId: string, data: string): Promise<void>;
     saveSettings(shopId: string, data: string): Promise<void>;
     saveShopUnits(shopId: string, data: string): Promise<void>;
     saveTransactions(shopId: string, data: string): Promise<void>;
     saveUsers(shopId: string, data: string): Promise<void>;
+    saveVendorRateHistory(shopId: string, data: string): Promise<void>;
+    saveVendors(shopId: string, data: string): Promise<void>;
 }
 import type { UserProfile as _UserProfile } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -181,6 +193,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getCategories(arg0);
+            return result;
+        }
+    }
+    async getCustomerOrders(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCustomerOrders(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCustomerOrders(arg0);
             return result;
         }
     }
@@ -268,6 +294,48 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getPurchaseOrders(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getPurchaseOrders(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getPurchaseOrders(arg0);
+            return result;
+        }
+    }
+    async getReminderLogs(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReminderLogs(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReminderLogs(arg0);
+            return result;
+        }
+    }
+    async getReminderRequests(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getReminderRequests(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getReminderRequests(arg0);
+            return result;
+        }
+    }
     async getReturns(arg0: string): Promise<string> {
         if (this.processError) {
             try {
@@ -352,6 +420,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getVendorRateHistory(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getVendorRateHistory(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getVendorRateHistory(arg0);
+            return result;
+        }
+    }
+    async getVendors(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getVendors(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getVendors(arg0);
+            return result;
+        }
+    }
     async saveAuditLogs(arg0: string, arg1: string): Promise<void> {
         if (this.processError) {
             try {
@@ -405,6 +501,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveCategories(arg0, arg1);
+            return result;
+        }
+    }
+    async saveCustomerOrders(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveCustomerOrders(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveCustomerOrders(arg0, arg1);
             return result;
         }
     }
@@ -492,6 +602,48 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async savePurchaseOrders(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.savePurchaseOrders(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.savePurchaseOrders(arg0, arg1);
+            return result;
+        }
+    }
+    async saveReminderLogs(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveReminderLogs(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveReminderLogs(arg0, arg1);
+            return result;
+        }
+    }
+    async saveReminderRequests(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveReminderRequests(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveReminderRequests(arg0, arg1);
+            return result;
+        }
+    }
     async saveReturns(arg0: string, arg1: string): Promise<void> {
         if (this.processError) {
             try {
@@ -559,6 +711,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveUsers(arg0, arg1);
+            return result;
+        }
+    }
+    async saveVendorRateHistory(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveVendorRateHistory(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveVendorRateHistory(arg0, arg1);
+            return result;
+        }
+    }
+    async saveVendors(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveVendors(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveVendors(arg0, arg1);
             return result;
         }
     }

@@ -174,28 +174,16 @@ export function LowPriceAlertLogPage() {
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-secondary/30">
-                        <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">
-                          Product
-                        </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">
-                          Staff
-                        </th>
-                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">
+                      <tr>
+                        <th className="table-header text-left">Product</th>
+                        <th className="table-header text-left">Staff</th>
+                        <th className="table-header text-right">
                           Entered Price
                         </th>
-                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">
-                          Min Price
-                        </th>
-                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">
-                          Loss
-                        </th>
-                        <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground">
-                          Status
-                        </th>
-                        <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">
-                          Date/Time
-                        </th>
+                        <th className="table-header text-right">Min Price</th>
+                        <th className="table-header text-right">Loss</th>
+                        <th className="table-header text-center">Status</th>
+                        <th className="table-header text-right">Date/Time</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -203,9 +191,7 @@ export function LowPriceAlertLogPage() {
                         <tr
                           key={log.id}
                           data-ocid={`low-price-log.item.${idx + 1}`}
-                          className={`hover:bg-secondary/20 transition-colors ${
-                            log.attemptType === "blocked" ? "bg-red-50/40" : ""
-                          }`}
+                          className={`hover:bg-muted/20 transition-colors ${log.attemptType === "blocked" ? "bg-alert-danger" : ""}`}
                         >
                           <td className="px-4 py-3 font-medium text-foreground">
                             {log.productName}
@@ -213,13 +199,13 @@ export function LowPriceAlertLogPage() {
                           <td className="px-4 py-3 text-muted-foreground">
                             {log.staffName}
                           </td>
-                          <td className="px-4 py-3 text-right text-red-600 font-semibold">
+                          <td className="px-4 py-3 text-right text-danger font-semibold">
                             {fmt(log.enteredPrice)}
                           </td>
                           <td className="px-4 py-3 text-right text-foreground font-medium">
                             {fmt(log.minSellPrice)}
                           </td>
-                          <td className="px-4 py-3 text-right text-red-600 font-medium">
+                          <td className="px-4 py-3 text-right text-danger font-medium">
                             {fmt(
                               Math.max(0, log.minSellPrice - log.enteredPrice),
                             )}
@@ -247,9 +233,7 @@ export function LowPriceAlertLogPage() {
                     <div
                       key={log.id}
                       data-ocid={`low-price-log.mobile.item.${idx + 1}`}
-                      className={`p-4 flex flex-col gap-2 ${
-                        log.attemptType === "blocked" ? "bg-red-50/40" : ""
-                      }`}
+                      className={`p-4 flex flex-col gap-2 ${log.attemptType === "blocked" ? "bg-alert-danger" : ""}`}
                     >
                       <div className="flex items-start justify-between">
                         <div>
@@ -265,7 +249,7 @@ export function LowPriceAlertLogPage() {
                       <div className="grid grid-cols-3 gap-2 text-xs">
                         <div>
                           <div className="text-muted-foreground">Entered</div>
-                          <div className="font-semibold text-red-600">
+                          <div className="font-semibold text-danger">
                             {fmt(log.enteredPrice)}
                           </div>
                         </div>
@@ -277,7 +261,7 @@ export function LowPriceAlertLogPage() {
                         </div>
                         <div>
                           <div className="text-muted-foreground">Loss</div>
-                          <div className="font-semibold text-red-600">
+                          <div className="font-semibold text-danger">
                             {fmt(
                               Math.max(0, log.minSellPrice - log.enteredPrice),
                             )}
@@ -287,13 +271,11 @@ export function LowPriceAlertLogPage() {
                       <div className="text-[11px] text-muted-foreground">
                         <AlertTriangle
                           size={10}
-                          className="inline mr-1 text-amber-500"
+                          className="inline mr-1 text-warning"
                         />
                         {new Date(log.timestamp).toLocaleString("en-IN")}
                         {log.pinUsed && (
-                          <span className="ml-2 text-green-600">
-                            (PIN used)
-                          </span>
+                          <span className="ml-2 text-success">(PIN used)</span>
                         )}
                       </div>
                     </div>

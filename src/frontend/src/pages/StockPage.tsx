@@ -1,6 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -10,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -19,12 +26,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Layers,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { TopBar } from "../components/TopBar";
 import { useStore } from "../context/StoreContext";
 import type { Product, StockBatch } from "../types/store";
+import { clearLeadingZeros } from "../utils/numberInput";
 
 /** Format qty display for mixed-unit products */
 function formatBatchQty(product: Product, batch: StockBatch): string {
@@ -49,6 +63,9 @@ export function StockPage() {
     addStockOut,
     getProductStock,
     getProductBatches,
+    addProduct,
+    addCategory,
+    categories,
     shopId,
   } = useStore();
 
@@ -69,6 +86,7 @@ export function StockPage() {
   const [inBillNo, setInBillNo] = useState("");
   const [inTransport, setInTransport] = useState("");
   const [inLabour, setInLabour] = useState("");
+  const [inOtherCharges, setInOtherCharges] = useState("");
   const [inExpiryDate, setInExpiryDate] = useState("");
   // Stock In: sell price / profit %
   const [inSellPrice, setInSellPrice] = useState("");
@@ -76,6 +94,65 @@ export function StockPage() {
   // Mixed Unit: dual qty
   const [inLengthQty, setInLengthQty] = useState("");
   const [inWeightQty, setInWeightQty] = useState("");
+
+  // ── Quick Add Product dialog ──────────────────────────────────────────────
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [qaName, setQaName] = useState("");
+  const [qaCategory, setQaCategory] = useState("");
+  const [qaUnit, setQaUnit] = useState("");
+  const [qaMinStock, setQaMinStock] = useState("");
+  const [qaSellPrice, setQaSellPrice] = useState("");
+
+  const resetQuickAdd = () => {
+    setQaName("");
+    setQaCategory("");
+    setQaUnit("");
+    setQaMinStock("");
+    setQaSellPrice("");
+  };
+
+  const handleQuickAddProduct = () => {
+    if (!qaName.trim()) {
+      toast.error("Product name required");
+      return;
+    }
+    if (!qaUnit.trim()) {
+      toast.error("Unit required (e.g. kg, piece, liter)");
+      return;
+    }
+    const duplicate = products.find(
+      (p) => p.name.trim().toLowerCase() === qaName.trim().toLowerCase(),
+    );
+    if (duplicate) {
+      toast.warning(`"${qaName}" pehle se exist karta hai`);
+      return;
+    }
+
+    let catId = categories.find(
+      (c) => c.name.toLowerCase() === qaCategory.trim().toLowerCase(),
+    )?.id;
+    if (!catId && qaCategory.trim()) {
+      catId = addCategory(qaCategory.trim());
+    }
+    if (!catId) {
+      catId = addCategory("General");
+    }
+
+    const newId = addProduct({
+      name: qaName.trim(),
+      categoryId: catId,
+      unit: qaUnit.trim(),
+      minStockAlert: qaMinStock ? Number(qaMinStock) : 0,
+      sellingPrice: qaSellPrice ? Number(qaSellPrice) : 0,
+      unitMode: "single",
+    });
+
+    // Auto-select the new product in Stock In dropdown
+    handleInProductChange(newId);
+    toast.success(`"${qaName.trim()}" product add ho gaya!`);
+    resetQuickAdd();
+    setShowQuickAdd(false);
+  };
 
   // Stock Out form
   const [outProduct, setOutProduct] = useState("");
@@ -138,6 +215,7 @@ export function StockPage() {
       inExpiryDate.trim() || undefined,
       lengthQtyVal,
       weightQtyVal,
+      inOtherCharges ? Number(inOtherCharges) : undefined,
     );
     toast.success("Stock added successfully!");
     setInQty("");
@@ -147,6 +225,7 @@ export function StockPage() {
     setInBillNo("");
     setInTransport("");
     setInLabour("");
+    setInOtherCharges("");
     setInExpiryDate("");
     setInSellPrice("");
     setInProfitPercent("");
@@ -181,7 +260,10 @@ export function StockPage() {
     : Number(inQty || 0);
   const purchaseSubtotal = Number(inRate || 0) * effectiveQty;
   const totalFinalCost =
-    purchaseSubtotal + Number(inTransport || 0) + Number(inLabour || 0);
+    purchaseSubtotal +
+    Number(inTransport || 0) +
+    Number(inLabour || 0) +
+    Number(inOtherCharges || 0);
   // Per-unit cost
   const inPerUnitCost = effectiveQty > 0 ? totalFinalCost / effectiveQty : 0;
   // Total selling price = finalCost + finalCost * profit% / 100
@@ -214,9 +296,15 @@ export function StockPage() {
         </div>
 
         <Tabs defaultValue="in">
-          <TabsList data-ocid="stock.tab" className="mb-4">
+          <TabsList
+            data-ocid="stock.tab"
+            className="mb-4 flex-wrap h-auto gap-1"
+          >
             <TabsTrigger value="in">
               <ArrowDownToLine size={14} className="mr-2" /> Stock In
+            </TabsTrigger>
+            <TabsTrigger value="bulk">
+              <Layers size={14} className="mr-2" /> Bulk Stock In
             </TabsTrigger>
             <TabsTrigger value="out">
               <ArrowUpFromLine size={14} className="mr-2" /> Stock Out
@@ -243,6 +331,20 @@ export function StockPage() {
                       <SelectValue placeholder="Select product" />
                     </SelectTrigger>
                     <SelectContent>
+                      {/* ── Quick Add New Product ── */}
+                      <button
+                        type="button"
+                        data-ocid="stock.in.add_new_product.button"
+                        className="flex w-full items-center gap-2 px-2 py-1.5 text-sm font-medium text-primary cursor-pointer rounded-sm hover:bg-primary/10 focus-visible:bg-primary/10 outline-none transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowQuickAdd(true);
+                        }}
+                      >
+                        <Plus size={14} className="shrink-0" />
+                        <span>Naya Product Add Karein</span>
+                      </button>
+                      <Separator className="my-1" />
                       {products.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
                           {p.name}{" "}
@@ -286,8 +388,11 @@ export function StockPage() {
                           type="number"
                           placeholder={`e.g. 10 ${selectedInProduct.lengthUnit || "meter"}`}
                           value={inLengthQty}
+                          onFocus={(e) => {
+                            if (e.target.value === "0") e.target.select();
+                          }}
                           onChange={(e) => {
-                            const val = e.target.value;
+                            const val = clearLeadingZeros(e.target.value);
                             setInLengthQty(val);
                             // Smart Mode auto-calculate weight
                             if (
@@ -310,8 +415,11 @@ export function StockPage() {
                           type="number"
                           placeholder={`e.g. 25 ${selectedInProduct.weightUnit || "kg"}`}
                           value={inWeightQty}
+                          onFocus={(e) => {
+                            if (e.target.value === "0") e.target.select();
+                          }}
                           onChange={(e) => {
-                            const val = e.target.value;
+                            const val = clearLeadingZeros(e.target.value);
                             setInWeightQty(val);
                             // Smart Mode auto-calculate length
                             if (
@@ -348,8 +456,11 @@ export function StockPage() {
                         type="number"
                         placeholder="e.g. 50"
                         value={inQty}
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
                         onChange={(e) => {
-                          const qty = e.target.value;
+                          const qty = clearLeadingZeros(e.target.value);
                           setInQty(qty);
                           const qtyNum = Number(qty || 0);
                           const cost =
@@ -378,8 +489,11 @@ export function StockPage() {
                         type="number"
                         placeholder="e.g. 80"
                         value={inRate}
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
                         onChange={(e) => {
-                          const rate = e.target.value;
+                          const rate = clearLeadingZeros(e.target.value);
                           setInRate(rate);
                           const qty = Number(inQty || 0);
                           const cost =
@@ -413,7 +527,12 @@ export function StockPage() {
                       type="number"
                       placeholder="e.g. 80"
                       value={inRate}
-                      onChange={(e) => setInRate(e.target.value)}
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
+                      onChange={(e) =>
+                        setInRate(clearLeadingZeros(e.target.value))
+                      }
                     />
                   </div>
                 )}
@@ -474,15 +593,19 @@ export function StockPage() {
                       type="number"
                       placeholder="0"
                       value={inTransport}
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
                       onChange={(e) => {
-                        const tc = e.target.value;
+                        const tc = clearLeadingZeros(e.target.value);
                         setInTransport(tc);
                         if (!isMixedIn) {
                           const qty = effectiveQty;
                           const totalCost =
                             Number(inRate || 0) * qty +
                             Number(tc) +
-                            Number(inLabour || 0);
+                            Number(inLabour || 0) +
+                            Number(inOtherCharges || 0);
                           if (
                             inProfitPercent !== "" &&
                             totalCost > 0 &&
@@ -513,15 +636,19 @@ export function StockPage() {
                       type="number"
                       placeholder="0"
                       value={inLabour}
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
                       onChange={(e) => {
-                        const lc = e.target.value;
+                        const lc = clearLeadingZeros(e.target.value);
                         setInLabour(lc);
                         if (!isMixedIn) {
                           const qty = effectiveQty;
                           const totalCost =
                             Number(inRate || 0) * qty +
                             Number(inTransport || 0) +
-                            Number(lc);
+                            Number(lc) +
+                            Number(inOtherCharges || 0);
                           if (
                             inProfitPercent !== "" &&
                             totalCost > 0 &&
@@ -547,6 +674,52 @@ export function StockPage() {
                   </div>
                 </div>
 
+                <div className="space-y-1.5">
+                  <Label className="text-sm">
+                    Other Charges / Anya Kharcha (₹)
+                  </Label>
+                  <Input
+                    data-ocid="stock.in.other_charges.input"
+                    type="number"
+                    placeholder="0"
+                    value={inOtherCharges}
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
+                    onChange={(e) => {
+                      const oc = clearLeadingZeros(e.target.value);
+                      setInOtherCharges(oc);
+                      if (!isMixedIn) {
+                        const qty = effectiveQty;
+                        const totalCost =
+                          Number(inRate || 0) * qty +
+                          Number(inTransport || 0) +
+                          Number(inLabour || 0) +
+                          Number(oc);
+                        if (
+                          inProfitPercent !== "" &&
+                          totalCost > 0 &&
+                          qty > 0
+                        ) {
+                          const totalSell =
+                            totalCost +
+                            (totalCost * Number(inProfitPercent)) / 100;
+                          setInSellPrice((totalSell / qty).toFixed(2));
+                        } else if (
+                          inSellPrice !== "" &&
+                          totalCost > 0 &&
+                          qty > 0
+                        ) {
+                          const totalSell = Number(inSellPrice) * qty;
+                          const pct =
+                            ((totalSell - totalCost) / totalCost) * 100;
+                          setInProfitPercent(pct.toFixed(2));
+                        }
+                      }
+                    }}
+                  />
+                </div>
+
                 {/* Sell Price + Profit % (only for single unit products) */}
                 {!isMixedIn && (
                   <>
@@ -563,8 +736,11 @@ export function StockPage() {
                           type="number"
                           placeholder="e.g. 120"
                           value={inSellPrice}
+                          onFocus={(e) => {
+                            if (e.target.value === "0") e.target.select();
+                          }}
                           onChange={(e) => {
-                            const sp = e.target.value;
+                            const sp = clearLeadingZeros(e.target.value);
                             setInSellPrice(sp);
                             if (
                               totalFinalCost > 0 &&
@@ -591,8 +767,11 @@ export function StockPage() {
                           min="0"
                           placeholder="e.g. 20"
                           value={inProfitPercent}
+                          onFocus={(e) => {
+                            if (e.target.value === "0") e.target.select();
+                          }}
                           onChange={(e) => {
-                            const pct = e.target.value;
+                            const pct = clearLeadingZeros(e.target.value);
                             if (Number(pct) < 0) return;
                             setInProfitPercent(pct);
                             if (
@@ -633,7 +812,8 @@ export function StockPage() {
                     <div className="space-y-1 text-muted-foreground">
                       <div className="flex justify-between">
                         <span>
-                          Purchase: ₹{inRate || 0} × {effectiveQty || 0}
+                          Kharid (Purchase): ₹{inRate || 0} ×{" "}
+                          {effectiveQty || 0}
                         </span>
                         <span className="text-foreground font-medium">
                           ₹{purchaseSubtotal.toFixed(2)}
@@ -641,7 +821,7 @@ export function StockPage() {
                       </div>
                       {Number(inTransport) > 0 && (
                         <div className="flex justify-between">
-                          <span>+ Transport</span>
+                          <span>+ Dhulai (Transport)</span>
                           <span className="text-foreground">
                             ₹{Number(inTransport).toFixed(2)}
                           </span>
@@ -649,14 +829,22 @@ export function StockPage() {
                       )}
                       {Number(inLabour) > 0 && (
                         <div className="flex justify-between">
-                          <span>+ Labour</span>
+                          <span>+ Majduri (Labour)</span>
                           <span className="text-foreground">
                             ₹{Number(inLabour).toFixed(2)}
                           </span>
                         </div>
                       )}
+                      {Number(inOtherCharges) > 0 && (
+                        <div className="flex justify-between">
+                          <span>+ Anya Kharcha (Other)</span>
+                          <span className="text-foreground">
+                            ₹{Number(inOtherCharges).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between border-t border-border pt-1 mt-1 font-semibold text-foreground">
-                        <span>Final Cost (Total)</span>
+                        <span>Final Cost / Lagat (Total)</span>
                         <span>₹{totalFinalCost.toFixed(2)}</span>
                       </div>
                       {effectiveQty > 0 && inPerUnitCost > 0 && (
@@ -692,6 +880,11 @@ export function StockPage() {
                 </Button>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── Bulk Stock In ────────────────────────────────────────── */}
+          <TabsContent value="bulk">
+            <BulkStockIn />
           </TabsContent>
 
           {/* Stock Out */}
@@ -831,7 +1024,12 @@ export function StockPage() {
                     type="number"
                     placeholder="e.g. 10"
                     value={outQty}
-                    onChange={(e) => setOutQty(e.target.value)}
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
+                    onChange={(e) =>
+                      setOutQty(clearLeadingZeros(e.target.value))
+                    }
                   />
                 </div>
 
@@ -899,7 +1097,1033 @@ export function StockPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Quick Add Product Dialog ─────────────────────────────── */}
+      <Dialog
+        open={showQuickAdd}
+        onOpenChange={(open) => {
+          if (!open) resetQuickAdd();
+          setShowQuickAdd(open);
+        }}
+      >
+        <DialogContent
+          data-ocid="stock.quick_add_product.dialog"
+          className="max-w-sm w-full"
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Plus size={16} className="text-primary" /> Naya Product Add
+              Karein
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label className="text-sm">
+                Product Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                data-ocid="stock.quick_add.name.input"
+                placeholder="e.g. Basmati Rice"
+                value={qaName}
+                onChange={(e) => setQaName(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Category</Label>
+                <Input
+                  data-ocid="stock.quick_add.category.input"
+                  placeholder="e.g. Grains"
+                  value={qaCategory}
+                  onChange={(e) => setQaCategory(e.target.value)}
+                  list="qa-category-suggestions"
+                />
+                {categories.length > 0 && (
+                  <datalist id="qa-category-suggestions">
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  Unit <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  data-ocid="stock.quick_add.unit.input"
+                  placeholder="kg / piece / liter"
+                  value={qaUnit}
+                  onChange={(e) => setQaUnit(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Min Stock Alert</Label>
+                <Input
+                  data-ocid="stock.quick_add.min_stock.input"
+                  type="number"
+                  placeholder="e.g. 5"
+                  value={qaMinStock}
+                  onChange={(e) => setQaMinStock(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Selling Price (₹)</Label>
+                <Input
+                  data-ocid="stock.quick_add.sell_price.input"
+                  type="number"
+                  placeholder="e.g. 120"
+                  value={qaSellPrice}
+                  onChange={(e) => setQaSellPrice(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              * Required fields. Baaki details baad mein Admin Panel se edit kar
+              sakte hain.
+            </p>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  resetQuickAdd();
+                  setShowQuickAdd(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                data-ocid="stock.quick_add.save.button"
+                className="flex-1"
+                onClick={handleQuickAddProduct}
+              >
+                <Plus size={14} className="mr-1" /> Save & Select
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+// ─── Bulk Stock In Component ──────────────────────────────────────────────────
+
+interface BulkRow {
+  id: string;
+  productId: string;
+  qty: string;
+  rate: string;
+  transport: string;
+  labour: string;
+  sellPrice: string;
+  profitPct: string;
+}
+
+function makeBulkRow(): BulkRow {
+  return {
+    id: `row_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    productId: "",
+    qty: "",
+    rate: "",
+    transport: "",
+    labour: "",
+    sellPrice: "",
+    profitPct: "",
+  };
+}
+
+function BulkStockIn() {
+  const {
+    products,
+    vendors,
+    categories,
+    addStockIn,
+    addProduct,
+    addCategory,
+    getProductStock,
+    getLastVendorRate,
+  } = useStore();
+
+  const [vendorId, setVendorId] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [billNo, setBillNo] = useState("");
+  const [rows, setRows] = useState<BulkRow[]>([
+    makeBulkRow(),
+    makeBulkRow(),
+    makeBulkRow(),
+  ]);
+
+  // Quick Add Product dialog (shared across all rows)
+  const [showQA, setShowQA] = useState(false);
+  const [qaTargetRowId, setQaTargetRowId] = useState<string | null>(null);
+  const [qaName, setQaName] = useState("");
+  const [qaCategory, setQaCategory] = useState("");
+  const [qaUnit, setQaUnit] = useState("");
+  const [qaMinStock, setQaMinStock] = useState("");
+  const [qaSellPrice, setQaSellPrice] = useState("");
+
+  const resetQA = () => {
+    setQaName("");
+    setQaCategory("");
+    setQaUnit("");
+    setQaMinStock("");
+    setQaSellPrice("");
+  };
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const calcFinalCost = (row: BulkRow): number => {
+    const qty = Number(row.qty || 0);
+    const rate = Number(row.rate || 0);
+    return rate * qty + Number(row.transport || 0) + Number(row.labour || 0);
+  };
+
+  const calcPerUnitCost = (row: BulkRow): number => {
+    const qty = Number(row.qty || 0);
+    if (qty <= 0) return 0;
+    return calcFinalCost(row) / qty;
+  };
+
+  const validRowCount = rows.filter(
+    (r) => r.productId && Number(r.qty) > 0 && Number(r.rate) > 0,
+  ).length;
+
+  // ── Row update helpers ─────────────────────────────────────────────────────
+  const updateRow = (id: string, changes: Partial<BulkRow>) => {
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...changes } : r)),
+    );
+  };
+
+  const recalcSell = (
+    row: BulkRow,
+    overrides: Partial<BulkRow> = {},
+  ): Partial<BulkRow> => {
+    const merged = { ...row, ...overrides };
+    const qty = Number(merged.qty || 0);
+    const finalCost = calcFinalCost(merged);
+    if (overrides.profitPct !== undefined) {
+      const pct = Number(merged.profitPct || 0);
+      if (finalCost > 0 && qty > 0) {
+        const totalSell = finalCost + (finalCost * pct) / 100;
+        return {
+          profitPct: merged.profitPct,
+          sellPrice: (totalSell / qty).toFixed(2),
+        };
+      }
+      return { profitPct: merged.profitPct };
+    }
+    if (overrides.sellPrice !== undefined) {
+      if (finalCost > 0 && qty > 0 && Number(merged.sellPrice) > 0) {
+        const totalSell = Number(merged.sellPrice) * qty;
+        const pct = ((totalSell - finalCost) / finalCost) * 100;
+        return { sellPrice: merged.sellPrice, profitPct: pct.toFixed(2) };
+      }
+      return { sellPrice: merged.sellPrice };
+    }
+    return {};
+  };
+
+  const handleProductChange = (rowId: string, productId: string) => {
+    if (productId === "__new__") {
+      setQaTargetRowId(rowId);
+      setShowQA(true);
+      return;
+    }
+    const changes: Partial<BulkRow> = { productId, rate: "" };
+    // Auto-fill rate from last vendor+product rate history
+    if (vendorId && productId) {
+      const lastRate = getLastVendorRate(vendorId, productId);
+      if (lastRate != null) {
+        changes.rate = String(lastRate);
+      }
+    }
+    updateRow(rowId, changes);
+  };
+
+  const handleVendorChange = (newVendorId: string) => {
+    setVendorId(newVendorId);
+    // Re-fill rates for rows that already have a product selected
+    setRows((prev) =>
+      prev.map((r) => {
+        if (!r.productId) return r;
+        const lastRate = getLastVendorRate(newVendorId, r.productId);
+        if (lastRate != null) return { ...r, rate: String(lastRate) };
+        return r;
+      }),
+    );
+  };
+
+  // ── Quick Add Product ──────────────────────────────────────────────────────
+  const handleQuickAdd = () => {
+    if (!qaName.trim()) {
+      toast.error("Product name required");
+      return;
+    }
+    if (!qaUnit.trim()) {
+      toast.error("Unit required");
+      return;
+    }
+    const dup = products.find(
+      (p) => p.name.trim().toLowerCase() === qaName.trim().toLowerCase(),
+    );
+    if (dup) {
+      toast.warning(`"${qaName}" pehle se exist karta hai`);
+      return;
+    }
+
+    let catId = categories.find(
+      (c) => c.name.toLowerCase() === qaCategory.trim().toLowerCase(),
+    )?.id;
+    if (!catId && qaCategory.trim()) catId = addCategory(qaCategory.trim());
+    if (!catId) catId = addCategory("General");
+
+    const newId = addProduct({
+      name: qaName.trim(),
+      categoryId: catId,
+      unit: qaUnit.trim(),
+      minStockAlert: qaMinStock ? Number(qaMinStock) : 0,
+      sellingPrice: qaSellPrice ? Number(qaSellPrice) : 0,
+      unitMode: "single",
+    });
+
+    if (qaTargetRowId) {
+      updateRow(qaTargetRowId, { productId: newId });
+    }
+    toast.success(`"${qaName.trim()}" product add ho gaya!`);
+    resetQA();
+    setShowQA(false);
+  };
+
+  // ── Save all ───────────────────────────────────────────────────────────────
+  const handleSaveAll = () => {
+    const validRows = rows.filter(
+      (r) => r.productId && Number(r.qty) > 0 && Number(r.rate) > 0,
+    );
+    if (validRows.length === 0) {
+      toast.error("Kam se kam ek row mein product, qty, aur rate fill karein");
+      return;
+    }
+    const dateIso = new Date(date).toISOString();
+    for (const row of validRows) {
+      addStockIn(
+        row.productId,
+        Number(row.qty),
+        Number(row.rate),
+        dateIso,
+        "Bulk stock purchase",
+        undefined,
+        billNo.trim() || undefined,
+        row.transport ? Number(row.transport) : undefined,
+        row.labour ? Number(row.labour) : undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+    }
+    toast.success(`${validRows.length} products ka stock add ho gaya! ✅`);
+    setRows([makeBulkRow(), makeBulkRow(), makeBulkRow()]);
+    setBillNo("");
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ── Header card: Vendor + Date + Bill No ─────────────────────── */}
+      <Card className="shadow-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Layers size={16} className="text-primary" />
+            Bulk Stock In — Ek Saath Kai Products
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-sm">Vendor (optional)</Label>
+              <Select value={vendorId} onValueChange={handleVendorChange}>
+                <SelectTrigger data-ocid="bulk.vendor.select">
+                  <SelectValue placeholder="Vendor chunein" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Koi vendor nahi —</SelectItem>
+                  {vendors.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Purchase Date</Label>
+              <Input
+                data-ocid="bulk.date.input"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Bill No (optional)</Label>
+              <Input
+                data-ocid="bulk.bill_no.input"
+                placeholder="e.g. BILL-001"
+                value={billNo}
+                onChange={(e) => setBillNo(e.target.value)}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Product rows ────────────────────────────────────────────── */}
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <Card className="shadow-card border-border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b border-border">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[180px]">
+                    Product *
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">
+                    Qty *
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[100px]">
+                    Rate (₹) *
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">
+                    Transport
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">
+                    Labour
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[100px]">
+                    Sell Price
+                  </th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[80px]">
+                    Profit %
+                  </th>
+                  <th className="text-center px-3 py-2 font-medium text-muted-foreground w-[80px]">
+                    Lagat/Unit
+                  </th>
+                  <th className="w-10" />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, idx) => (
+                  <BulkRowDesktop
+                    key={row.id}
+                    row={row}
+                    idx={idx}
+                    products={products}
+                    canDelete={rows.length > 1}
+                    calcPerUnitCost={calcPerUnitCost}
+                    getProductStock={getProductStock}
+                    onProductChange={(pid) => handleProductChange(row.id, pid)}
+                    onQtyChange={(v) => {
+                      const qty = clearLeadingZeros(v);
+                      const extra = recalcSell(row, { qty });
+                      updateRow(row.id, { qty, ...extra });
+                    }}
+                    onRateChange={(v) => {
+                      const rate = clearLeadingZeros(v);
+                      const extra = recalcSell(row, { rate });
+                      updateRow(row.id, { rate, ...extra });
+                    }}
+                    onTransportChange={(v) => {
+                      const transport = clearLeadingZeros(v);
+                      const extra = recalcSell(row, { transport });
+                      updateRow(row.id, { transport, ...extra });
+                    }}
+                    onLabourChange={(v) => {
+                      const labour = clearLeadingZeros(v);
+                      const extra = recalcSell(row, { labour });
+                      updateRow(row.id, { labour, ...extra });
+                    }}
+                    onSellPriceChange={(v) => {
+                      const sellPrice = clearLeadingZeros(v);
+                      const extra = recalcSell(row, { sellPrice });
+                      updateRow(row.id, { ...extra });
+                    }}
+                    onProfitPctChange={(v) => {
+                      if (Number(v) < 0) return;
+                      const profitPct = clearLeadingZeros(v);
+                      const extra = recalcSell(row, { profitPct });
+                      updateRow(row.id, { ...extra });
+                    }}
+                    onDelete={() =>
+                      setRows((prev) => prev.filter((r) => r.id !== row.id))
+                    }
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {rows.map((row, idx) => (
+          <BulkRowMobile
+            key={row.id}
+            row={row}
+            idx={idx}
+            products={products}
+            canDelete={rows.length > 1}
+            calcFinalCost={calcFinalCost}
+            calcPerUnitCost={calcPerUnitCost}
+            getProductStock={getProductStock}
+            onProductChange={(pid) => handleProductChange(row.id, pid)}
+            onQtyChange={(v) => {
+              const qty = clearLeadingZeros(v);
+              const extra = recalcSell(row, { qty });
+              updateRow(row.id, { qty, ...extra });
+            }}
+            onRateChange={(v) => {
+              const rate = clearLeadingZeros(v);
+              const extra = recalcSell(row, { rate });
+              updateRow(row.id, { rate, ...extra });
+            }}
+            onTransportChange={(v) => {
+              const transport = clearLeadingZeros(v);
+              const extra = recalcSell(row, { transport });
+              updateRow(row.id, { transport, ...extra });
+            }}
+            onLabourChange={(v) => {
+              const labour = clearLeadingZeros(v);
+              const extra = recalcSell(row, { labour });
+              updateRow(row.id, { labour, ...extra });
+            }}
+            onSellPriceChange={(v) => {
+              const sellPrice = clearLeadingZeros(v);
+              const extra = recalcSell(row, { sellPrice });
+              updateRow(row.id, { ...extra });
+            }}
+            onProfitPctChange={(v) => {
+              if (Number(v) < 0) return;
+              const profitPct = clearLeadingZeros(v);
+              const extra = recalcSell(row, { profitPct });
+              updateRow(row.id, { ...extra });
+            }}
+            onDelete={() =>
+              setRows((prev) => prev.filter((r) => r.id !== row.id))
+            }
+          />
+        ))}
+      </div>
+
+      {/* ── Add Row + Save ───────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+        <Button
+          data-ocid="bulk.add_row.button"
+          variant="outline"
+          onClick={() => setRows((prev) => [...prev, makeBulkRow()])}
+          className="flex items-center gap-2"
+        >
+          <Plus size={15} /> Ek Aur Product Add Karein
+        </Button>
+
+        <div className="flex-1 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-end">
+          {validRowCount > 0 && (
+            <span className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                {validRowCount}
+              </span>{" "}
+              item{validRowCount !== 1 ? "s" : ""} save ke liye taiyaar
+            </span>
+          )}
+          <Button
+            data-ocid="bulk.save_all.button"
+            className="w-full sm:w-auto bg-success hover:bg-success/90 text-success-foreground font-semibold"
+            disabled={validRowCount === 0}
+            onClick={handleSaveAll}
+          >
+            <ArrowDownToLine size={16} className="mr-2" />
+            Sab Save Karein ({validRowCount} item
+            {validRowCount !== 1 ? "s" : ""})
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Quick Add Product Dialog ──────────────────────────────────── */}
+      <Dialog
+        open={showQA}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetQA();
+            setQaTargetRowId(null);
+          }
+          setShowQA(open);
+        }}
+      >
+        <DialogContent
+          data-ocid="bulk.quick_add.dialog"
+          className="max-w-sm w-full"
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Plus size={16} className="text-primary" /> Naya Product Add
+              Karein
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <Label className="text-sm">
+                Product Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                data-ocid="bulk.qa.name.input"
+                placeholder="e.g. Basmati Rice"
+                value={qaName}
+                onChange={(e) => setQaName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Category</Label>
+                <Input
+                  data-ocid="bulk.qa.category.input"
+                  placeholder="e.g. Grains"
+                  value={qaCategory}
+                  onChange={(e) => setQaCategory(e.target.value)}
+                  list="bulk-qa-cat"
+                />
+                {categories.length > 0 && (
+                  <datalist id="bulk-qa-cat">
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  Unit <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  data-ocid="bulk.qa.unit.input"
+                  placeholder="kg / piece"
+                  value={qaUnit}
+                  onChange={(e) => setQaUnit(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Min Stock</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 5"
+                  value={qaMinStock}
+                  onChange={(e) => setQaMinStock(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Sell Price (₹)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 120"
+                  value={qaSellPrice}
+                  onChange={(e) => setQaSellPrice(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  resetQA();
+                  setShowQA(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                data-ocid="bulk.qa.save.button"
+                className="flex-1"
+                onClick={handleQuickAdd}
+              >
+                <Plus size={14} className="mr-1" /> Save & Select
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Desktop table row ─────────────────────────────────────────────────────────
+interface BulkRowDesktopProps {
+  row: BulkRow;
+  idx: number;
+  products: Product[];
+  canDelete: boolean;
+  calcPerUnitCost: (r: BulkRow) => number;
+  getProductStock: (id: string) => number;
+  onProductChange: (pid: string) => void;
+  onQtyChange: (v: string) => void;
+  onRateChange: (v: string) => void;
+  onTransportChange: (v: string) => void;
+  onLabourChange: (v: string) => void;
+  onSellPriceChange: (v: string) => void;
+  onProfitPctChange: (v: string) => void;
+  onDelete: () => void;
+}
+
+function BulkRowDesktop({
+  row,
+  idx,
+  products,
+  canDelete,
+  calcPerUnitCost,
+  getProductStock,
+  onProductChange,
+  onQtyChange,
+  onRateChange,
+  onTransportChange,
+  onLabourChange,
+  onSellPriceChange,
+  onProfitPctChange,
+  onDelete,
+}: BulkRowDesktopProps) {
+  const isValid = row.productId && Number(row.qty) > 0 && Number(row.rate) > 0;
+  const perUnitCost = calcPerUnitCost(row);
+
+  return (
+    <tr
+      data-ocid={`bulk.row.${idx + 1}`}
+      className={`border-b border-border/60 last:border-0 transition-colors ${isValid ? "bg-success/5" : "bg-background"}`}
+    >
+      {/* Product */}
+      <td className="px-3 py-2">
+        <Select value={row.productId || ""} onValueChange={onProductChange}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="Product chunein…" />
+          </SelectTrigger>
+          <SelectContent>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-2 py-1.5 text-xs font-medium text-primary cursor-pointer rounded-sm hover:bg-primary/10 focus-visible:bg-primary/10 outline-none"
+              onClick={(e) => {
+                e.stopPropagation();
+                onProductChange("__new__");
+              }}
+            >
+              <Plus size={12} /> Naya Product
+            </button>
+            <Separator className="my-1" />
+            {products.map((p) => (
+              <SelectItem key={p.id} value={p.id} className="text-xs">
+                {p.name} ({getProductStock(p.id)} {p.unit})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </td>
+      {/* Qty */}
+      <td className="px-3 py-2">
+        <Input
+          type="number"
+          placeholder="0"
+          className="h-8 text-xs"
+          value={row.qty}
+          onFocus={(e) => {
+            if (e.target.value === "0") e.target.select();
+          }}
+          onChange={(e) => onQtyChange(e.target.value)}
+        />
+      </td>
+      {/* Rate */}
+      <td className="px-3 py-2">
+        <Input
+          type="number"
+          placeholder="0"
+          className="h-8 text-xs"
+          value={row.rate}
+          onFocus={(e) => {
+            if (e.target.value === "0") e.target.select();
+          }}
+          onChange={(e) => onRateChange(e.target.value)}
+        />
+      </td>
+      {/* Transport */}
+      <td className="px-3 py-2">
+        <Input
+          type="number"
+          placeholder="0"
+          className="h-8 text-xs"
+          value={row.transport}
+          onFocus={(e) => {
+            if (e.target.value === "0") e.target.select();
+          }}
+          onChange={(e) => onTransportChange(e.target.value)}
+        />
+      </td>
+      {/* Labour */}
+      <td className="px-3 py-2">
+        <Input
+          type="number"
+          placeholder="0"
+          className="h-8 text-xs"
+          value={row.labour}
+          onFocus={(e) => {
+            if (e.target.value === "0") e.target.select();
+          }}
+          onChange={(e) => onLabourChange(e.target.value)}
+        />
+      </td>
+      {/* Sell Price */}
+      <td className="px-3 py-2">
+        <Input
+          type="number"
+          placeholder="0"
+          className="h-8 text-xs"
+          value={row.sellPrice}
+          onFocus={(e) => {
+            if (e.target.value === "0") e.target.select();
+          }}
+          onChange={(e) => onSellPriceChange(e.target.value)}
+        />
+      </td>
+      {/* Profit % */}
+      <td className="px-3 py-2">
+        <Input
+          type="number"
+          placeholder="0"
+          className="h-8 text-xs"
+          value={row.profitPct}
+          onFocus={(e) => {
+            if (e.target.value === "0") e.target.select();
+          }}
+          onChange={(e) => onProfitPctChange(e.target.value)}
+        />
+      </td>
+      {/* Per unit cost (read-only) */}
+      <td className="px-3 py-2 text-center">
+        <span
+          className={`text-xs font-semibold ${perUnitCost > 0 ? "text-primary" : "text-muted-foreground"}`}
+        >
+          {perUnitCost > 0 ? `₹${perUnitCost.toFixed(2)}` : "—"}
+        </span>
+      </td>
+      {/* Delete */}
+      <td className="px-2 py-2 text-center">
+        {canDelete && (
+          <button
+            type="button"
+            data-ocid={`bulk.row.${idx + 1}.delete`}
+            onClick={onDelete}
+            className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
+            aria-label="Row hatayein"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+// ─── Mobile card row ───────────────────────────────────────────────────────────
+interface BulkRowMobileProps
+  extends Omit<BulkRowDesktopProps, "calcPerUnitCost"> {
+  calcFinalCost: (r: BulkRow) => number;
+  calcPerUnitCost: (r: BulkRow) => number;
+}
+
+function BulkRowMobile({
+  row,
+  idx,
+  products,
+  canDelete,
+  calcFinalCost,
+  calcPerUnitCost,
+  getProductStock,
+  onProductChange,
+  onQtyChange,
+  onRateChange,
+  onTransportChange,
+  onLabourChange,
+  onSellPriceChange,
+  onProfitPctChange,
+  onDelete,
+}: BulkRowMobileProps) {
+  const isValid = row.productId && Number(row.qty) > 0 && Number(row.rate) > 0;
+  const finalCost = calcFinalCost(row);
+  const perUnitCost = calcPerUnitCost(row);
+
+  return (
+    <Card
+      data-ocid={`bulk.row_mobile.${idx + 1}`}
+      className={`shadow-sm border ${isValid ? "border-success/30 bg-success/5" : "border-border bg-card"}`}
+    >
+      <CardContent className="p-3 space-y-3">
+        {/* Row header */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Product {idx + 1}
+          </span>
+          {canDelete && (
+            <button
+              type="button"
+              data-ocid={`bulk.row_mobile.${idx + 1}.delete`}
+              onClick={onDelete}
+              className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
+              aria-label="Row hatayein"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
+        </div>
+
+        {/* Product select */}
+        <div className="space-y-1">
+          <Label className="text-xs">Product *</Label>
+          <Select value={row.productId || ""} onValueChange={onProductChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Product chunein…" />
+            </SelectTrigger>
+            <SelectContent>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm font-medium text-primary cursor-pointer rounded-sm hover:bg-primary/10 outline-none"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onProductChange("__new__");
+                }}
+              >
+                <Plus size={13} /> Naya Product
+              </button>
+              <Separator className="my-1" />
+              {products.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} ({getProductStock(p.id)} {p.unit})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Qty + Rate */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Qty *</Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={row.qty}
+              onFocus={(e) => {
+                if (e.target.value === "0") e.target.select();
+              }}
+              onChange={(e) => onQtyChange(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Rate (₹) *</Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={row.rate}
+              onFocus={(e) => {
+                if (e.target.value === "0") e.target.select();
+              }}
+              onChange={(e) => onRateChange(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Transport + Labour */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Transport (₹)</Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={row.transport}
+              onFocus={(e) => {
+                if (e.target.value === "0") e.target.select();
+              }}
+              onChange={(e) => onTransportChange(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Labour (₹)</Label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={row.labour}
+              onFocus={(e) => {
+                if (e.target.value === "0") e.target.select();
+              }}
+              onChange={(e) => onLabourChange(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Sell Price + Profit % */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Sell Price (₹)</Label>
+            <Input
+              type="number"
+              placeholder="auto"
+              value={row.sellPrice}
+              onFocus={(e) => {
+                if (e.target.value === "0") e.target.select();
+              }}
+              onChange={(e) => onSellPriceChange(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Profit %</Label>
+            <Input
+              type="number"
+              placeholder="auto"
+              value={row.profitPct}
+              onFocus={(e) => {
+                if (e.target.value === "0") e.target.select();
+              }}
+              onChange={(e) => onProfitPctChange(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Cost summary mini-box */}
+        {(finalCost > 0 || perUnitCost > 0) && (
+          <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-xs">
+            <span className="text-muted-foreground">Final Lagat:</span>
+            <span className="font-semibold text-foreground">
+              ₹{finalCost.toFixed(2)}
+            </span>
+            {perUnitCost > 0 && (
+              <>
+                <span className="text-muted-foreground ml-2">Per Unit:</span>
+                <span className="font-semibold text-primary">
+                  ₹{perUnitCost.toFixed(2)}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

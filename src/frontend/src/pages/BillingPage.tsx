@@ -40,11 +40,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { TopBar } from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { Invoice, InvoiceItem } from "../types/store";
 import { ROLE_PERMISSIONS } from "../types/store";
+import { clearLeadingZeros } from "../utils/numberInput";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -343,7 +343,13 @@ function LowPriceAlertModal({
   );
 }
 
-export function BillingPage() {
+const PENDING_CASH_KEY = "pending_cash_invoice";
+
+export function BillingPage({
+  onNavigate,
+}: {
+  onNavigate?: (page: import("../types/store").NavPage) => void;
+}) {
   const {
     products,
     getProductStock,
@@ -768,8 +774,16 @@ export function BillingPage() {
       invoiceTotalProfit,
       totalExtraProfit: totalExtraProfit > 0 ? totalExtraProfit : undefined,
       totalStaffBonus: totalStaffBonus > 0 ? totalStaffBonus : undefined,
-      soldByUserId: currentUser?.id ?? undefined,
-      soldByName: currentUser?.name ?? undefined,
+      soldByUserId:
+        currentUser?.id ??
+        (typeof localStorage !== "undefined"
+          ? ((
+              JSON.parse(
+                localStorage.getItem("mobile_auth_session") ?? "null",
+              ) as { shopId?: string } | null
+            )?.shopId ?? "owner")
+          : "owner"),
+      soldByName: currentUser?.name ?? "Owner",
     };
 
     if (lowPriceItems.length > 0) {
@@ -782,6 +796,19 @@ export function BillingPage() {
     }
 
     // No low price issues — proceed directly
+    // For cash payments, route through Cash Counter
+    if (paymentMode === "cash" && onNavigate) {
+      try {
+        sessionStorage.setItem(
+          PENDING_CASH_KEY,
+          JSON.stringify({ invoiceData, invoiceItems, billTotal: total }),
+        );
+      } catch (_) {
+        /* ignore storage errors */
+      }
+      onNavigate("cash-counter");
+      return;
+    }
     doCreateInvoice(invoiceData, invoiceItems, false, false, []);
   };
 
@@ -872,6 +899,53 @@ export function BillingPage() {
         pendingLowPriceItems,
       );
     } else {
+      // Log low price items (audit only — invoice not created yet if cash)
+      for (const item of pendingLowPriceItems) {
+        const attemptType = pinUsed ? "overridden" : "warned";
+        addLowPriceAlertLog({
+          shopId: "",
+          productId: item.productId,
+          productName: item.productName,
+          staffName: currentUser?.name ?? "Unknown",
+          enteredPrice: item.enteredPrice,
+          minSellPrice: item.minSellPrice,
+          costPrice: item.costPrice,
+          attemptType,
+          pinUsed,
+          timestamp: new Date().toISOString(),
+        });
+        addAuditLog(
+          "low_price_attempt",
+          `${item.productName} — entered ₹${item.enteredPrice}, min ₹${item.minSellPrice.toFixed(0)}, status: ${attemptType}`,
+          item.productId,
+        );
+      }
+      if (pinUsed && pendingLowPriceItems.length > 0) {
+        addAuditLog(
+          "low_price_override",
+          `Owner PIN override — ${pendingLowPriceItems.map((i) => i.productName).join(", ")}`,
+        );
+      }
+      // For cash payments, route through Cash Counter
+      if (pendingInvoiceData.paymentMode === "cash" && onNavigate) {
+        try {
+          sessionStorage.setItem(
+            PENDING_CASH_KEY,
+            JSON.stringify({
+              invoiceData: pendingInvoiceData,
+              invoiceItems: pendingInvoiceItems,
+              billTotal: pendingInvoiceData.totalAmount,
+            }),
+          );
+        } catch (_) {
+          /* ignore storage errors */
+        }
+        setPendingLowPriceItems([]);
+        setPendingInvoiceData(null);
+        setPendingInvoiceItems([]);
+        onNavigate("cash-counter");
+        return;
+      }
       doCreateInvoice(
         pendingInvoiceData,
         pendingInvoiceItems,
@@ -922,16 +996,14 @@ export function BillingPage() {
   }
 
   const paymentModeColors: Record<PaymentMode, string> = {
-    cash: "bg-green-50 border-green-400 text-green-700",
-    upi: "bg-blue-50 border-blue-400 text-blue-700",
-    online: "bg-purple-50 border-purple-400 text-purple-700",
-    credit: "bg-amber-50 border-amber-400 text-amber-700",
+    cash: "bg-card border-green-500 text-green-700 shadow-sm",
+    upi: "bg-card border-blue-500 text-blue-700 shadow-sm",
+    online: "bg-card border-primary text-primary shadow-sm",
+    credit: "bg-card border-amber-500 text-amber-700 shadow-sm",
   };
 
   return (
     <div className="flex flex-col gap-6">
-      <TopBar title="Billing / POS" />
-
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
         <div>
           <h1 className="text-xl font-bold">Point of Sale</h1>
@@ -954,7 +1026,7 @@ export function BillingPage() {
               {overSellItems.map((osi) => (
                 <div
                   key={osi.productId}
-                  className="bg-white border border-red-200 rounded-md p-3 text-sm"
+                  className="bg-card border border-red-200 rounded-md p-3 text-sm"
                 >
                   <div className="font-semibold text-red-800 mb-1">
                     {osi.productName}
@@ -1094,7 +1166,12 @@ export function BillingPage() {
                     type="number"
                     placeholder="Qty"
                     value={addQty}
-                    onChange={(e) => setAddQty(e.target.value)}
+                    onChange={(e) =>
+                      setAddQty(clearLeadingZeros(e.target.value))
+                    }
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
                     className="w-20"
                   />
                   <Button
@@ -1266,10 +1343,14 @@ export function BillingPage() {
                                     onChange={(e) =>
                                       handleQtyInputChange(
                                         item.productId,
-                                        e.target.value,
+                                        clearLeadingZeros(e.target.value),
                                         item.selectedBatchId,
                                       )
                                     }
+                                    onFocus={(e) => {
+                                      if (e.target.value === "0")
+                                        e.target.select();
+                                    }}
                                     className={`w-14 h-7 text-sm text-center ${isOverSell ? "border-red-500" : ""}`}
                                   />
                                   <Button
@@ -1328,9 +1409,15 @@ export function BillingPage() {
                                         onChange={(e) =>
                                           handleRateChange(
                                             item.productId,
-                                            Number(e.target.value),
+                                            Number(
+                                              clearLeadingZeros(e.target.value),
+                                            ),
                                           )
                                         }
+                                        onFocus={(e) => {
+                                          if (e.target.value === "0")
+                                            e.target.select();
+                                        }}
                                         className={`w-24 h-7 text-sm ${errMsg || isBelowMin ? "border-red-500 focus-visible:ring-red-400" : ""}`}
                                       />
                                       {/* Cost / Min / Sell labels — hidden for staff */}
@@ -1456,7 +1543,9 @@ export function BillingPage() {
 
                 {/* Payment Mode Selector */}
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Payment Mode</Label>
+                  <Label className="text-sm font-medium text-foreground">
+                    Payment Mode
+                  </Label>
                   <div className="grid grid-cols-2 gap-2">
                     {(["cash", "upi", "online", "credit"] as PaymentMode[]).map(
                       (mode) => (
@@ -1465,23 +1554,39 @@ export function BillingPage() {
                           type="button"
                           data-ocid={`billing.payment_mode_${mode}.toggle`}
                           onClick={() => handlePaymentModeChange(mode)}
-                          className={`px-3 py-2 rounded-lg border-2 text-xs font-semibold capitalize transition-all ${
+                          className={`h-11 flex items-center justify-center gap-2 px-3 rounded-lg border-2 text-xs font-semibold capitalize transition-all ${
                             paymentMode === mode
                               ? paymentModeColors[mode]
                               : "bg-background border-border text-muted-foreground hover:border-primary/40"
                           }`}
                         >
-                          {mode === "cash" && "💵 Cash"}
-                          {mode === "upi" && "📱 UPI"}
-                          {mode === "online" && "💻 Online"}
-                          {mode === "credit" && "📝 Credit"}
+                          {mode === "cash" && (
+                            <>
+                              <span>💵</span> Cash
+                            </>
+                          )}
+                          {mode === "upi" && (
+                            <>
+                              <span>📱</span> UPI
+                            </>
+                          )}
+                          {mode === "online" && (
+                            <>
+                              <span>💻</span> Online
+                            </>
+                          )}
+                          {mode === "credit" && (
+                            <>
+                              <span>📝</span> Credit
+                            </>
+                          )}
                         </button>
                       ),
                     )}
                   </div>
                   {paymentMode === "credit" && (
                     <p className="text-xs text-amber-600 mt-1">
-                      ⚠️ Credit sale: Paid = ₹0, Due = Total. Customer name
+                      Credit sale: Paid = ₹0, Due = Total. Customer name
                       required.
                     </p>
                   )}
@@ -1517,29 +1622,71 @@ export function BillingPage() {
                       type="number"
                       placeholder="Enter amount received"
                       value={paidAmountStr}
-                      onChange={(e) => setPaidAmountStr(e.target.value)}
+                      onChange={(e) =>
+                        setPaidAmountStr(clearLeadingZeros(e.target.value))
+                      }
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
                     />
                   </div>
                 )}
 
-                {/* Paid / Due summary */}
-                <div className="rounded-lg bg-secondary/50 p-3 space-y-1.5 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Amount Paid</span>
-                    <span className="font-semibold text-green-600">
-                      {fmt(computedPaid)}
+                {/* Cash / UPI / Credit breakdown card */}
+                <div className="rounded-lg border border-border bg-card shadow-card overflow-hidden text-sm">
+                  {paymentMode === "cash" && (
+                    <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <span>💵</span> Cash
+                      </span>
+                      <span className="font-semibold text-green-600">
+                        {fmt(computedPaid)}
+                      </span>
+                    </div>
+                  )}
+                  {(paymentMode === "upi" || paymentMode === "online") && (
+                    <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <span>📱</span>{" "}
+                        {paymentMode === "upi" ? "UPI" : "Online"}
+                      </span>
+                      <span className="font-semibold text-blue-600">
+                        {fmt(computedPaid)}
+                      </span>
+                    </div>
+                  )}
+                  {paymentMode === "credit" && (
+                    <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <span>📝</span> Credit
+                      </span>
+                      <span className="font-semibold text-amber-600">
+                        {fmt(total)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
+                    <span className="font-semibold text-foreground">Total</span>
+                    <span className="font-bold text-foreground">
+                      {fmt(total)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Amount Due</span>
-                    <span
-                      className={`font-semibold ${
-                        computedDue > 0 ? "text-red-600" : "text-green-600"
-                      }`}
-                    >
-                      {fmt(computedDue)}
-                    </span>
-                  </div>
+                  {computedDue > 0 && (
+                    <div className="flex items-center justify-between px-3 py-2.5 bg-red-50">
+                      <span className="text-red-600 font-medium">Due</span>
+                      <span className="font-bold text-red-600">
+                        {fmt(computedDue)}
+                      </span>
+                    </div>
+                  )}
+                  {computedDue === 0 && paymentMode !== "credit" && (
+                    <div className="flex items-center justify-between px-3 py-2.5 bg-green-50">
+                      <span className="text-green-600 font-medium">
+                        Fully Paid
+                      </span>
+                      <span className="text-green-600">✓</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Smart Pricing Summary — hidden for staff role */}
@@ -1620,13 +1767,16 @@ export function BillingPage() {
 
                 <Button
                   data-ocid="billing.generate_invoice.button"
-                  className="w-full"
+                  className="w-full h-11 text-base font-semibold"
                   onClick={handleGenerateInvoice}
                   disabled={
                     cart.length === 0 || Object.keys(itemErrors).length > 0
                   }
                 >
-                  <Receipt size={16} className="mr-2" /> Generate Invoice
+                  <Receipt size={16} className="mr-2" />
+                  {paymentMode === "cash" && onNavigate
+                    ? "💰 Cash Counter se Payment"
+                    : "Generate Invoice"}
                 </Button>
               </CardContent>
             </Card>

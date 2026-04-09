@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -33,12 +34,14 @@ import {
   ChevronUp,
   Eye,
   Package,
+  Plus,
+  Search,
+  ShoppingCart,
 } from "lucide-react";
 import { useState } from "react";
-import { TopBar } from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
-import type { Product, StockBatch } from "../types/store";
+import type { NavPage, Product, StockBatch } from "../types/store";
 import { ROLE_PERMISSIONS } from "../types/store";
 
 function fmtCurrency(n: number) {
@@ -269,9 +272,18 @@ function BatchViewDialog({
   );
 }
 
-export function InventoryPage() {
-  const { products, categories, getProductStock, getProductBatches } =
-    useStore();
+export function InventoryPage({
+  onNavigate,
+}: {
+  onNavigate?: (page: NavPage, params?: Record<string, unknown>) => void;
+}) {
+  const {
+    products,
+    categories,
+    getProductStock,
+    getProductBatches,
+    purchaseOrders,
+  } = useStore();
   const { currentUser } = useAuth();
   const userRole = currentUser?.role ?? "staff";
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
@@ -297,12 +309,6 @@ export function InventoryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TopBar
-        title="Inventory"
-        searchValue={search}
-        onSearchChange={setSearch}
-      />
-
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
@@ -312,6 +318,18 @@ export function InventoryPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {onNavigate && (
+              <Button
+                data-ocid="inventory.add_new_stock.button"
+                onClick={() => onNavigate("stock")}
+                size="sm"
+                className="gap-1.5 text-sm font-semibold"
+              >
+                <Plus size={15} />
+                <span className="hidden sm:inline">Naya Stock Add Karein</span>
+                <span className="sm:hidden">Add Stock</span>
+              </Button>
+            )}
             <Badge variant="outline" className="text-xs">
               {totalStockItems} Products
             </Badge>
@@ -324,7 +342,20 @@ export function InventoryPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              size={14}
+            />
+            <Input
+              data-ocid="inventory.search.input"
+              placeholder="Search products..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-8 text-sm"
+            />
+          </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger
               data-ocid="inventory.category.select"
@@ -355,23 +386,40 @@ export function InventoryPage() {
             </div>
           )}
 
-          {filtered.map((p, idx) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              idx={idx}
-              isExpanded={expandedProduct === p.id}
-              onToggle={(id) =>
-                setExpandedProduct(expandedProduct === id ? null : id)
-              }
-              getProductStock={getProductStock}
-              getProductBatches={getProductBatches}
-              onViewBatches={(prod) => setBatchDialogProduct(prod)}
-              canViewCost={canViewCost}
-              canEdit={ROLE_PERMISSIONS.canEditProduct(userRole)}
-              canDelete={ROLE_PERMISSIONS.canDeleteProducts(userRole)}
-            />
-          ))}
+          {filtered.map((p, idx) => {
+            // Look up last purchase order for this product to pre-fill reorder
+            const lastPO = purchaseOrders
+              .filter((po) => po.productId === p.id)
+              .sort((a, b) => b.createdAt - a.createdAt)[0];
+
+            return (
+              <ProductCard
+                key={p.id}
+                product={p}
+                idx={idx}
+                isExpanded={expandedProduct === p.id}
+                onToggle={(id) =>
+                  setExpandedProduct(expandedProduct === id ? null : id)
+                }
+                getProductStock={getProductStock}
+                getProductBatches={getProductBatches}
+                onViewBatches={(prod) => setBatchDialogProduct(prod)}
+                canViewCost={canViewCost}
+                canEdit={ROLE_PERMISSIONS.canEditProduct(userRole)}
+                canDelete={ROLE_PERMISSIONS.canDeleteProducts(userRole)}
+                onReorder={
+                  onNavigate
+                    ? () =>
+                        onNavigate("purchase-orders", {
+                          reorderProductId: p.id,
+                          reorderVendorId: lastPO?.vendorId,
+                          reorderRate: lastPO?.rate,
+                        })
+                    : undefined
+                }
+              />
+            );
+          })}
         </div>
       </div>
 
@@ -398,6 +446,7 @@ interface ProductCardProps {
   canViewCost: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  onReorder?: () => void;
 }
 
 function ProductCard({
@@ -411,6 +460,7 @@ function ProductCard({
   canViewCost,
   canEdit,
   canDelete,
+  onReorder,
 }: ProductCardProps) {
   const { categories } = useStore();
   const stock = getProductStock(p.id);
@@ -527,6 +577,22 @@ function ProductCard({
                 <Badge variant="destructive" className="text-xs hidden sm:flex">
                   Low Stock
                 </Badge>
+              )}
+              {/* Reorder button for low-stock items */}
+              {isLow && onReorder && (
+                <Button
+                  data-ocid={`inventory.item.reorder.${idx + 1}`}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] gap-1 border-orange-400 text-orange-600 hover:bg-orange-50 flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReorder();
+                  }}
+                >
+                  <ShoppingCart size={11} />
+                  Reorder
+                </Button>
               )}
               {/* Expiry badge on header row */}
               {worstStatus === "expired" && (

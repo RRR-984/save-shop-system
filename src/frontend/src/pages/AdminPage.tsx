@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -28,33 +27,35 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import {
+  Calculator,
   Clock,
+  Lock,
   Pencil,
   Plus,
   Ruler,
   Settings,
   ShieldOff,
+  ShoppingCart,
+  Tag,
   Trash2,
+  TrendingUp,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { TopBar } from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { AppUser, Product } from "../types/store";
 import { ROLE_PERMISSIONS } from "../types/store";
+import { clearLeadingZeros } from "../utils/numberInput";
 
 export function AdminPage() {
   const { currentUser } = useAuth();
   const role = currentUser?.role ?? "staff";
 
-  // Staff cannot access admin panel — show access denied
   if (role === "staff") {
     return (
       <div className="flex flex-col gap-6">
-        <TopBar title="Admin Panel" />
         <div className="flex items-center justify-center min-h-[60vh] px-4">
           <Card
             data-ocid="admin.denied.card"
@@ -91,16 +92,15 @@ function AdminPanelContent({ role }: { role: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <TopBar title="Admin Panel" />
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
         <div>
-          <h1 className="text-xl font-bold">Admin Panel</h1>
+          <h1 className="text-xl font-bold text-foreground">Admin Panel</h1>
           <p className="text-muted-foreground text-sm">
             Manage products, categories, units
             {isOwner ? ", users, and settings" : ""}
           </p>
           {!isOwner && (
-            <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-medium">
+            <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary text-muted-foreground text-xs font-medium border border-border">
               <ShieldOff size={12} />
               Manager View — Limited Access
             </div>
@@ -115,9 +115,7 @@ function AdminPanelContent({ role }: { role: string }) {
             <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="units">Units</TabsTrigger>
-            {/* Users tab — Owner only */}
             {canManageStaff && <TabsTrigger value="users">Users</TabsTrigger>}
-            {/* Settings tab — Owner only */}
             {canChangeSettings && (
               <TabsTrigger value="settings">
                 <Settings size={12} className="mr-1" /> Settings
@@ -152,24 +150,24 @@ function AdminPanelContent({ role }: { role: string }) {
 
 // ── Settings Manager ──────────────────────────────────────────────────
 function SettingsManager() {
-  const { shopSettings, updateShopSettings } = useStore();
+  const { shopSettings, updateShopSettings, appConfig, saveAppConfig } =
+    useStore();
 
   return (
     <div className="flex flex-col gap-4 max-w-lg">
       <Card className="shadow-card border-border">
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="text-base flex items-center gap-2 text-foreground">
             <Ruler size={16} className="text-primary" />
             Unit Settings
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Mixed Units Toggle */}
-          <div className="flex items-start justify-between gap-4 p-3 rounded-lg bg-secondary/50">
+          <div className="flex items-start justify-between gap-4 p-3 rounded-lg bg-secondary/50 border border-border">
             <div className="flex-1">
               <Label
                 htmlFor="mixed-units-toggle"
-                className="text-sm font-semibold cursor-pointer"
+                className="text-sm font-semibold cursor-pointer text-foreground"
               >
                 Allow Mixed Units (Length + Weight)
               </Label>
@@ -179,8 +177,7 @@ function SettingsManager() {
               </p>
               {shopSettings.allowMixedUnits && (
                 <div className="mt-2 text-xs text-primary font-medium">
-                  ✅ Mixed Unit Mode is ON — Products ab dual unit mein add ho
-                  sakte hain
+                  Mixed Unit Mode is ON
                 </div>
               )}
             </div>
@@ -194,26 +191,75 @@ function SettingsManager() {
             />
           </div>
 
-          {/* Info box when mixed units ON */}
           {shopSettings.allowMixedUnits && (
-            <div className="p-3 rounded-lg border border-primary/20 bg-primary/5 text-xs text-muted-foreground space-y-1">
+            <div className="p-3 rounded-lg border border-border bg-secondary/30 text-xs text-muted-foreground space-y-1">
               <p className="font-semibold text-foreground">
-                💡 Mixed Unit Mode kya karta hai?
+                Mixed Unit Mode kya karta hai?
               </p>
               <p>
                 • Product add karte waqt Length + Weight dono set kar sakte hain
               </p>
               <p>• Example: 1 Pipe = 6 meter = 15 kg</p>
               <p>• Smart Ratio set karo — auto calculate hoga</p>
-              <p>• Display format: "10 meter (25 kg)"</p>
             </div>
           )}
         </CardContent>
       </Card>
 
+      <Card className="shadow-card border-border">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2 text-foreground">
+            <Settings size={16} className="text-primary" />
+            Vendor Rate Settings
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Vendor ka rate change hone par product cost price ka behavior
+            control karein
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-start justify-between gap-4 p-3 rounded-lg bg-secondary/50 border border-border">
+            <div className="flex-1">
+              <Label
+                htmlFor="auto-cost-update-toggle"
+                className="text-sm font-semibold cursor-pointer text-foreground"
+              >
+                Auto Update Product Cost on Rate Change
+              </Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                ON: Vendor rate badalne par product ki cost price automatically
+                update ho jaayegi.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                OFF: Confirmation dialog aayega — aap decide karenge.
+              </p>
+            </div>
+            <Switch
+              id="auto-cost-update-toggle"
+              data-ocid="admin.settings.auto_cost_update.toggle"
+              checked={appConfig.autoUpdateCostOnVendorRateChange ?? false}
+              onCheckedChange={(checked) =>
+                saveAppConfig({ autoUpdateCostOnVendorRateChange: checked })
+              }
+            />
+          </div>
+
+          <div className="p-3 rounded-lg border border-border bg-secondary/30 text-xs space-y-1">
+            <p className="font-semibold text-foreground">Vendor Rate History</p>
+            <p className="text-muted-foreground">
+              • Har rate change automatically record hoga
+            </p>
+            <p className="text-muted-foreground">
+              • Vendors page mein Rate History button se pura history dekh sakte
+              hain
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="shadow-card border-border mt-4">
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="text-base flex items-center gap-2 text-foreground">
             <Clock size={16} className="text-primary" />
             Dead Stock Settings
           </CardTitle>
@@ -257,7 +303,7 @@ function SettingsManager() {
                 />
                 <Label
                   htmlFor={`ds-${opt.value}`}
-                  className="cursor-pointer text-sm font-medium"
+                  className="cursor-pointer text-sm font-medium text-foreground"
                 >
                   {opt.label}
                 </Label>
@@ -265,12 +311,13 @@ function SettingsManager() {
             ))}
           </RadioGroup>
 
-          {/* Custom days input */}
           {![90, 180, 365].includes(
             shopSettings.deadStockThresholdDays ?? 90,
           ) && (
             <div className="flex items-center gap-3 mt-2">
-              <Label className="text-sm whitespace-nowrap">Custom Days:</Label>
+              <Label className="text-sm whitespace-nowrap text-foreground">
+                Custom Days:
+              </Label>
               <Input
                 type="number"
                 min={1}
@@ -283,11 +330,14 @@ function SettingsManager() {
                   90
                 }
                 onChange={(e) => {
-                  const days = Number(e.target.value);
+                  const days = Number(clearLeadingZeros(e.target.value));
                   updateShopSettings({
                     deadStockThresholdDays: days,
                     deadStockCustomDays: days,
                   });
+                }}
+                onFocus={(e) => {
+                  if (e.target.value === "0") e.target.select();
                 }}
                 placeholder="e.g. 45"
               />
@@ -295,19 +345,18 @@ function SettingsManager() {
             </div>
           )}
 
-          {/* Info */}
-          <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 text-xs space-y-1">
-            <p className="font-semibold text-amber-800 dark:text-amber-200">
-              📊 Dead Stock Kya Hai?
+          <div className="p-3 rounded-lg border border-border bg-secondary/30 text-xs space-y-1">
+            <p className="font-semibold text-foreground">
+              Dead Stock Thresholds
             </p>
-            <p className="text-amber-700 dark:text-amber-300">
-              • Yellow (Slow):{" "}
+            <p className="text-muted-foreground">
+              • Slow:{" "}
               {Math.round((shopSettings.deadStockThresholdDays ?? 90) / 2)} din
               se zyada sale nahi hua
             </p>
-            <p className="text-amber-700 dark:text-amber-300">
-              • Red (Dead): {shopSettings.deadStockThresholdDays ?? 90} din se
-              zyada sale nahi hua
+            <p className="text-muted-foreground">
+              • Dead: {shopSettings.deadStockThresholdDays ?? 90} din se zyada
+              sale nahi hua
             </p>
           </div>
         </CardContent>
@@ -316,7 +365,98 @@ function SettingsManager() {
   );
 }
 
-// ── Products Manager ─────────────────────────────────────────────────────────────────
+// ── Form Section Helper ───────────────────────────────────────────────────────
+type SectionColor =
+  | "blue"
+  | "indigo"
+  | "orange"
+  | "slate"
+  | "green"
+  | "emerald"
+  | "amber";
+
+function FormSection({
+  icon,
+  label,
+  bgHint,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  color?: SectionColor;
+  bgHint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-border last:border-b-0">
+      <div className="flex items-center gap-2 px-5 py-2.5 bg-secondary/40">
+        <span className="text-muted-foreground">{icon}</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+        {bgHint && (
+          <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Lock size={9} /> {bgHint}
+          </span>
+        )}
+      </div>
+      <div className="px-5 py-4 space-y-3">{children}</div>
+    </div>
+  );
+}
+
+// ── Auto-calculated read-only field ──────────────────────────────────────────
+function AutoCalcField({
+  ocid,
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  ocid: string;
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: "blue" | "green";
+}) {
+  return (
+    <div
+      data-ocid={ocid}
+      className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 ${
+        accent === "green"
+          ? "bg-green-50 border-green-200"
+          : accent === "blue"
+            ? "bg-blue-50 border-blue-200"
+            : "bg-muted/40 border-dashed border-border"
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        <Lock size={10} className="text-muted-foreground" />
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+          {label}
+        </span>
+      </div>
+      <span
+        className={`text-base font-bold ${
+          accent === "green"
+            ? "text-green-700"
+            : accent === "blue"
+              ? "text-blue-700"
+              : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+      {sub && (
+        <span className="text-[10px] text-muted-foreground leading-tight">
+          {sub}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Products Manager ──────────────────────────────────────────────────────────
 function ProductsManager({ canDelete }: { canDelete: boolean }) {
   const {
     products,
@@ -335,7 +475,6 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
 
-  // Required fields
   const [name, setName] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [unit, setUnit] = useState("");
@@ -344,12 +483,10 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
   const [costPrice, setCostPrice] = useState("");
   const [profitPercent, setProfitPercent] = useState("");
   const [minProfitPct, setMinProfitPct] = useState("");
-  // Optional vendor/purchase fields
   const [vendorName, setVendorName] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
   const [initialQty, setInitialQty] = useState("");
   const [details, setDetails] = useState("");
-  // New purchase detail fields
   const [purchaseDate, setPurchaseDate] = useState(
     new Date().toISOString().slice(0, 10),
   );
@@ -357,13 +494,17 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
   const [billNo, setBillNo] = useState("");
   const [transportCharge, setTransportCharge] = useState("");
   const [labourCharge, setLabourCharge] = useState("");
+  const [otherCharge, setOtherCharge] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
 
-  // ── Mix Unit Mode state ──
+  // ── Mix Unit Mode ──
   const [unitMode, setUnitMode] = useState<"single" | "mixed">("single");
   const [lengthUnit, setLengthUnit] = useState("");
   const [weightUnit, setWeightUnit] = useState("");
   const [meterToKgRatio, setMeterToKgRatio] = useState("");
+
+  // ── Selling mode toggle: "profit" = edit profit%, "price" = edit sell price ──
+  const [sellingMode, setSellingMode] = useState<"profit" | "price">("profit");
 
   const resetForm = () => {
     setName("");
@@ -383,11 +524,13 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
     setBillNo("");
     setTransportCharge("");
     setLabourCharge("");
+    setOtherCharge("");
     setExpiryDate("");
     setUnitMode("single");
     setLengthUnit("");
     setWeightUnit("");
     setMeterToKgRatio("");
+    setSellingMode("profit");
   };
 
   const openAdd = () => {
@@ -406,7 +549,6 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
     setSellPrice(String(p.sellingPrice));
     setCostPrice(p.costPrice != null ? String(p.costPrice) : "");
     setMinProfitPct(p.minProfitPct != null ? String(p.minProfitPct) : "");
-    // Auto-compute profit % from existing prices
     if (p.purchasePrice != null && p.purchasePrice > 0) {
       const pp = ((p.sellingPrice - p.purchasePrice) / p.purchasePrice) * 100;
       setProfitPercent(pp > 0 ? pp.toFixed(2) : "");
@@ -415,7 +557,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
     }
     setVendorName(p.vendorName ?? "");
     setPurchasePrice(p.purchasePrice != null ? String(p.purchasePrice) : "");
-    setInitialQty(""); // initial qty only for new products
+    setInitialQty("");
     setDetails(p.details ?? "");
     setPurchaseDate(new Date().toISOString().slice(0, 10));
     setInvoiceNo("");
@@ -423,11 +565,11 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
     setTransportCharge("");
     setLabourCharge("");
     setExpiryDate(p.expiryDate ?? "");
-    // Mix Unit Mode
     setUnitMode(p.unitMode ?? "single");
     setLengthUnit(p.lengthUnit ?? "");
     setWeightUnit(p.weightUnit ?? "");
     setMeterToKgRatio(p.meterToKgRatio != null ? String(p.meterToKgRatio) : "");
+    setSellingMode("profit");
     setShowForm(true);
   };
 
@@ -438,7 +580,6 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
     if (!minStock) missingFields.push("Min Alert");
     if (!sellPrice) missingFields.push("Sell Price");
 
-    // Validate unit based on mode
     if (unitMode === "single" && !unit.trim()) missingFields.push("Unit");
     if (unitMode === "mixed") {
       if (!lengthUnit.trim()) missingFields.push("Length Unit");
@@ -458,7 +599,6 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
       catId = addCategory(categoryName.trim());
     }
 
-    // Build product data based on unit mode
     const primaryUnit = unitMode === "mixed" ? lengthUnit.trim() : unit.trim();
 
     const data: Omit<Product, "id"> = {
@@ -487,7 +627,6 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
       updateProduct(editProduct.id, data);
       toast.success("Product updated");
     } else {
-      // Check for duplicate product name before creating
       const existingProduct = products.find(
         (p) => p.name.trim().toLowerCase() === data.name.trim().toLowerCase(),
       );
@@ -499,7 +638,6 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
         return;
       }
       const newId = addProduct(data);
-      // If initial qty provided, add a stock batch with all purchase details
       const qty = Number(initialQty);
       if (qty > 0) {
         addStockIn(
@@ -517,6 +655,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
           unitMode === "mixed" && meterToKgRatio
             ? qty * Number(meterToKgRatio)
             : undefined,
+          otherCharge ? Number(otherCharge) : undefined,
         );
       }
       toast.success("Product added! ✓");
@@ -525,25 +664,60 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
   };
 
   const qty4cost = Number(initialQty || 0);
-  // Final Cost (total) = purchasePrice × qty + transport + labour
+  // Final Cost (total) = purchasePrice × qty + transport + labour + other
   const finalCostTotal =
     Number(purchasePrice || 0) * qty4cost +
     Number(transportCharge || 0) +
-    Number(labourCharge || 0);
-  // Per-unit final cost
+    Number(labourCharge || 0) +
+    Number(otherCharge || 0);
   const finalCostPerUnit =
     qty4cost > 0 ? finalCostTotal / qty4cost : Number(purchasePrice || 0);
-  // Total selling price = finalCostTotal + finalCostTotal * profit% / 100
-  const adminTotalSellingPrice =
-    profitPercent !== "" && finalCostTotal > 0
-      ? finalCostTotal + (finalCostTotal * Number(profitPercent)) / 100
-      : sellPrice !== "" && qty4cost > 0
-        ? Number(sellPrice) * qty4cost
-        : 0;
-  const adminPerUnitSellingPrice =
-    qty4cost > 0 && adminTotalSellingPrice > 0
-      ? adminTotalSellingPrice / qty4cost
-      : 0;
+
+  // Selling section: compute derived values based on mode
+  const handleProfitPctChange = (pct: string) => {
+    setProfitPercent(pct);
+    if (Number(pct) < 0) return;
+    const baseCost =
+      finalCostPerUnit > 0 ? finalCostPerUnit : Number(purchasePrice || 0);
+    if (baseCost > 0 && pct !== "") {
+      const sp = baseCost + (baseCost * Number(pct)) / 100;
+      setSellPrice(sp.toFixed(2));
+    }
+  };
+
+  const handleSellPriceChange = (sp: string) => {
+    setSellPrice(sp);
+    const baseCost =
+      finalCostPerUnit > 0 ? finalCostPerUnit : Number(purchasePrice || 0);
+    if (baseCost > 0 && sp !== "") {
+      const pct = ((Number(sp) - baseCost) / baseCost) * 100;
+      setProfitPercent(pct.toFixed(2));
+    }
+  };
+
+  // Update cost-derived fields when cost inputs change
+  const recalcFromCost = (
+    pp: string,
+    qty: string,
+    tc: string,
+    lc: string,
+    oc: string,
+  ) => {
+    const qtyN = Number(qty || 0);
+    const totalCost =
+      Number(pp || 0) * qtyN +
+      Number(tc || 0) +
+      Number(lc || 0) +
+      Number(oc || 0);
+    const perUnit = qtyN > 0 ? totalCost / qtyN : Number(pp || 0);
+    if (sellingMode === "profit" && profitPercent !== "" && perUnit > 0) {
+      const sp = perUnit + (perUnit * Number(profitPercent)) / 100;
+      setSellPrice(sp.toFixed(2));
+    } else if (sellingMode === "price" && sellPrice !== "" && perUnit > 0) {
+      const pct = ((Number(sellPrice) - perUnit) / perUnit) * 100;
+      setProfitPercent(pct.toFixed(2));
+    }
+  };
 
   return (
     <>
@@ -604,7 +778,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                         <TableCell className="text-sm font-medium">
                           {p.name}
                           {p.unitMode === "mixed" && (
-                            <Badge className="ml-1 text-[10px] px-1 py-0 h-4 bg-blue-100 text-blue-700 border-0">
+                            <Badge className="ml-1 text-[10px] px-1 py-0 h-4 bg-secondary text-muted-foreground border-0">
                               Mixed
                             </Badge>
                           )}
@@ -623,13 +797,13 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                           {`\u20b9${p.sellingPrice}`}
                         </TableCell>
                         {(() => {
-                          const costPrice = getProductCostPrice(p.id);
+                          const cp = getProductCostPrice(p.id);
                           const profit = getProductProfit(p.id);
                           const profitPct = getProductProfitPct(p.id);
                           return (
                             <>
                               <TableCell className="text-xs">
-                                {costPrice > 0 ? `₹${costPrice}` : "-"}
+                                {cp > 0 ? `₹${cp}` : "-"}
                               </TableCell>
                               <TableCell
                                 className={`text-xs font-semibold ${
@@ -640,7 +814,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                                       : "text-muted-foreground"
                                 }`}
                               >
-                                {costPrice > 0 ? `₹${profit.toFixed(2)}` : "-"}
+                                {cp > 0 ? `₹${profit.toFixed(2)}` : "-"}
                               </TableCell>
                               <TableCell
                                 className={`text-xs font-semibold ${
@@ -651,9 +825,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                                       : "text-muted-foreground"
                                 }`}
                               >
-                                {costPrice > 0
-                                  ? `${profitPct.toFixed(1)}%`
-                                  : "-"}
+                                {cp > 0 ? `${profitPct.toFixed(1)}%` : "-"}
                               </TableCell>
                             </>
                           );
@@ -698,54 +870,142 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent
           data-ocid="admin.products.form.dialog"
-          className="max-w-md w-full"
+          className="max-w-lg w-full p-0 gap-0 overflow-hidden"
         >
-          <DialogHeader>
-            <DialogTitle>
-              {editProduct ? "Edit Product" : "Add Product"}
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border bg-card">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              {editProduct ? (
+                <>
+                  <Pencil size={16} className="text-primary" /> Edit Product
+                </>
+              ) : (
+                <>
+                  <Plus size={16} className="text-primary" /> Add New Product
+                </>
+              )}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
-            {/* Required fields */}
-            <div className="space-y-1.5">
-              <Label className="text-sm">Product Name *</Label>
-              <Input
-                data-ocid="admin.products.name.input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Basmati Rice"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Category *</Label>
-              <Input
-                data-ocid="admin.products.category.input"
-                value={categoryName}
-                onChange={(e) => setCategoryName(e.target.value)}
-                placeholder="e.g. Grains, Dairy, Snacks"
-                list="category-suggestions"
-              />
-              {categories.length > 0 && (
-                <datalist id="category-suggestions">
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.name} />
-                  ))}
-                </datalist>
-              )}
-            </div>
 
-            {/* Unit section — single vs mixed */}
-            <div className="space-y-2">
-              <Label className="text-sm">Unit *</Label>
+          <div className="overflow-y-auto max-h-[76vh]">
+            {/* ── SECTION 1: Purchase Details (new only) ── */}
+            {!editProduct && (
+              <FormSection
+                icon={<ShoppingCart size={14} />}
+                label="Purchase Details"
+                color="blue"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Vendor
+                    </Label>
+                    <Input
+                      data-ocid="admin.products.vendor.input"
+                      value={vendorName}
+                      onChange={(e) => setVendorName(e.target.value)}
+                      placeholder="e.g. Sharma Traders"
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Bill No
+                    </Label>
+                    <Input
+                      data-ocid="admin.products.bill_no.input"
+                      value={billNo}
+                      onChange={(e) => setBillNo(e.target.value)}
+                      placeholder="e.g. BILL-001"
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Date
+                  </Label>
+                  <Input
+                    data-ocid="admin.products.purchase_date.input"
+                    type="date"
+                    value={purchaseDate}
+                    onChange={(e) => setPurchaseDate(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+              </FormSection>
+            )}
 
-              {/* If allowMixedUnits is ON, show mode toggle */}
+            {/* ── SECTION 2: Product Details ── */}
+            <FormSection
+              icon={<Tag size={14} />}
+              label="Product Details"
+              color="indigo"
+            >
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Product Name *
+                </Label>
+                <Input
+                  data-ocid="admin.products.name.input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Basmati Rice"
+                  className="h-9"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Category *
+                  </Label>
+                  <Input
+                    data-ocid="admin.products.category.input"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                    placeholder="e.g. Grains"
+                    list="category-suggestions"
+                    className="h-9"
+                  />
+                  {categories.length > 0 && (
+                    <datalist id="category-suggestions">
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.name} />
+                      ))}
+                    </datalist>
+                  )}
+                </div>
+
+                {unitMode === "single" && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Unit *
+                    </Label>
+                    <Input
+                      data-ocid="admin.products.unit.input"
+                      value={unit}
+                      onChange={(e) => setUnit(e.target.value)}
+                      placeholder="kg"
+                      list="unit-suggestions"
+                      className="h-9"
+                    />
+                    {shopUnits.length > 0 && (
+                      <datalist id="unit-suggestions">
+                        {shopUnits.map((u) => (
+                          <option key={u.id} value={u.name} />
+                        ))}
+                      </datalist>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {shopSettings.allowMixedUnits && (
                 <div className="flex gap-2">
                   <button
                     type="button"
                     data-ocid="admin.products.unit_mode_single.toggle"
                     onClick={() => setUnitMode("single")}
-                    className={`flex-1 text-sm py-1.5 px-3 rounded-md border transition-colors ${
+                    className={`flex-1 text-xs py-1.5 px-3 rounded-md border transition-colors ${
                       unitMode === "single"
                         ? "bg-primary text-primary-foreground border-primary"
                         : "border-border text-muted-foreground hover:border-primary/50"
@@ -757,7 +1017,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                     type="button"
                     data-ocid="admin.products.unit_mode_mixed.toggle"
                     onClick={() => setUnitMode("mixed")}
-                    className={`flex-1 text-sm py-1.5 px-3 rounded-md border transition-colors ${
+                    className={`flex-1 text-xs py-1.5 px-3 rounded-md border transition-colors ${
                       unitMode === "mixed"
                         ? "bg-primary text-primary-foreground border-primary"
                         : "border-border text-muted-foreground hover:border-primary/50"
@@ -768,31 +1028,8 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                 </div>
               )}
 
-              {/* Single Unit input */}
-              {unitMode === "single" && (
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Input
-                      data-ocid="admin.products.unit.input"
-                      value={unit}
-                      onChange={(e) => setUnit(e.target.value)}
-                      placeholder="kg"
-                      list="unit-suggestions"
-                    />
-                    {shopUnits.length > 0 && (
-                      <datalist id="unit-suggestions">
-                        {shopUnits.map((u) => (
-                          <option key={u.id} value={u.name} />
-                        ))}
-                      </datalist>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Mixed Unit inputs */}
               {unitMode === "mixed" && (
-                <div className="space-y-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
+                <div className="space-y-2 p-3 rounded-lg border border-border bg-secondary/30">
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">
@@ -809,7 +1046,6 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                       <datalist id="length-unit-suggestions">
                         <option value="meter" />
                         <option value="cm" />
-                        <option value="km" />
                         <option value="feet" />
                         <option value="inch" />
                       </datalist>
@@ -829,12 +1065,10 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                       <datalist id="weight-unit-suggestions">
                         <option value="kg" />
                         <option value="ton" />
-                        <option value="quintal" />
                         <option value="gram" />
                       </datalist>
                     </div>
                   </div>
-                  {/* Smart Mode Ratio */}
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">
                       Smart Mode Ratio (Optional)
@@ -847,7 +1081,12 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                         data-ocid="admin.products.ratio.input"
                         type="number"
                         value={meterToKgRatio}
-                        onChange={(e) => setMeterToKgRatio(e.target.value)}
+                        onChange={(e) =>
+                          setMeterToKgRatio(clearLeadingZeros(e.target.value))
+                        }
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
                         placeholder="2.5"
                         className="h-8 text-sm"
                         min="0"
@@ -857,385 +1096,541 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                         {weightUnit || "kg"}
                       </span>
                     </div>
-                    {meterToKgRatio && (
-                      <p className="text-xs text-primary">
-                        ✨ Auto calculate: 10 {lengthUnit || "meter"} →{" "}
-                        {(10 * Number(meterToKgRatio)).toFixed(2)}{" "}
-                        {weightUnit || "kg"}
-                      </p>
-                    )}
                   </div>
                 </div>
               )}
-            </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Min Alert *</Label>
-                <Input
-                  data-ocid="admin.products.min_stock.input"
-                  type="number"
-                  value={minStock}
-                  onChange={(e) => setMinStock(e.target.value)}
-                  placeholder="10"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Cost Price (Lagat ₹)</Label>
-                <Input
-                  data-ocid="admin.products.cost_price.input"
-                  type="number"
-                  value={costPrice}
-                  onChange={(e) => {
-                    const cp = e.target.value;
-                    setCostPrice(cp);
-                    const cost = cp ? Number(cp) : finalCostPerUnit;
-                    if (cost > 0 && sellPrice !== "") {
-                      const pct = ((Number(sellPrice) - cost) / cost) * 100;
-                      setProfitPercent(pct.toFixed(2));
-                    }
-                  }}
-                  placeholder="e.g. 80"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Sell Price (₹) *</Label>
-                <Input
-                  data-ocid="admin.products.sell_price.input"
-                  type="number"
-                  value={sellPrice}
-                  onChange={(e) => {
-                    const sp = e.target.value;
-                    setSellPrice(sp);
-                    if (finalCostTotal > 0 && sp !== "" && qty4cost > 0) {
-                      const totalSell = Number(sp) * qty4cost;
-                      const pct =
-                        ((totalSell - finalCostTotal) / finalCostTotal) * 100;
-                      setProfitPercent(pct.toFixed(2));
-                    } else {
-                      setProfitPercent("");
-                    }
-                  }}
-                  placeholder="100"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Profit %</Label>
-                <Input
-                  data-ocid="admin.products.profit_percent.input"
-                  type="number"
-                  value={profitPercent}
-                  min="0"
-                  onChange={(e) => {
-                    const pct = e.target.value;
-                    if (Number(pct) < 0) return;
-                    setProfitPercent(pct);
-                    if (finalCostTotal > 0 && pct !== "" && qty4cost > 0) {
-                      const totalSell =
-                        finalCostTotal + (finalCostTotal * Number(pct)) / 100;
-                      setSellPrice((totalSell / qty4cost).toFixed(2));
-                    }
-                  }}
-                  placeholder="20"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Minimum Profit % (Min Profit)</Label>
-              <Input
-                data-ocid="admin.products.min_profit_pct.input"
-                type="number"
-                value={minProfitPct}
-                min="0"
-                max="100"
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (Number(val) < 0) return;
-                  setMinProfitPct(val);
-                }}
-                placeholder="e.g. 10"
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Har sale mein itna profit zaroor hoga — staff is se kam rate par
-                sell nahi kar sakta
-              </p>
-            </div>
-
-            {/* Divider for optional fields */}
-            <div className="border-t border-border pt-2">
-              <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">
-                Optional Details
-              </p>
-            </div>
-
-            {/* Vendor + Purchase Price */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Vendor Name</Label>
-                <Input
-                  data-ocid="admin.products.vendor.input"
-                  value={vendorName}
-                  onChange={(e) => setVendorName(e.target.value)}
-                  placeholder="e.g. Sharma Traders"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Purchase Price (₹)</Label>
-                <Input
-                  data-ocid="admin.products.purchase_price.input"
-                  type="number"
-                  value={purchasePrice}
-                  onChange={(e) => {
-                    const cp = e.target.value;
-                    setPurchasePrice(cp);
-                    const qty = Number(initialQty || 0);
-                    const totalCost =
-                      Number(cp) * qty +
-                      Number(transportCharge || 0) +
-                      Number(labourCharge || 0);
-                    if (profitPercent !== "" && totalCost > 0 && qty > 0) {
-                      const totalSell =
-                        totalCost + (totalCost * Number(profitPercent)) / 100;
-                      setSellPrice((totalSell / qty).toFixed(2));
-                    } else if (sellPrice !== "" && totalCost > 0 && qty > 0) {
-                      const totalSell = Number(sellPrice) * qty;
-                      const pct = ((totalSell - totalCost) / totalCost) * 100;
-                      setProfitPercent(pct.toFixed(2));
-                    }
-                  }}
-                  placeholder="80"
-                />
-              </div>
-            </div>
-
-            {/* Initial Qty — only for new products */}
-            {!editProduct && (
-              <div className="space-y-1.5">
-                <Label className="text-sm">Initial Qty (Opening Stock)</Label>
-                <Input
-                  data-ocid="admin.products.initial_qty.input"
-                  type="number"
-                  value={initialQty}
-                  onChange={(e) => setInitialQty(e.target.value)}
-                  placeholder="e.g. 50"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Shuru mein kitna stock hai? Ek stock batch ban jayega.
-                </p>
-              </div>
-            )}
-
-            {/* Purchase Date + Invoice + Bill — only for new products with initial qty */}
-            {!editProduct && (
-              <>
+              {!editProduct && (
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Purchase Date</Label>
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Quantity{" "}
+                    <span className="text-muted-foreground normal-case">
+                      (Opening Stock)
+                    </span>
+                  </Label>
                   <Input
-                    data-ocid="admin.products.purchase_date.input"
-                    type="date"
-                    value={purchaseDate}
-                    onChange={(e) => setPurchaseDate(e.target.value)}
+                    data-ocid="admin.products.initial_qty.input"
+                    type="number"
+                    value={initialQty}
+                    onChange={(e) =>
+                      setInitialQty(clearLeadingZeros(e.target.value))
+                    }
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
+                    placeholder="e.g. 50"
+                    className="h-9"
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    Shuru mein kitna stock hai? Ek stock batch ban jayega.
+                  </p>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+              )}
+            </FormSection>
+
+            {/* ── SECTION 3: Cost Input (new only) ── */}
+            {!editProduct && (
+              <FormSection
+                icon={<ShoppingCart size={14} />}
+                label="Cost Input"
+                color="orange"
+              >
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Invoice No</Label>
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Purchase Price (₹)
+                    </Label>
                     <Input
-                      data-ocid="admin.products.invoice_no.input"
-                      value={invoiceNo}
-                      onChange={(e) => setInvoiceNo(e.target.value)}
-                      placeholder="e.g. INV-001"
+                      data-ocid="admin.products.purchase_price.input"
+                      type="number"
+                      value={purchasePrice}
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
+                      onChange={(e) => {
+                        setPurchasePrice(clearLeadingZeros(e.target.value));
+                        recalcFromCost(
+                          clearLeadingZeros(e.target.value),
+                          initialQty,
+                          transportCharge,
+                          labourCharge,
+                          otherCharge,
+                        );
+                      }}
+                      placeholder="e.g. 80"
+                      className="h-9"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Bill No</Label>
-                    <Input
-                      data-ocid="admin.products.bill_no.input"
-                      value={billNo}
-                      onChange={(e) => setBillNo(e.target.value)}
-                      placeholder="e.g. BILL-2024-01"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Transport Charge (₹)</Label>
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Transport (₹)
+                    </Label>
                     <Input
                       data-ocid="admin.products.transport.input"
                       type="number"
                       value={transportCharge}
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
                       onChange={(e) => {
-                        const tc = e.target.value;
-                        setTransportCharge(tc);
-                        const qty = Number(initialQty || 0);
-                        const totalCost =
-                          Number(purchasePrice || 0) * qty +
-                          Number(tc) +
-                          Number(labourCharge || 0);
-                        if (profitPercent !== "" && totalCost > 0 && qty > 0) {
-                          const totalSell =
-                            totalCost +
-                            (totalCost * Number(profitPercent)) / 100;
-                          setSellPrice((totalSell / qty).toFixed(2));
-                        } else if (
-                          sellPrice !== "" &&
-                          totalCost > 0 &&
-                          qty > 0
-                        ) {
-                          const totalSell = Number(sellPrice) * qty;
-                          const pct =
-                            ((totalSell - totalCost) / totalCost) * 100;
-                          setProfitPercent(pct.toFixed(2));
-                        }
+                        setTransportCharge(clearLeadingZeros(e.target.value));
+                        recalcFromCost(
+                          purchasePrice,
+                          initialQty,
+                          clearLeadingZeros(e.target.value),
+                          labourCharge,
+                          otherCharge,
+                        );
                       }}
                       placeholder="0"
+                      className="h-9"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Labour Charge (₹)</Label>
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Labour (₹)
+                    </Label>
                     <Input
                       data-ocid="admin.products.labour.input"
                       type="number"
                       value={labourCharge}
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
                       onChange={(e) => {
-                        const lc = e.target.value;
-                        setLabourCharge(lc);
-                        const qty = Number(initialQty || 0);
-                        const totalCost =
-                          Number(purchasePrice || 0) * qty +
-                          Number(transportCharge || 0) +
-                          Number(lc);
-                        if (profitPercent !== "" && totalCost > 0 && qty > 0) {
-                          const totalSell =
-                            totalCost +
-                            (totalCost * Number(profitPercent)) / 100;
-                          setSellPrice((totalSell / qty).toFixed(2));
-                        } else if (
-                          sellPrice !== "" &&
-                          totalCost > 0 &&
-                          qty > 0
-                        ) {
-                          const totalSell = Number(sellPrice) * qty;
-                          const pct =
-                            ((totalSell - totalCost) / totalCost) * 100;
-                          setProfitPercent(pct.toFixed(2));
-                        }
+                        setLabourCharge(clearLeadingZeros(e.target.value));
+                        recalcFromCost(
+                          purchasePrice,
+                          initialQty,
+                          transportCharge,
+                          clearLeadingZeros(e.target.value),
+                          otherCharge,
+                        );
                       }}
                       placeholder="0"
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Other (₹)
+                    </Label>
+                    <Input
+                      data-ocid="admin.products.other_charges.input"
+                      type="number"
+                      value={otherCharge}
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
+                      onChange={(e) => {
+                        setOtherCharge(clearLeadingZeros(e.target.value));
+                        recalcFromCost(
+                          purchasePrice,
+                          initialQty,
+                          transportCharge,
+                          labourCharge,
+                          clearLeadingZeros(e.target.value),
+                        );
+                      }}
+                      placeholder="0"
+                      className="h-9"
                     />
                   </div>
                 </div>
-                {Number(initialQty) > 0 && (
-                  <div className="bg-secondary/60 rounded-lg p-3 text-sm space-y-1">
-                    <p className="font-medium text-foreground">
-                      📦 Cost & Profit Summary
-                    </p>
-                    <div className="space-y-1 text-muted-foreground">
-                      <div className="flex justify-between">
-                        <span>
-                          Purchase: ₹{Number(purchasePrice || 0)} × {qty4cost}
-                        </span>
-                        <span className="text-foreground">
-                          ₹{(Number(purchasePrice || 0) * qty4cost).toFixed(2)}
-                        </span>
-                      </div>
-                      {Number(transportCharge) > 0 && (
-                        <div className="flex justify-between">
-                          <span>+ Transport</span>
-                          <span className="text-foreground">
-                            ₹{Number(transportCharge).toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-                      {Number(labourCharge) > 0 && (
-                        <div className="flex justify-between">
-                          <span>+ Labour</span>
-                          <span className="text-foreground">
-                            ₹{Number(labourCharge).toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex justify-between border-t border-border pt-1 mt-1 font-semibold text-foreground">
-                        <span>Final Cost (Total)</span>
-                        <span>₹{finalCostTotal.toFixed(2)}</span>
-                      </div>
-                      {qty4cost > 0 && finalCostPerUnit > 0 && (
-                        <div className="flex justify-between text-blue-600 dark:text-blue-400">
-                          <span>Per Unit Cost</span>
-                          <span>₹{finalCostPerUnit.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {adminTotalSellingPrice > 0 && (
-                        <>
-                          <div className="flex justify-between text-green-600 dark:text-green-400 font-semibold border-t border-border pt-1 mt-1">
-                            <span>Selling Price (Total)</span>
-                            <span>₹{adminTotalSellingPrice.toFixed(2)}</span>
-                          </div>
-                          {qty4cost > 0 && (
-                            <div className="flex justify-between text-green-600 dark:text-green-400">
-                              <span>Per Unit Selling Price</span>
-                              <span>
-                                ₹{adminPerUnitSellingPrice.toFixed(2)}
-                              </span>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
+              </FormSection>
             )}
 
-            {/* Details / Notes */}
-            <div className="space-y-1.5">
-              <Label className="text-sm">Expiry Date</Label>
-              <Input
-                data-ocid="admin.products.expiry_date.input"
-                type="date"
-                value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional: agar product ki expiry hai
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm">Details / Notes</Label>
-              <Textarea
-                data-ocid="admin.products.details.textarea"
-                value={details}
-                onChange={(e) => setDetails(e.target.value)}
-                placeholder="Koi bhi extra details ya notes..."
-                rows={2}
-                className="resize-none"
-              />
+            {/* ── SECTION 4: Auto Calculation (new only, read-only) ── */}
+            {!editProduct && (
+              <FormSection
+                icon={<Calculator size={14} />}
+                label="Auto Calculation"
+                color="slate"
+                bgHint="Auto-calculated — read only"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <AutoCalcField
+                    ocid="admin.products.final_cost.display"
+                    label="Final Cost (Total)"
+                    value={
+                      qty4cost > 0 || finalCostTotal > 0
+                        ? `₹${finalCostTotal.toFixed(2)}`
+                        : "—"
+                    }
+                    sub={
+                      qty4cost > 0 && purchasePrice
+                        ? `₹${Number(purchasePrice || 0)} × ${qty4cost}${Number(transportCharge) > 0 ? ` + ₹${transportCharge} transport` : ""}${Number(labourCharge) > 0 ? ` + ₹${labourCharge} labour` : ""}${Number(otherCharge) > 0 ? ` + ₹${otherCharge} other` : ""}`
+                        : undefined
+                    }
+                    accent="green"
+                  />
+                  <AutoCalcField
+                    ocid="admin.products.per_unit_cost.display"
+                    label="Per Unit Cost"
+                    value={
+                      finalCostPerUnit > 0
+                        ? `₹${finalCostPerUnit.toFixed(2)}`
+                        : "—"
+                    }
+                    sub={
+                      qty4cost > 0 && finalCostTotal > 0
+                        ? `₹${finalCostTotal.toFixed(2)} ÷ ${qty4cost}`
+                        : undefined
+                    }
+                    accent="blue"
+                  />
+                </div>
+              </FormSection>
+            )}
+
+            {/* Edit mode: compact purchase details */}
+            {editProduct && (
+              <FormSection
+                icon={<ShoppingCart size={14} />}
+                label="Purchase Details"
+                color="orange"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Vendor
+                    </Label>
+                    <Input
+                      data-ocid="admin.products.vendor.input"
+                      value={vendorName}
+                      onChange={(e) => setVendorName(e.target.value)}
+                      placeholder="e.g. Sharma Traders"
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Purchase Price (₹)
+                    </Label>
+                    <Input
+                      data-ocid="admin.products.purchase_price.input"
+                      type="number"
+                      value={purchasePrice}
+                      onChange={(e) =>
+                        setPurchasePrice(clearLeadingZeros(e.target.value))
+                      }
+                      onFocus={(e) => {
+                        if (e.target.value === "0") e.target.select();
+                      }}
+                      placeholder="80"
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+              </FormSection>
+            )}
+
+            {/* ── SECTION 5: Selling ── */}
+            <FormSection
+              icon={<TrendingUp size={14} />}
+              label="Selling"
+              color="green"
+            >
+              {/* One-input-at-a-time toggle */}
+              <div className="flex gap-1 p-0.5 bg-secondary rounded-lg w-full">
+                <button
+                  type="button"
+                  onClick={() => setSellingMode("profit")}
+                  className={`flex-1 text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                    sellingMode === "profit"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Edit Profit %
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSellingMode("price")}
+                  className={`flex-1 text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                    sellingMode === "price"
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Edit Sell Price
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Profit % — editable only in "profit" mode */}
+                <div className="space-y-1.5">
+                  {sellingMode === "profit" ? (
+                    <>
+                      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Profit % *
+                      </Label>
+                      <Input
+                        data-ocid="admin.products.profit_percent.input"
+                        type="number"
+                        value={profitPercent}
+                        min="0"
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
+                        onChange={(e) =>
+                          handleProfitPctChange(
+                            clearLeadingZeros(e.target.value),
+                          )
+                        }
+                        placeholder="e.g. 20"
+                        className="h-9"
+                      />
+                    </>
+                  ) : (
+                    <AutoCalcField
+                      ocid="admin.products.profit_percent_display.display"
+                      label="Profit %"
+                      value={
+                        profitPercent
+                          ? `${Number(profitPercent).toFixed(1)}%`
+                          : "—"
+                      }
+                      accent="green"
+                    />
+                  )}
+                </div>
+
+                {/* Sell Price — editable only in "price" mode */}
+                <div className="space-y-1.5">
+                  {sellingMode === "price" ? (
+                    <>
+                      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Selling Price (₹) *
+                      </Label>
+                      <Input
+                        data-ocid="admin.products.sell_price.input"
+                        type="number"
+                        value={sellPrice}
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
+                        onChange={(e) =>
+                          handleSellPriceChange(
+                            clearLeadingZeros(e.target.value),
+                          )
+                        }
+                        placeholder="100"
+                        className="h-9"
+                      />
+                    </>
+                  ) : (
+                    <AutoCalcField
+                      ocid="admin.products.sell_price_display.display"
+                      label="Sell Price"
+                      value={
+                        sellPrice ? `₹${Number(sellPrice).toFixed(2)}` : "—"
+                      }
+                      accent="green"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    MRP (₹){" "}
+                    <span className="normal-case text-muted-foreground">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    data-ocid="admin.products.mrp.input"
+                    type="number"
+                    value={costPrice}
+                    onChange={(e) => setCostPrice(e.target.value)}
+                    placeholder="e.g. 120"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Min Profit %{" "}
+                    <span className="normal-case text-muted-foreground">
+                      (lock)
+                    </span>
+                  </Label>
+                  <Input
+                    data-ocid="admin.products.min_profit_pct.input"
+                    type="number"
+                    value={minProfitPct}
+                    min="0"
+                    max="100"
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
+                    onChange={(e) => {
+                      const val = clearLeadingZeros(e.target.value);
+                      if (Number(val) < 0) return;
+                      setMinProfitPct(val);
+                    }}
+                    placeholder="e.g. 10"
+                    className="h-9"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Staff is se kam par sell nahi kar sakta
+                  </p>
+                </div>
+              </div>
+            </FormSection>
+
+            {/* ── SECTION 6: Auto Profit (read-only summary) ── */}
+            {(() => {
+              const baseCost =
+                finalCostPerUnit > 0
+                  ? finalCostPerUnit
+                  : purchasePrice
+                    ? Number(purchasePrice)
+                    : 0;
+              const sp = sellPrice ? Number(sellPrice) : 0;
+              const profitRs = baseCost > 0 && sp > 0 ? sp - baseCost : 0;
+              const profitPct =
+                baseCost > 0 && profitRs !== 0
+                  ? (profitRs / baseCost) * 100
+                  : 0;
+              const hasData = baseCost > 0 && sp > 0;
+              return (
+                <FormSection
+                  icon={<TrendingUp size={14} />}
+                  label="Auto Profit"
+                  color="emerald"
+                  bgHint="From Per Unit Cost + Selling Price"
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <div
+                      data-ocid="admin.products.profit_rs.display"
+                      className={`rounded-lg border p-3 text-center ${
+                        !hasData
+                          ? "bg-muted/40 border-border"
+                          : profitRs >= 0
+                            ? "bg-green-50 border-green-200"
+                            : "bg-red-50 border-red-200"
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-1 mb-0.5">
+                        <Lock size={10} className="text-muted-foreground" />
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                          Profit ₹
+                        </span>
+                      </div>
+                      <p
+                        className={`text-lg font-bold ${
+                          !hasData
+                            ? "text-muted-foreground"
+                            : profitRs >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                        }`}
+                      >
+                        {hasData ? `₹${profitRs.toFixed(2)}` : "—"}
+                      </p>
+                    </div>
+                    <div
+                      data-ocid="admin.products.profit_pct_display.display"
+                      className={`rounded-lg border p-3 text-center ${
+                        !hasData
+                          ? "bg-muted/40 border-border"
+                          : profitPct >= 0
+                            ? "bg-green-50 border-green-200"
+                            : "bg-red-50 border-red-200"
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-1 mb-0.5">
+                        <Lock size={10} className="text-muted-foreground" />
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                          Profit %
+                        </span>
+                      </div>
+                      <p
+                        className={`text-lg font-bold ${
+                          !hasData
+                            ? "text-muted-foreground"
+                            : profitPct >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                        }`}
+                      >
+                        {hasData ? `${profitPct.toFixed(1)}%` : "—"}
+                      </p>
+                    </div>
+                  </div>
+                </FormSection>
+              );
+            })()}
+
+            {/* ── SECTION 7: Alerts ── */}
+            <FormSection
+              icon={<Settings size={14} />}
+              label="Alerts"
+              color="amber"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Min Stock Alert *
+                  </Label>
+                  <Input
+                    data-ocid="admin.products.min_stock.input"
+                    type="number"
+                    value={minStock}
+                    onChange={(e) => setMinStock(e.target.value)}
+                    placeholder="e.g. 10"
+                    className="h-9"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Is level se neeche jaane par alert aayega
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Expiry Date{" "}
+                    <span className="normal-case text-muted-foreground">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    data-ocid="admin.products.expiry_date.input"
+                    type="date"
+                    value={expiryDate}
+                    onChange={(e) => setExpiryDate(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+              </div>
+            </FormSection>
+
+            {/* ── SECTION 8: Action ── */}
+            <div className="px-5 py-4 border-t border-border bg-card flex flex-col gap-2">
+              <Button
+                data-ocid="admin.products.form.save_button"
+                onClick={handleSave}
+                className="w-full h-11 text-sm font-semibold"
+              >
+                {editProduct ? "Update Product" : "Save Product"}
+              </Button>
+              <Button
+                variant="outline"
+                data-ocid="admin.products.form.cancel_button"
+                onClick={() => setShowForm(false)}
+                className="w-full h-10 text-sm"
+              >
+                Cancel
+              </Button>
             </div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              data-ocid="admin.products.form.cancel_button"
-              onClick={() => setShowForm(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              data-ocid="admin.products.form.save_button"
-              onClick={handleSave}
-            >
-              {editProduct ? "Update" : "Add"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
   );
 }
 
-// ── Categories Manager ─────────────────────────────────────────────────────────────────
+// ── Categories Manager ────────────────────────────────────────────────────────
 function CategoriesManager() {
   const { categories, addCategory, updateCategory, deleteCategory, products } =
     useStore();
@@ -1334,7 +1729,9 @@ function CategoriesManager() {
                 </div>
               ) : (
                 <>
-                  <span className="text-sm font-medium">{c.name}</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {c.name}
+                  </span>
                   <div className="flex gap-1">
                     <Badge variant="outline" className="text-xs mr-2">
                       {products.filter((p) => p.categoryId === c.id).length}{" "}
@@ -1372,7 +1769,7 @@ function CategoriesManager() {
   );
 }
 
-// ── Units Manager ──────────────────────────────────────────────────────────────────────
+// ── Units Manager ──────────────────────────────────────────────────────────────
 function UnitsManager() {
   const { shopUnits, addShopUnit, deleteShopUnit } = useStore();
   const [newUnit, setNewUnit] = useState("");
@@ -1471,7 +1868,9 @@ function UnitsManager() {
                   <div className="w-7 h-7 rounded-md bg-accent flex items-center justify-center">
                     <Ruler size={13} className="text-accent-foreground" />
                   </div>
-                  <span className="text-sm font-medium">{u.name}</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {u.name}
+                  </span>
                 </div>
                 <Button
                   data-ocid={`admin.units.delete_button.${idx + 1}`}
@@ -1494,7 +1893,7 @@ function UnitsManager() {
   );
 }
 
-// ── Users Manager ────────────────────────────────────────────────────────────────────
+// ── Users Manager ─────────────────────────────────────────────────────────────
 function UsersManager() {
   const { users, addUser, updateUser, deleteUser } = useStore();
   const { currentUser, currentShop } = useAuth();
@@ -1594,7 +1993,7 @@ function UsersManager() {
                       data-ocid={`admin.users.item.${idx + 1}`}
                       className={u.id === currentUser?.id ? "bg-primary/5" : ""}
                     >
-                      <TableCell className="text-sm font-medium">
+                      <TableCell className="text-sm font-medium text-foreground">
                         {u.name}
                         {u.id === currentUser?.id && (
                           <span className="ml-1.5 text-xs text-primary">
@@ -1609,7 +2008,7 @@ function UsersManager() {
                             u.role === "owner"
                               ? "bg-blue-100 text-blue-700 border-0 text-xs"
                               : u.role === "manager"
-                                ? "bg-purple-100 text-purple-700 border-0 text-xs"
+                                ? "bg-secondary text-muted-foreground border-0 text-xs"
                                 : "bg-secondary text-muted-foreground border-0 text-xs"
                           }
                         >
@@ -1696,13 +2095,14 @@ function UsersManager() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="owner">Owner</SelectItem>
+                  <SelectItem value="manager">Manager</SelectItem>
                   <SelectItem value="staff">Staff</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
-          <DialogFooter>
+          <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
             <Button
               variant="outline"
               data-ocid="admin.users.form.cancel_button"
@@ -1716,7 +2116,7 @@ function UsersManager() {
             >
               {editUser ? "Update" : "Add"}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </>

@@ -38,12 +38,11 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { TopBar } from "../components/TopBar";
 import { useStore } from "../context/StoreContext";
-import type { DraftSnapshot, Invoice, QAChange } from "../types/store";
+import type { DraftSnapshot, QAChange } from "../types/store";
 
 function fmt(n: number) {
-  return `\u20b9${n.toLocaleString("en-IN")}`;
+  return `₹${n.toLocaleString("en-IN")}`;
 }
 
 type SalesFilter = "all" | "due" | "paid";
@@ -51,35 +50,24 @@ type HistoryTab = "sales" | "drafts";
 
 // ── Payment Mode Badge ──────────────────────────────────────────────────────────────
 function PaymentModeBadge({ mode }: { mode: string }) {
-  const configs: Record<string, { label: string; className: string }> = {
-    cash: {
-      label: "Cash",
-      className: "bg-gray-100 text-gray-700 border-gray-300",
-    },
-    upi: {
-      label: "UPI",
-      className: "bg-blue-100 text-blue-700 border-blue-300",
-    },
-    online: {
-      label: "Online",
-      className: "bg-purple-100 text-purple-700 border-purple-300",
-    },
-    credit: {
-      label: "Credit",
-      className: "bg-amber-100 text-amber-700 border-amber-300",
-    },
+  const cls: Record<string, string> = {
+    cash: "badge-success",
+    upi: "badge-info",
+    online: "badge-info",
+    credit: "badge-warning",
   };
-  const cfg = configs[mode] ?? {
-    label: mode,
-    className: "bg-secondary text-foreground",
+  const labels: Record<string, string> = {
+    cash: "Cash",
+    upi: "UPI",
+    online: "Online",
+    credit: "Credit",
   };
   return (
-    <Badge
-      variant="outline"
-      className={`text-[10px] capitalize font-medium ${cfg.className}`}
+    <span
+      className={`${cls[mode] ?? "badge-info"} capitalize text-[10px] font-medium`}
     >
-      {cfg.label}
-    </Badge>
+      {labels[mode] ?? mode}
+    </span>
   );
 }
 
@@ -186,11 +174,9 @@ function SalesHistorySection() {
                     <TableRow
                       key={inv.id}
                       data-ocid={`history.sales.item.${idx + 1}`}
-                      className={`${
-                        isPaid
-                          ? "bg-green-50 dark:bg-green-950/20"
-                          : "bg-red-50 dark:bg-red-950/20"
-                      }`}
+                      className={
+                        isPaid ? "bg-success-light/30" : "bg-alert-danger"
+                      }
                     >
                       <TableCell className="text-xs font-medium">
                         {inv.invoiceNumber}
@@ -204,17 +190,17 @@ function SalesHistorySection() {
                       <TableCell className="text-sm font-semibold">
                         {fmt(inv.totalAmount)}
                       </TableCell>
-                      <TableCell className="text-sm text-green-700 font-medium">
+                      <TableCell className="text-sm text-success font-medium">
                         {fmt(inv.paidAmount)}
                       </TableCell>
                       <TableCell>
                         {due > 0 ? (
-                          <span className="text-sm font-bold text-red-600">
+                          <span className="text-sm font-bold text-danger">
                             {fmt(due)}
                           </span>
                         ) : (
-                          <span className="text-xs text-green-600 font-medium">
-                            \u2713 Paid
+                          <span className="text-xs text-success font-medium">
+                            ✓ Paid
                           </span>
                         )}
                       </TableCell>
@@ -240,19 +226,19 @@ function SalesHistorySection() {
 function qaIcon(type: QAChange["type"]) {
   switch (type) {
     case "product_added":
-      return { emoji: "\u2795", color: "text-green-600" };
+      return { emoji: "➕", color: "text-success" };
     case "product_edited":
-      return { emoji: "\u270f\ufe0f", color: "text-blue-600" };
+      return { emoji: "✏️", color: "text-brand-blue" };
     case "product_deleted":
-      return { emoji: "\ud83d\uddd1\ufe0f", color: "text-red-500" };
+      return { emoji: "🗑️", color: "text-danger" };
     case "stock_in":
-      return { emoji: "\ud83d\udce6", color: "text-green-600" };
+      return { emoji: "📦", color: "text-success" };
     case "stock_out":
-      return { emoji: "\ud83d\udce4", color: "text-orange-500" };
+      return { emoji: "📤", color: "text-warning" };
     case "invoice_created":
-      return { emoji: "\ud83e\uddfe", color: "text-blue-600" };
+      return { emoji: "🧾", color: "text-brand-blue" };
     default:
-      return { emoji: "\ud83d\udd35", color: "text-muted-foreground" };
+      return { emoji: "🔵", color: "text-muted-foreground" };
   }
 }
 
@@ -540,8 +526,6 @@ export function HistoryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TopBar title="History" />
-
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -558,10 +542,10 @@ export function HistoryPage() {
         >
           <TabsList>
             <TabsTrigger data-ocid="history.sales_tab.tab" value="sales">
-              \ud83e\uddfe Sales History
+              🧾 Sales History
             </TabsTrigger>
             <TabsTrigger data-ocid="history.drafts_tab.tab" value="drafts">
-              \ud83d\udcbe Draft History
+              💾 Draft History
             </TabsTrigger>
           </TabsList>
         </Tabs>

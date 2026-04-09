@@ -16,6 +16,7 @@ import type {
   AuditLog,
   Category,
   Customer,
+  CustomerOrder,
   DraftSnapshot,
   FeatureFlags,
   Invoice,
@@ -23,13 +24,19 @@ import type {
   LowPriceAlertLog,
   PaymentRecord,
   Product,
+  PurchaseOrder,
   QAChange,
+  ReminderLog,
+  ReminderRequest,
   ReturnEntry,
   ShopSettings,
   ShopUnit,
   StockBatch,
   StockTransaction,
+  Vendor,
+  VendorRateHistory,
 } from "../types/store";
+import { STORAGE_KEYS, loadData, saveData } from "../utils/localStorage";
 import { useAuth, useAuthUserSync } from "./AuthContext";
 
 // Re-export AppUser for compatibility
@@ -126,6 +133,7 @@ interface StoreContextValue {
     expiryDate?: string,
     lengthQty?: number,
     weightQty?: number,
+    otherCharges?: number,
   ) => void;
   addStockOut: (productId: string, quantity: number, note: string) => void;
   getProductStock: (productId: string) => number;
@@ -224,6 +232,60 @@ interface StoreContextValue {
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string, resourceId?: string) => void;
   getAuditLogs: () => AuditLog[];
+
+  // Reminder System
+  reminderLogs: ReminderLog[];
+  reminderRequests: ReminderRequest[];
+  sendReminder: (customer: CustomerLedger, sentBy: AppUser) => Promise<void>;
+  requestReminder: (
+    customer: CustomerLedger,
+    requestedBy: AppUser,
+  ) => Promise<void>;
+  approveReminderRequest: (
+    requestId: string,
+    approvedBy: AppUser,
+  ) => Promise<void>;
+  rejectReminderRequest: (
+    requestId: string,
+    rejectedBy: AppUser,
+  ) => Promise<void>;
+  getReminderCountToday: (staffId: string, customerId: string) => number;
+  getPendingReminderRequests: () => ReminderRequest[];
+
+  // Vendor System
+  vendors: Vendor[];
+  addVendor: (
+    v: Omit<Vendor, "id" | "shopId" | "createdAt" | "updatedAt">,
+  ) => Promise<void>;
+  updateVendor: (id: string, changes: Partial<Vendor>) => Promise<void>;
+  deleteVendor: (id: string) => Promise<void>;
+
+  // Purchase Orders
+  purchaseOrders: PurchaseOrder[];
+  addPurchaseOrder: (
+    po: Omit<PurchaseOrder, "id" | "shopId" | "createdAt">,
+  ) => Promise<void>;
+  updatePurchaseOrder: (
+    id: string,
+    changes: Partial<PurchaseOrder>,
+  ) => Promise<void>;
+  markPurchaseReceived: (id: string, receivedQty: number) => Promise<void>;
+
+  // Customer Orders
+  customerOrders: CustomerOrder[];
+  addCustomerOrder: (
+    co: Omit<CustomerOrder, "id" | "shopId" | "createdAt">,
+  ) => Promise<void>;
+  acceptCustomerOrder: (id: string) => Promise<void>;
+  rejectCustomerOrder: (id: string, reason: string) => Promise<void>;
+
+  // Vendor Rate History
+  vendorRateHistory: VendorRateHistory[];
+  addVendorRateHistory: (
+    entry: Omit<VendorRateHistory, "id" | "shopId" | "changedAt">,
+  ) => Promise<void>;
+  getLastVendorRate: (vendorId: string, productId: string) => number | null;
+  getVendorRateHistoryForVendor: (vendorId: string) => VendorRateHistory[];
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -281,6 +343,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const auditLogsRef = useRef<AuditLog[]>([]);
+
+  const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>([]);
+  const reminderLogsRef = useRef<ReminderLog[]>([]);
+  const [reminderRequests, setReminderRequests] = useState<ReminderRequest[]>(
+    [],
+  );
+  const reminderRequestsRef = useRef<ReminderRequest[]>([]);
+
+  // ── Vendor / Purchase Order / Customer Order state ────────────────────────
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const vendorsRef = useRef<Vendor[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const purchaseOrdersRef = useRef<PurchaseOrder[]>([]);
+  const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
+  const customerOrdersRef = useRef<CustomerOrder[]>([]);
+  const [vendorRateHistory, setVendorRateHistory] = useState<
+    VendorRateHistory[]
+  >([]);
+  const vendorRateHistoryRef = useRef<VendorRateHistory[]>([]);
 
   // ── Shop Settings (localStorage per shop) ──────────────────────────────────────────────
   const [shopSettings, setShopSettings] = useState<ShopSettings>(() => {
@@ -416,6 +497,59 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ── Load all data from ICP backend when shopId & actor are ready ────────────────────────────
   useEffect(() => {
     if (!shopId || !actor) return;
+
+    // ── 2b: Pre-populate from localStorage for instant render (ICP will overwrite) ──
+    const cachedProducts = loadData<Product[]>(STORAGE_KEYS.products, []);
+    if (cachedProducts.length > 0) setProducts(cachedProducts);
+    const cachedCustomers = loadData<Customer[]>(STORAGE_KEYS.customers, []);
+    if (cachedCustomers.length > 0) setCustomers(cachedCustomers);
+    const cachedBatches = loadData<StockBatch[]>(STORAGE_KEYS.batches, []);
+    if (cachedBatches.length > 0) {
+      setBatches(cachedBatches);
+      batchesRef.current = cachedBatches;
+    }
+    const cachedInvoices = loadData<Invoice[]>(STORAGE_KEYS.sales, []);
+    if (cachedInvoices.length > 0) {
+      setInvoices(cachedInvoices);
+      invoicesRef.current = cachedInvoices;
+    }
+    const cachedPayments = loadData<PaymentRecord[]>(STORAGE_KEYS.payments, []);
+    if (cachedPayments.length > 0) setPayments(cachedPayments);
+    const cachedReturns = loadData<ReturnEntry[]>(STORAGE_KEYS.returns, []);
+    if (cachedReturns.length > 0) {
+      setReturns(cachedReturns);
+      returnsRef.current = cachedReturns;
+    }
+    const cachedVendors = loadData<Vendor[]>(STORAGE_KEYS.vendors, []);
+    if (cachedVendors.length > 0) {
+      setVendors(cachedVendors);
+      vendorsRef.current = cachedVendors;
+    }
+    const cachedPOs = loadData<PurchaseOrder[]>(
+      STORAGE_KEYS.purchaseOrders,
+      [],
+    );
+    if (cachedPOs.length > 0) {
+      setPurchaseOrders(cachedPOs);
+      purchaseOrdersRef.current = cachedPOs;
+    }
+    const cachedCOs = loadData<CustomerOrder[]>(
+      STORAGE_KEYS.customerOrders,
+      [],
+    );
+    if (cachedCOs.length > 0) {
+      setCustomerOrders(cachedCOs);
+      customerOrdersRef.current = cachedCOs;
+    }
+    const cachedVRH = loadData<VendorRateHistory[]>(
+      STORAGE_KEYS.vendorRateHistory,
+      [],
+    );
+    if (cachedVRH.length > 0) {
+      setVendorRateHistory(cachedVRH);
+      vendorRateHistoryRef.current = cachedVRH;
+    }
+
     setIsLoading(true);
     console.log(
       `[StoreContext] === Loading shop from ICP backend: ${shopId} ===`,
@@ -454,23 +588,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             loadedProducts,
           );
           setProducts(loadedProducts);
-          setCategories(
-            categoriesRaw ? (JSON.parse(categoriesRaw) as Category[]) : [],
-          );
-          setBatches(
-            batchesRaw ? (JSON.parse(batchesRaw) as StockBatch[]) : [],
-          );
-          setTransactions(
-            transactionsRaw
-              ? (JSON.parse(transactionsRaw) as StockTransaction[])
-              : [],
-          );
-          setCustomers(
-            customersRaw ? (JSON.parse(customersRaw) as Customer[]) : [],
-          );
-          setInvoices(
-            invoicesRaw ? (JSON.parse(invoicesRaw) as Invoice[]) : [],
-          );
+          if (loadedProducts.length > 0)
+            saveData(STORAGE_KEYS.products, loadedProducts);
+
+          const loadedCategories = categoriesRaw
+            ? (JSON.parse(categoriesRaw) as Category[])
+            : [];
+          setCategories(loadedCategories);
+
+          const loadedBatches = batchesRaw
+            ? (JSON.parse(batchesRaw) as StockBatch[])
+            : [];
+          setBatches(loadedBatches);
+          if (loadedBatches.length > 0)
+            saveData(STORAGE_KEYS.batches, loadedBatches);
+
+          const loadedTransactions = transactionsRaw
+            ? (JSON.parse(transactionsRaw) as StockTransaction[])
+            : [];
+          setTransactions(loadedTransactions);
+
+          const loadedCustomers = customersRaw
+            ? (JSON.parse(customersRaw) as Customer[])
+            : [];
+          setCustomers(loadedCustomers);
+          if (loadedCustomers.length > 0)
+            saveData(STORAGE_KEYS.customers, loadedCustomers);
+
+          const loadedInvoices = invoicesRaw
+            ? (JSON.parse(invoicesRaw) as Invoice[])
+            : [];
+          setInvoices(loadedInvoices);
+          invoicesRef.current = loadedInvoices;
+          if (loadedInvoices.length > 0)
+            saveData(STORAGE_KEYS.sales, loadedInvoices);
+
           const loadedUsers = usersRaw
             ? (JSON.parse(usersRaw) as AppUser[])
             : [];
@@ -481,14 +633,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setShopUnits(
             shopUnitsRaw ? (JSON.parse(shopUnitsRaw) as ShopUnit[]) : [],
           );
-          setPayments(
-            paymentsRaw ? (JSON.parse(paymentsRaw) as PaymentRecord[]) : [],
-          );
+
+          const loadedPayments = paymentsRaw
+            ? (JSON.parse(paymentsRaw) as PaymentRecord[])
+            : [];
+          setPayments(loadedPayments);
+          if (loadedPayments.length > 0)
+            saveData(STORAGE_KEYS.payments, loadedPayments);
+
           const loadedReturns = returnsRaw
             ? (JSON.parse(returnsRaw) as ReturnEntry[])
             : [];
           setReturns(loadedReturns);
           returnsRef.current = loadedReturns;
+          if (loadedReturns.length > 0)
+            saveData(STORAGE_KEYS.returns, loadedReturns);
 
           // Load low price alert logs
           (actorRef.current as any)
@@ -507,6 +666,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               const logs = raw ? (JSON.parse(raw) as AuditLog[]) : [];
               setAuditLogs(logs);
               auditLogsRef.current = logs;
+            })
+            .catch(() => {});
+
+          // Load reminder logs
+          (actorRef.current as any)
+            ?.getReminderLogs?.(shopId)
+            .then((raw: string | null) => {
+              const logs = raw ? (JSON.parse(raw) as ReminderLog[]) : [];
+              setReminderLogs(logs);
+              reminderLogsRef.current = logs;
+            })
+            .catch(() => {});
+
+          // Load reminder requests
+          (actorRef.current as any)
+            ?.getReminderRequests?.(shopId)
+            .then((raw: string | null) => {
+              const reqs = raw ? (JSON.parse(raw) as ReminderRequest[]) : [];
+              setReminderRequests(reqs);
+              reminderRequestsRef.current = reqs;
+            })
+            .catch(() => {});
+
+          // Load vendors
+          (actorRef.current as any)
+            ?.getVendors?.(shopId)
+            .then((raw: string | null) => {
+              const data = raw ? (JSON.parse(raw) as Vendor[]) : [];
+              setVendors(data);
+              vendorsRef.current = data;
+              if (data.length > 0) saveData(STORAGE_KEYS.vendors, data);
+            })
+            .catch(() => {});
+
+          // Load purchase orders
+          (actorRef.current as any)
+            ?.getPurchaseOrders?.(shopId)
+            .then((raw: string | null) => {
+              const data = raw ? (JSON.parse(raw) as PurchaseOrder[]) : [];
+              setPurchaseOrders(data);
+              purchaseOrdersRef.current = data;
+              if (data.length > 0) saveData(STORAGE_KEYS.purchaseOrders, data);
+            })
+            .catch(() => {});
+
+          // Load customer orders
+          (actorRef.current as any)
+            ?.getCustomerOrders?.(shopId)
+            .then((raw: string | null) => {
+              const data = raw ? (JSON.parse(raw) as CustomerOrder[]) : [];
+              setCustomerOrders(data);
+              customerOrdersRef.current = data;
+              if (data.length > 0) saveData(STORAGE_KEYS.customerOrders, data);
+            })
+            .catch(() => {});
+
+          // Load vendor rate history
+          (actorRef.current as any)
+            ?.getVendorRateHistory?.(shopId)
+            .then((raw: string | null) => {
+              const data = raw ? (JSON.parse(raw) as VendorRateHistory[]) : [];
+              setVendorRateHistory(data);
+              vendorRateHistoryRef.current = data;
+              if (data.length > 0)
+                saveData(STORAGE_KEYS.vendorRateHistory, data);
             })
             .catch(() => {});
         },
@@ -623,12 +847,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
+      saveData(STORAGE_KEYS.products, updated);
       console.log(
         `[StoreContext] products after add: ${updated.length} items`,
         updated,
       );
       return updated;
     });
+    toast.success("Data saved");
     return id;
   }, []);
 
@@ -654,8 +880,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
+      saveData(STORAGE_KEYS.products, updated);
       return updated;
     });
+    toast.success("Data saved");
   }, []);
 
   const deleteProduct = useCallback((id: string) => {
@@ -680,8 +908,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
+      saveData(STORAGE_KEYS.products, updated);
       return updated;
     });
+    toast.success("Data saved");
   }, []);
 
   // ── Stock Helpers ────────────────────────────────────────────────────────────────────────────
@@ -780,6 +1010,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       expiryDate?: string,
       lengthQty?: number,
       weightQty?: number,
+      otherCharges?: number,
     ) => {
       const productName =
         productsRef.current.find((p) => p.id === productId)?.name ?? productId;
@@ -798,7 +1029,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
 
       const finalPurchaseCost =
-        purchaseRate * quantity + (transportCharge ?? 0) + (labourCharge ?? 0);
+        purchaseRate * quantity +
+        (transportCharge ?? 0) +
+        (labourCharge ?? 0) +
+        (otherCharges ?? 0);
       const existingBatchCount = batchesRef.current.filter(
         (b) => b.productId === productId,
       ).length;
@@ -813,6 +1047,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ...(billNo ? { billNo } : {}),
         ...(transportCharge != null ? { transportCharge } : {}),
         ...(labourCharge != null ? { labourCharge } : {}),
+        ...(otherCharges != null ? { otherCharges } : {}),
         ...(expiryDate?.trim() ? { expiryDate: expiryDate.trim() } : {}),
         finalPurchaseCost,
         ...(lengthQty != null ? { lengthQty } : {}),
@@ -824,6 +1059,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           shopIdRef.current,
           JSON.stringify(updated),
         );
+        saveData(STORAGE_KEYS.batches, updated);
         return updated;
       });
       setTransactions((prev) => {
@@ -845,6 +1081,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return updated;
       });
+      toast.success("Data saved");
     },
     [],
   );
@@ -919,8 +1156,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
+      saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
+    toast.success("Data saved");
   }, []);
 
   const updateCustomer = useCallback((id: string, c: Partial<Customer>) => {
@@ -930,8 +1169,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
+      saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
+    toast.success("Data saved");
   }, []);
 
   const deleteCustomer = useCallback((id: string) => {
@@ -941,8 +1182,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
+      saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
+    toast.success("Data saved");
   }, []);
 
   // ── Invoice ────────────────────────────────────────────────────────────────────────────────
@@ -998,6 +1241,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         paidAmount,
         dueAmount,
         customerMobile: data.customerMobile ?? "",
+        // Safety net: always ensure soldByUserId and soldByName are set
+        soldByUserId: data.soldByUserId || shopIdRef.current || "owner",
+        soldByName: data.soldByName || "Owner",
       };
 
       // ── FIFO Deduction ──
@@ -1067,6 +1313,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           shopIdRef.current,
           JSON.stringify(updatedBatches),
         );
+        saveData(STORAGE_KEYS.batches, updatedBatches);
         setBatches(updatedBatches);
       }
 
@@ -1093,7 +1340,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updatedInvoices),
       );
+      saveData(STORAGE_KEYS.sales, updatedInvoices);
       setInvoices(updatedInvoices);
+      toast.success("Data saved");
 
       return { invoice, mergedExisting };
     },
@@ -1126,6 +1375,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           shopIdRef.current,
           JSON.stringify(updated),
         );
+        saveData(STORAGE_KEYS.payments, updated);
         return updated;
       });
 
@@ -1180,6 +1430,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           JSON.stringify(updated),
         );
         invoicesRef.current = updated;
+        saveData(STORAGE_KEYS.sales, updated);
         return updated;
       });
 
@@ -1194,9 +1445,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             shopIdRef.current,
             JSON.stringify(updated),
           );
+          saveData(STORAGE_KEYS.customers, updated);
           return updated;
         });
       }
+      toast.success("Data saved");
     },
     [],
   );
@@ -1543,6 +1796,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           shopIdRef.current,
           JSON.stringify(updated),
         );
+        saveData(STORAGE_KEYS.batches, updated);
         batchesRef.current = updated;
         return updated;
       });
@@ -1555,6 +1809,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updatedReturns),
       );
+      saveData(STORAGE_KEYS.returns, updatedReturns);
+      toast.success("Data saved");
 
       return true;
     },
@@ -1596,6 +1852,513 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
     },
     [returns],
+  );
+
+  // ── Reminder System ──────────────────────────────────────────────────────────
+  const buildReminderMessage = useCallback(
+    (customerName: string, dueAmount: number): string => {
+      const shopName = currentShop?.name ?? "Save Shop System";
+      return `Namaste ${customerName},\nAapka ₹${Math.round(dueAmount).toLocaleString("en-IN")} baki hai.\n\nKripya jaldi payment kare.\n\nDhanyavaad 🙏\n${shopName}`;
+    },
+    [currentShop],
+  );
+
+  const sendReminder = useCallback(
+    async (customer: CustomerLedger, sentBy: AppUser): Promise<void> => {
+      const message = buildReminderMessage(
+        customer.customerName,
+        customer.totalDue,
+      );
+      window.open(
+        `https://wa.me/91${customer.customerMobile}?text=${encodeURIComponent(message)}`,
+        "_blank",
+        "noopener",
+      );
+      const log: ReminderLog = {
+        id: `rl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        senderId: sentBy.id,
+        senderName: sentBy.name,
+        senderRole: sentBy.role as "owner" | "manager" | "staff",
+        customerId: customer.customerMobile,
+        customerName: customer.customerName,
+        customerMobile: customer.customerMobile,
+        message,
+        sentAt: new Date().toISOString(),
+        status: "sent",
+      };
+      const updated = [log, ...reminderLogsRef.current];
+      reminderLogsRef.current = updated;
+      setReminderLogs(updated);
+      (actorRef.current as any)?.saveReminderLogs?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+    },
+    [buildReminderMessage],
+  );
+
+  const requestReminder = useCallback(
+    async (customer: CustomerLedger, requestedBy: AppUser): Promise<void> => {
+      const req: ReminderRequest = {
+        id: `rreq_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        staffId: requestedBy.id,
+        staffName: requestedBy.name,
+        customerId: customer.customerMobile,
+        customerName: customer.customerName,
+        customerMobile: customer.customerMobile,
+        dueAmount: customer.totalDue,
+        requestedAt: new Date().toISOString(),
+        approvalStatus: "pending",
+      };
+      const updatedReqs = [req, ...reminderRequestsRef.current];
+      reminderRequestsRef.current = updatedReqs;
+      setReminderRequests(updatedReqs);
+      (actorRef.current as any)?.saveReminderRequests?.(
+        shopIdRef.current,
+        JSON.stringify(updatedReqs),
+      );
+
+      const message = buildReminderMessage(
+        customer.customerName,
+        customer.totalDue,
+      );
+      const log: ReminderLog = {
+        id: `rl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        senderId: requestedBy.id,
+        senderName: requestedBy.name,
+        senderRole: "staff",
+        customerId: customer.customerMobile,
+        customerName: customer.customerName,
+        customerMobile: customer.customerMobile,
+        message,
+        sentAt: new Date().toISOString(),
+        status: "requested",
+        requestId: req.id,
+      };
+      const updatedLogs = [log, ...reminderLogsRef.current];
+      reminderLogsRef.current = updatedLogs;
+      setReminderLogs(updatedLogs);
+      (actorRef.current as any)?.saveReminderLogs?.(
+        shopIdRef.current,
+        JSON.stringify(updatedLogs),
+      );
+    },
+    [buildReminderMessage],
+  );
+
+  const approveReminderRequest = useCallback(
+    async (requestId: string, approvedBy: AppUser): Promise<void> => {
+      const req = reminderRequestsRef.current.find((r) => r.id === requestId);
+      if (!req || req.approvalStatus !== "pending") return;
+
+      const message = buildReminderMessage(req.customerName, req.dueAmount);
+      window.open(
+        `https://wa.me/91${req.customerMobile}?text=${encodeURIComponent(message)}`,
+        "_blank",
+        "noopener",
+      );
+
+      const updatedReqs = reminderRequestsRef.current.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              approvalStatus: "approved" as const,
+              approvedBy: approvedBy.name,
+              approvedAt: new Date().toISOString(),
+            }
+          : r,
+      );
+      reminderRequestsRef.current = updatedReqs;
+      setReminderRequests(updatedReqs);
+      (actorRef.current as any)?.saveReminderRequests?.(
+        shopIdRef.current,
+        JSON.stringify(updatedReqs),
+      );
+
+      const log: ReminderLog = {
+        id: `rl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        senderId: approvedBy.id,
+        senderName: approvedBy.name,
+        senderRole: approvedBy.role as "owner" | "manager" | "staff",
+        customerId: req.customerMobile,
+        customerName: req.customerName,
+        customerMobile: req.customerMobile,
+        message,
+        sentAt: new Date().toISOString(),
+        status: "approved",
+        requestId,
+      };
+      const updatedLogs = [log, ...reminderLogsRef.current];
+      reminderLogsRef.current = updatedLogs;
+      setReminderLogs(updatedLogs);
+      (actorRef.current as any)?.saveReminderLogs?.(
+        shopIdRef.current,
+        JSON.stringify(updatedLogs),
+      );
+    },
+    [buildReminderMessage],
+  );
+
+  const rejectReminderRequest = useCallback(
+    async (requestId: string, rejectedBy: AppUser): Promise<void> => {
+      const req = reminderRequestsRef.current.find((r) => r.id === requestId);
+      if (!req) return;
+
+      const updatedReqs = reminderRequestsRef.current.map((r) =>
+        r.id === requestId
+          ? {
+              ...r,
+              approvalStatus: "rejected" as const,
+              approvedBy: rejectedBy.name,
+              approvedAt: new Date().toISOString(),
+            }
+          : r,
+      );
+      reminderRequestsRef.current = updatedReqs;
+      setReminderRequests(updatedReqs);
+      (actorRef.current as any)?.saveReminderRequests?.(
+        shopIdRef.current,
+        JSON.stringify(updatedReqs),
+      );
+
+      const log: ReminderLog = {
+        id: `rl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        senderId: rejectedBy.id,
+        senderName: rejectedBy.name,
+        senderRole: rejectedBy.role as "owner" | "manager" | "staff",
+        customerId: req.customerMobile,
+        customerName: req.customerName,
+        customerMobile: req.customerMobile,
+        message: "",
+        sentAt: new Date().toISOString(),
+        status: "rejected",
+        requestId,
+      };
+      const updatedLogs = [log, ...reminderLogsRef.current];
+      reminderLogsRef.current = updatedLogs;
+      setReminderLogs(updatedLogs);
+      (actorRef.current as any)?.saveReminderLogs?.(
+        shopIdRef.current,
+        JSON.stringify(updatedLogs),
+      );
+    },
+    [],
+  );
+
+  const getReminderCountToday = useCallback(
+    (staffId: string, customerId: string): number => {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      return reminderLogsRef.current.filter(
+        (l) =>
+          l.senderId === staffId &&
+          l.customerId === customerId &&
+          l.sentAt.slice(0, 10) === todayStr &&
+          l.status === "sent",
+      ).length;
+    },
+    [],
+  );
+
+  const getPendingReminderRequests = useCallback((): ReminderRequest[] => {
+    return reminderRequestsRef.current.filter(
+      (r) => r.approvalStatus === "pending",
+    );
+  }, []);
+
+  // ── Vendor CRUD ──────────────────────────────────────────────────────────────
+  const addVendor = useCallback(
+    async (
+      v: Omit<Vendor, "id" | "shopId" | "createdAt" | "updatedAt">,
+    ): Promise<void> => {
+      const newVendor: Vendor = {
+        id: `vendor_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        ...v,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      const updated = [...vendorsRef.current, newVendor];
+      vendorsRef.current = updated;
+      setVendors(updated);
+      (actorRef.current as any)?.saveVendors?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.vendors, updated);
+      toast.success("Data saved");
+    },
+    [],
+  );
+
+  const updateVendor = useCallback(
+    async (id: string, changes: Partial<Vendor>): Promise<void> => {
+      const updated = vendorsRef.current.map((v) =>
+        v.id === id ? { ...v, ...changes, updatedAt: Date.now() } : v,
+      );
+      vendorsRef.current = updated;
+      setVendors(updated);
+      (actorRef.current as any)?.saveVendors?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.vendors, updated);
+      toast.success("Data saved");
+    },
+    [],
+  );
+
+  const deleteVendor = useCallback(async (id: string): Promise<void> => {
+    const updated = vendorsRef.current.filter((v) => v.id !== id);
+    vendorsRef.current = updated;
+    setVendors(updated);
+    (actorRef.current as any)?.saveVendors?.(
+      shopIdRef.current,
+      JSON.stringify(updated),
+    );
+    saveData(STORAGE_KEYS.vendors, updated);
+    toast.success("Data saved");
+  }, []);
+
+  // ── Purchase Order CRUD ───────────────────────────────────────────────────────
+  const addPurchaseOrder = useCallback(
+    async (
+      po: Omit<PurchaseOrder, "id" | "shopId" | "createdAt">,
+    ): Promise<void> => {
+      const newPO: PurchaseOrder = {
+        id: `po_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        ...po,
+        createdAt: Date.now(),
+      };
+      const updated = [newPO, ...purchaseOrdersRef.current];
+      purchaseOrdersRef.current = updated;
+      setPurchaseOrders(updated);
+      (actorRef.current as any)?.savePurchaseOrders?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.purchaseOrders, updated);
+      toast.success("Data saved");
+    },
+    [],
+  );
+
+  const updatePurchaseOrder = useCallback(
+    async (id: string, changes: Partial<PurchaseOrder>): Promise<void> => {
+      const updated = purchaseOrdersRef.current.map((po) =>
+        po.id === id ? { ...po, ...changes } : po,
+      );
+      purchaseOrdersRef.current = updated;
+      setPurchaseOrders(updated);
+      (actorRef.current as any)?.savePurchaseOrders?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.purchaseOrders, updated);
+      toast.success("Data saved");
+    },
+    [],
+  );
+
+  const markPurchaseReceived = useCallback(
+    async (id: string, receivedQty: number): Promise<void> => {
+      const po = purchaseOrdersRef.current.find((p) => p.id === id);
+      if (!po) return;
+      const newStatus: PurchaseOrder["status"] =
+        receivedQty >= po.qty ? "received" : "partial";
+      const updated = purchaseOrdersRef.current.map((p) =>
+        p.id === id
+          ? { ...p, status: newStatus, receivedQty, receivedDate: Date.now() }
+          : p,
+      );
+      purchaseOrdersRef.current = updated;
+      setPurchaseOrders(updated);
+      (actorRef.current as any)?.savePurchaseOrders?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.purchaseOrders, updated);
+      // Add stock via addStockIn
+      if (receivedQty > 0) {
+        addStockIn(
+          po.productId,
+          receivedQty,
+          po.rate,
+          new Date().toISOString(),
+          `Purchase Order ${id} received`,
+          undefined,
+          undefined,
+          po.transportCharge,
+          po.labourCharge,
+          undefined,
+          undefined,
+          undefined,
+          po.otherCharges,
+        );
+      }
+    },
+    [addStockIn],
+  );
+
+  // ── Ref to track currentUser in callbacks without stale closure ──────────────
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  // ── Customer Order CRUD ───────────────────────────────────────────────────────
+  const addCustomerOrder = useCallback(
+    async (
+      co: Omit<CustomerOrder, "id" | "shopId" | "createdAt">,
+    ): Promise<void> => {
+      const newCO: CustomerOrder = {
+        id: `co_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        ...co,
+        createdAt: Date.now(),
+      };
+      const updated = [newCO, ...customerOrdersRef.current];
+      customerOrdersRef.current = updated;
+      setCustomerOrders(updated);
+      (actorRef.current as any)?.saveCustomerOrders?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.customerOrders, updated);
+      toast.success("Data saved");
+    },
+    [],
+  );
+
+  const acceptCustomerOrder = useCallback(
+    async (id: string): Promise<void> => {
+      const co = customerOrdersRef.current.find((o) => o.id === id);
+      if (!co || co.status !== "pending") return;
+      const updated = customerOrdersRef.current.map((o) =>
+        o.id === id ? { ...o, status: "accepted" as const } : o,
+      );
+      customerOrdersRef.current = updated;
+      setCustomerOrders(updated);
+      (actorRef.current as any)?.saveCustomerOrders?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.customerOrders, updated);
+      toast.success("Data saved");
+      // Convert to invoice
+      const customer = customers.find((c) => c.id === co.customerId);
+      const seller = currentUserRef.current;
+      const invoiceItems: Omit<Invoice, "id" | "invoiceNumber"> = {
+        customerId: co.customerId,
+        customerName: customer?.name ?? "Customer",
+        customerMobile: customer?.mobile ?? "",
+        items: co.items.map((item) => {
+          const product = productsRef.current.find(
+            (p) => p.id === item.productId,
+          );
+          return {
+            productId: item.productId,
+            productName: product?.name ?? item.productId,
+            quantity: item.qty,
+            sellingRate: item.price,
+            purchaseCost: 0,
+          };
+        }),
+        totalAmount: co.totalAmount,
+        paidAmount: co.totalAmount,
+        dueAmount: 0,
+        paymentMode: "cash",
+        date: new Date().toISOString(),
+        soldByName: seller?.name ?? "Owner",
+        soldByUserId: seller?.id ?? shopIdRef.current,
+      };
+      createInvoice(invoiceItems);
+    },
+    [customers, createInvoice],
+  );
+
+  const rejectCustomerOrder = useCallback(
+    async (id: string, reason: string): Promise<void> => {
+      const updated = customerOrdersRef.current.map((o) =>
+        o.id === id
+          ? { ...o, status: "rejected" as const, rejectionReason: reason }
+          : o,
+      );
+      customerOrdersRef.current = updated;
+      setCustomerOrders(updated);
+      (actorRef.current as any)?.saveCustomerOrders?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.customerOrders, updated);
+      toast.success("Data saved");
+    },
+    [],
+  );
+
+  // ── Vendor Rate History ──────────────────────────────────────────────────────
+  const addVendorRateHistory = useCallback(
+    async (
+      entry: Omit<VendorRateHistory, "id" | "shopId" | "changedAt">,
+    ): Promise<void> => {
+      // Only save if rate actually changed from last entry
+      const last = vendorRateHistoryRef.current
+        .filter(
+          (r) =>
+            r.vendorId === entry.vendorId && r.productId === entry.productId,
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime(),
+        )[0];
+      if (last && Math.abs(last.newRate - entry.newRate) < 0.01) return;
+
+      const newEntry: VendorRateHistory = {
+        id: `vrh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        ...entry,
+        changedAt: new Date().toISOString(),
+      };
+      const updated = [newEntry, ...vendorRateHistoryRef.current];
+      vendorRateHistoryRef.current = updated;
+      setVendorRateHistory(updated);
+      (actorRef.current as any)?.saveVendorRateHistory?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+      saveData(STORAGE_KEYS.vendorRateHistory, updated);
+    },
+    [],
+  );
+
+  const getLastVendorRate = useCallback(
+    (vendorId: string, productId: string): number | null => {
+      const history = vendorRateHistoryRef.current
+        .filter((r) => r.vendorId === vendorId && r.productId === productId)
+        .sort(
+          (a, b) =>
+            new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime(),
+        );
+      return history.length > 0 ? history[0].newRate : null;
+    },
+    [],
+  );
+
+  const getVendorRateHistoryForVendor = useCallback(
+    (vendorId: string): VendorRateHistory[] => {
+      return vendorRateHistoryRef.current
+        .filter((r) => r.vendorId === vendorId)
+        .sort(
+          (a, b) =>
+            new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime(),
+        );
+    },
+    [],
   );
 
   // ── Low Price Alert Log ──────────────────────────────────────────────────────
@@ -1765,6 +2528,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     auditLogs,
     addAuditLog,
     getAuditLogs,
+    reminderLogs,
+    reminderRequests,
+    sendReminder,
+    requestReminder,
+    approveReminderRequest,
+    rejectReminderRequest,
+    getReminderCountToday,
+    getPendingReminderRequests,
+    vendors,
+    addVendor,
+    updateVendor,
+    deleteVendor,
+    purchaseOrders,
+    addPurchaseOrder,
+    updatePurchaseOrder,
+    markPurchaseReceived,
+    customerOrders,
+    addCustomerOrder,
+    acceptCustomerOrder,
+    rejectCustomerOrder,
+    vendorRateHistory,
+    addVendorRateHistory,
+    getLastVendorRate,
+    getVendorRateHistoryForVendor,
   };
 
   return (

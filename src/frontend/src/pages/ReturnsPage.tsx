@@ -22,10 +22,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { TopBar } from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { ReturnReason } from "../types/store";
+import { clearLeadingZeros } from "../utils/numberInput";
 
 const RETURN_REASONS: ReturnReason[] = [
   "Damaged",
@@ -145,8 +145,6 @@ export function ReturnsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8" data-ocid="returns.page">
-      <TopBar title="Returns" />
-
       <div className="px-4 md:px-6 space-y-5">
         {/* ─── Return Report Card ──────────────────── */}
         <Card
@@ -168,7 +166,7 @@ export function ReturnsPage() {
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Total Return Value */}
-              <div className="rounded-xl bg-white border border-rose-100 p-4 flex flex-col gap-1">
+              <div className="rounded-xl bg-card border border-rose-100 p-4 flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-rose-600 mb-1">
                   <PackageCheck size={16} />
                   <span className="text-xs font-semibold uppercase tracking-wide">
@@ -225,7 +223,7 @@ export function ReturnsPage() {
               </div>
 
               {/* Top Reason */}
-              <div className="rounded-xl bg-white border border-amber-100 p-4 flex flex-col gap-1">
+              <div className="rounded-xl bg-card border border-amber-100 p-4 flex flex-col gap-1">
                 <div className="flex items-center gap-2 text-amber-600 mb-1">
                   <Trophy size={16} />
                   <span className="text-xs font-semibold uppercase tracking-wide">
@@ -293,7 +291,10 @@ export function ReturnsPage() {
                     step="0.01"
                     placeholder="e.g. 5"
                     value={qty}
-                    onChange={(e) => setQty(e.target.value)}
+                    onChange={(e) => setQty(clearLeadingZeros(e.target.value))}
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
                     data-ocid="returns.qty.input"
                   />
                 </div>
@@ -310,7 +311,12 @@ export function ReturnsPage() {
                     step="0.01"
                     placeholder="Auto-filled from product"
                     value={sellingPrice}
-                    onChange={(e) => setSellingPrice(e.target.value)}
+                    onChange={(e) =>
+                      setSellingPrice(clearLeadingZeros(e.target.value))
+                    }
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
                     data-ocid="returns.selling_price.input"
                   />
                 </div>
@@ -325,7 +331,12 @@ export function ReturnsPage() {
                     step="0.01"
                     placeholder="Customer ko kitna wapas diya"
                     value={returnValue}
-                    onChange={(e) => setReturnValue(e.target.value)}
+                    onChange={(e) =>
+                      setReturnValue(clearLeadingZeros(e.target.value))
+                    }
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
                     data-ocid="returns.return_value.input"
                   />
                 </div>
@@ -648,7 +659,7 @@ function ReturnReasonBadge({ reason }: { reason: string }) {
       className += "bg-pink-100 text-pink-700 border-pink-200";
       break;
     default:
-      className += "bg-gray-100 text-gray-700 border-gray-200";
+      className += "bg-muted text-muted-foreground border-border";
   }
   return <span className={className}>{reason}</span>;
 }
