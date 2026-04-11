@@ -23,3 +23,16 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </InternetIdentityProvider>
   </QueryClientProvider>,
 );
+
+// Hide splash screen once app renders
+setTimeout(() => {
+  const splash = document.getElementById("splash-screen");
+  if (splash) splash.style.display = "none";
+}, 500);
+
+// Register service worker
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(console.error);
+  });
+}

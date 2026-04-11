@@ -8,8 +8,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Trophy } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Eye, EyeOff, Trophy } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 
@@ -58,6 +58,15 @@ export function AdminSummaryCard() {
   const { currentUser } = useAuth();
   const { invoices } = useStore();
   const [filter, setFilter] = useState<DateFilter>("today");
+  const [amountsVisible, setAmountsVisible] = useState<boolean>(
+    () => localStorage.getItem("amountsVisible") !== "false",
+  );
+
+  useEffect(() => {
+    localStorage.setItem("amountsVisible", amountsVisible ? "true" : "false");
+  }, [amountsVisible]);
+
+  const showAmt = (value: number) => (amountsVisible ? fmt(value) : "₹••••");
 
   const filtered = useMemo(
     () => invoices.filter((inv) => isWithinFilter(inv.date, filter)),
@@ -139,9 +148,25 @@ export function AdminSummaryCard() {
     >
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-3 border-b border-border">
-        <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-          <span>📊</span> Admin Summary
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+            <span>📊</span> Admin Summary
+          </h2>
+          {/* Eye toggle */}
+          <button
+            type="button"
+            data-ocid="admin.summary.toggle_visibility"
+            aria-label={amountsVisible ? "Hide amounts" : "Show amounts"}
+            onClick={() => setAmountsVisible((v) => !v)}
+            className="p-1 rounded hover:bg-muted transition-colors"
+          >
+            {amountsVisible ? (
+              <Eye className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+            ) : (
+              <EyeOff className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+            )}
+          </button>
+        </div>
         {/* Date Filter */}
         <div
           data-ocid="admin.summary.tab"
@@ -173,7 +198,8 @@ export function AdminSummaryCard() {
             </h3>
             {highestBonusStaff && highestBonusStaff.bonus > 0 && (
               <Badge className="bg-amber-100 text-amber-700 border-amber-200 border text-xs font-medium">
-                🎯 Highest Bonus: {fmt(highestBonusStaff.bonus)} by{" "}
+                🎯 Highest Bonus:{" "}
+                {amountsVisible ? fmt(highestBonusStaff.bonus) : "••••"} by{" "}
                 {highestBonusStaff.name}
               </Badge>
             )}
@@ -215,7 +241,7 @@ export function AdminSummaryCard() {
                         data-ocid={`admin.staff.item.${idx + 1}`}
                         className={
                           isTop
-                            ? "bg-amber-50 border-amber-100"
+                            ? "bg-amber-50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-800/30"
                             : "hover:bg-secondary/40"
                         }
                       >
@@ -241,21 +267,21 @@ export function AdminSummaryCard() {
                         </TableCell>
                         <TableCell className="text-right py-2.5">
                           <span className="text-sm font-semibold text-blue-700">
-                            {fmt(staff.totalSale)}
+                            {amountsVisible ? fmt(staff.totalSale) : "••••"}
                           </span>
                         </TableCell>
                         <TableCell className="text-right py-2.5">
                           <span
                             className={`text-sm font-semibold ${staff.extraProfit > 0 ? "text-success" : "text-muted-foreground"}`}
                           >
-                            {fmt(staff.extraProfit)}
+                            {amountsVisible ? fmt(staff.extraProfit) : "••••"}
                           </span>
                         </TableCell>
                         <TableCell className="text-right py-2.5">
                           <span
                             className={`text-sm font-semibold ${staff.bonus > 0 ? "text-success" : "text-muted-foreground"}`}
                           >
-                            {fmt(staff.bonus)}
+                            {amountsVisible ? fmt(staff.bonus) : "••••"}
                           </span>
                         </TableCell>
                       </TableRow>
@@ -275,31 +301,31 @@ export function AdminSummaryCard() {
             B. Totals
           </h3>
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-xl p-3 flex flex-col gap-1">
               <span className="text-lg">🔵</span>
-              <span className="text-[11px] text-blue-600 font-medium">
+              <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
                 Total Sale
               </span>
-              <span className="text-sm md:text-base font-bold text-blue-700 break-all">
-                {fmt(totals.totalSale)}
+              <span className="text-sm md:text-base font-bold text-blue-700 dark:text-blue-300 break-all">
+                {showAmt(totals.totalSale)}
               </span>
             </div>
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-xl p-3 flex flex-col gap-1">
               <span className="text-lg">🔴</span>
-              <span className="text-[11px] text-red-600 font-medium">
+              <span className="text-[11px] text-red-600 dark:text-red-400 font-medium">
                 Total Discount
               </span>
-              <span className="text-sm md:text-base font-bold text-red-700 break-all">
-                {fmt(totals.totalDiscount)}
+              <span className="text-sm md:text-base font-bold text-red-700 dark:text-red-300 break-all">
+                {showAmt(totals.totalDiscount)}
               </span>
             </div>
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex flex-col gap-1">
+            <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/40 rounded-xl p-3 flex flex-col gap-1">
               <span className="text-lg">🟢</span>
-              <span className="text-[11px] text-green-600 font-medium">
+              <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">
                 Extra Profit
               </span>
-              <span className="text-sm md:text-base font-bold text-green-700 break-all">
-                {fmt(totals.totalExtraProfit)}
+              <span className="text-sm md:text-base font-bold text-green-700 dark:text-green-300 break-all">
+                {showAmt(totals.totalExtraProfit)}
               </span>
             </div>
           </div>
@@ -313,29 +339,31 @@ export function AdminSummaryCard() {
             C. Final Summary
           </h3>
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col gap-1">
+            <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/40 rounded-xl p-4 flex flex-col gap-1">
               <span className="text-2xl">💚</span>
-              <span className="text-xs text-green-600 font-medium">
+              <span className="text-xs text-green-600 dark:text-green-400 font-medium">
                 Net Income
               </span>
-              <span className="text-lg md:text-xl font-extrabold text-green-700">
-                {fmt(summary.netIncome)}
+              <span className="text-lg md:text-xl font-extrabold text-green-700 dark:text-green-300">
+                {showAmt(summary.netIncome)}
               </span>
-              <span className="text-[10px] text-green-500">
+              <span className="text-[10px] text-green-500 dark:text-green-500">
                 Actual collected
               </span>
             </div>
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col gap-1">
+            <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-4 flex flex-col gap-1">
               <span className="text-2xl">📈</span>
-              <span className="text-xs text-emerald-600 font-medium">
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                 Total Profit
               </span>
               <span
-                className={`text-lg md:text-xl font-extrabold ${summary.totalProfit >= 0 ? "text-emerald-700" : "text-red-600"}`}
+                className={`text-lg md:text-xl font-extrabold ${summary.totalProfit >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-400"}`}
               >
-                {fmt(summary.totalProfit)}
+                {showAmt(summary.totalProfit)}
               </span>
-              <span className="text-[10px] text-emerald-500">Sell - Cost</span>
+              <span className="text-[10px] text-emerald-500 dark:text-emerald-500">
+                Sell - Cost
+              </span>
             </div>
           </div>
         </div>

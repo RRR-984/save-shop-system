@@ -266,6 +266,28 @@ export interface LowPriceAlertLog {
   timestamp: string;
 }
 
+// ─── Diamond Reward System ───────────────────────────────────────────────────
+
+export type DiamondTier = "bronze" | "silver" | "gold" | "diamond";
+
+export interface DiamondReward {
+  id: string;
+  shopId: string;
+  userId: string;
+  userName: string;
+  productId: string;
+  productName: string;
+  cycleCompletedAt: string;
+  diamondCount: number;
+}
+
+export function getDiamondTier(total: number): DiamondTier {
+  if (total >= 500) return "diamond";
+  if (total >= 200) return "gold";
+  if (total >= 50) return "silver";
+  return "bronze";
+}
+
 export type NavPage =
   | "dashboard"
   | "inventory"
@@ -286,7 +308,9 @@ export type NavPage =
   | "vendors"
   | "purchase-orders"
   | "customer-orders"
-  | "cash-counter";
+  | "cash-counter"
+  | "diamond-rewards"
+  | "rankings";
 
 // ─── Vendor & Order System ────────────────────────────────────────────────────
 
@@ -374,4 +398,68 @@ export interface ReminderRequest {
   approvalStatus: "pending" | "approved" | "rejected";
   approvedBy?: string;
   approvedAt?: string;
+}
+
+// ─── Advertisement System ─────────────────────────────────────────────────────
+
+export type AdType = "banner" | "card" | "reward" | "vendor";
+
+export type AdStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "active"
+  | "paused";
+
+export interface Advertisement {
+  id: string;
+  shopId: string;
+  type: AdType;
+  title: string;
+  description: string;
+  imageUrl?: string;
+  targetUrl?: string;
+  vendorId?: string;
+  vendorName?: string;
+  status: AdStatus;
+  rewardDiamonds?: number;
+  createdAt: string;
+  updatedAt: string;
+  impressions: number;
+  clicks: number;
+  displayOrder: number;
+  backgroundColor?: string;
+  accentColor?: string;
+  emoji?: string;
+}
+
+export interface WatchAdReward {
+  id: string;
+  shopId: string;
+  userId: string;
+  userName: string;
+  adId: string;
+  adTitle: string;
+  diamondsEarned: number;
+  watchedAt: string;
+}
+
+// ─── Rankings System ──────────────────────────────────────────────────────────
+
+export interface RankingEntry {
+  rank: number;
+  id: string;
+  name: string;
+  value: number;
+  secondaryValue?: number;
+  badge?: string;
+}
+
+export interface RankingsData {
+  topSellingProducts: RankingEntry[];
+  highProfitProducts: RankingEntry[];
+  topCustomers: RankingEntry[];
+  topVendors: RankingEntry[];
+  topStaff: RankingEntry[];
+  lastUpdated: string;
 }

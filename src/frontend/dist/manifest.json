@@ -1,0 +1,24 @@
+{
+  "name": "FIFO Bridge",
+  "short_name": "FIFO Bridge",
+  "description": "Smart shop management system",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1a0533",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/assets/diamond-logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/diamond-logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

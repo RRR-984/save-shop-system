@@ -6,6 +6,7 @@ import {
   Building2,
   ClipboardList,
   CreditCard,
+  Gem,
   History,
   LayoutDashboard,
   LogOut,
@@ -20,12 +21,14 @@ import {
   Smartphone,
   Store,
   TrendingUp,
+  Trophy,
   UserCog,
   Users,
   X,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import type { NavPage, UserRole } from "../types/store";
 
 // Role badge component
@@ -151,6 +154,17 @@ const NAV_ITEMS: NavItem[] = [
     icon: Bell,
     roles: ["owner", "manager"],
   },
+  {
+    id: "diamond-rewards",
+    label: "Diamond Rewards",
+    icon: Gem,
+  },
+  {
+    id: "rankings",
+    label: "Rankings",
+    icon: Trophy,
+    roles: ["owner", "manager"],
+  },
 ];
 
 interface SidebarProps {
@@ -161,6 +175,7 @@ interface SidebarProps {
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { currentUser, currentShop, logout } = useAuth();
+  const { t } = useLanguage();
 
   const handleNav = (page: NavPage) => {
     onNavigate(page);
@@ -188,7 +203,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             <Store className="w-5 h-5 text-white" />
           </div>
           <div>
-            <div className="text-white font-bold text-base leading-tight">
+            <div className="text-sidebar-foreground font-bold text-base leading-tight">
               Save Shop
             </div>
             <div className="text-sidebar-foreground/60 text-xs">
@@ -211,8 +226,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
                   active
-                    ? "bg-sidebar-accent text-white"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-white",
+                    ? "bg-sidebar-accent text-sidebar-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                 )}
               >
                 <Icon
@@ -224,7 +239,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   )}
                   size={17}
                 />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{t(item.label)}</span>
                 {active && (
                   <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
                 )}
@@ -256,7 +271,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   <Smartphone size={14} className="text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-white text-xs font-semibold truncate">
+                  <div className="text-sidebar-foreground text-xs font-semibold truncate">
                     {currentUser.name || `+91 ${currentUser.mobile}`}
                   </div>
                   <div className="mt-0.5">
@@ -298,7 +313,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <button
         type="button"
         data-ocid="nav.menu.button"
-        className="md:hidden fixed top-4 left-4 z-50 w-9 h-9 bg-sidebar rounded-lg flex items-center justify-center text-white shadow-lg"
+        className="md:hidden fixed top-4 left-4 z-50 w-9 h-9 bg-sidebar rounded-lg flex items-center justify-center text-sidebar-foreground shadow-lg"
         onClick={() => setMobileOpen(true)}
       >
         <Menu size={18} />
@@ -318,7 +333,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           <aside className="relative w-56 h-full bg-sidebar animate-slide-in-left flex flex-col">
             <button
               type="button"
-              className="absolute top-4 right-4 text-sidebar-foreground/60 hover:text-white z-10"
+              className="absolute top-4 right-4 text-sidebar-foreground/60 hover:text-sidebar-foreground z-10"
               onClick={() => setMobileOpen(false)}
             >
               <X size={18} />

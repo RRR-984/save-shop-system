@@ -61,14 +61,14 @@ export default {
           5: "oklch(var(--chart-5))",
         },
         sidebar: {
-          DEFAULT: "oklch(var(--sidebar))",
-          foreground: "oklch(var(--sidebar-foreground))",
-          primary: "oklch(var(--sidebar-primary))",
-          "primary-foreground": "oklch(var(--sidebar-primary-foreground))",
-          accent: "oklch(var(--sidebar-accent))",
-          "accent-foreground": "oklch(var(--sidebar-accent-foreground))",
-          border: "oklch(var(--sidebar-border))",
-          ring: "oklch(var(--sidebar-ring))",
+          DEFAULT: "oklch(var(--sidebar) / <alpha-value>)",
+          foreground: "oklch(var(--sidebar-foreground) / <alpha-value>)",
+          primary: "oklch(var(--sidebar-primary) / <alpha-value>)",
+          "primary-foreground": "oklch(var(--sidebar-primary-foreground) / <alpha-value>)",
+          accent: "oklch(var(--sidebar-accent) / <alpha-value>)",
+          "accent-foreground": "oklch(var(--sidebar-accent-foreground) / <alpha-value>)",
+          border: "oklch(var(--sidebar-border) / <alpha-value>)",
+          ring: "oklch(var(--sidebar-ring) / <alpha-value>)",
         },
         success: {
           DEFAULT: "oklch(var(--success))",
@@ -87,8 +87,9 @@ export default {
       },
       boxShadow: {
         xs: "0 1px 2px 0 rgba(0,0,0,0.04)",
-        card: "0 1px 4px 0 rgba(0,0,0,0.06), 0 1px 2px 0 rgba(0,0,0,0.04)",
-        "card-hover": "0 4px 12px 0 rgba(0,0,0,0.10), 0 2px 4px 0 rgba(0,0,0,0.06)",
+        card: "0 6px 16px 0 rgba(0,0,0,0.06)",
+        "card-hover": "0 12px 24px 0 rgba(0,0,0,0.10)",
+        soft: "0 6px 16px 0 rgba(0,0,0,0.06)",
       },
       keyframes: {
         "accordion-down": {
@@ -107,12 +108,22 @@ export default {
           from: { transform: "translateX(-100%)" },
           to: { transform: "translateX(0)" },
         },
+        "float": {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
+        "scale-tap": {
+          "0%": { transform: "scale(1)" },
+          "100%": { transform: "scale(0.96)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.4s ease-out forwards",
         "slide-in-left": "slide-in-left 0.3s ease-out",
+        "float": "float 3s ease-in-out infinite",
+        "scale-tap": "scale-tap 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
       },
     },
   },

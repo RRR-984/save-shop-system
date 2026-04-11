@@ -3,9 +3,12 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, CheckCircle, IndianRupee } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { VoiceInputButton } from "../components/VoiceInputButton";
+import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import type { Invoice, InvoiceItem, NavPage } from "../types/store";
 import { clearLeadingZeros } from "../utils/numberInput";
+import type { ParsedVoiceCommand } from "../utils/voiceParser";
 
 interface CashCounterPageProps {
   onNavigate: (page: NavPage) => void;
@@ -44,6 +47,7 @@ function fmtINR(n: number): string {
 
 export function CashCounterPage({ onNavigate }: CashCounterPageProps) {
   const { addAuditLog, createInvoice } = useStore();
+  const { t, language } = useLanguage();
 
   // Read pending cash payment from sessionStorage (set by BillingPage)
   const [pendingPayment, setPendingPayment] =
@@ -69,6 +73,15 @@ export function CashCounterPage({ onNavigate }: CashCounterPageProps) {
   const [billAmount, setBillAmount] = useState<string>("");
   const [confirmed, setConfirmed] = useState(false);
   const [returnAmt, setReturnAmt] = useState(0);
+
+  // Voice input handler for Cash Counter
+  const handleCashVoiceParsed = (parsed: ParsedVoiceCommand) => {
+    if (parsed.price !== null) {
+      toast.info(`${t("Detected payment amount")}: ₹${parsed.price}`);
+    } else {
+      toast.success(t("Voice input applied — please review and save"));
+    }
+  };
 
   const totalCash = useMemo(() => {
     return DENOMINATIONS.reduce((sum, d) => {
@@ -206,14 +219,31 @@ export function CashCounterPage({ onNavigate }: CashCounterPageProps) {
           </p>
         </div>
         {pendingPayment && (
-          <div className="ml-auto bg-primary/10 text-primary text-sm font-bold px-3 py-1.5 rounded-full">
-            {fmtINR(pendingPayment.billTotal)}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="bg-primary/10 text-primary text-sm font-bold px-3 py-1.5 rounded-full">
+              {fmtINR(pendingPayment.billTotal)}
+            </div>
+            <VoiceInputButton
+              compact
+              onParsed={handleCashVoiceParsed}
+              lang={language === "hi" ? "hi-IN" : "en-IN"}
+              data-ocid="cash_counter.voice_input.button"
+            />
+          </div>
+        )}
+        {!pendingPayment && (
+          <div className="ml-auto">
+            <VoiceInputButton
+              compact
+              onParsed={handleCashVoiceParsed}
+              lang={language === "hi" ? "hi-IN" : "en-IN"}
+              data-ocid="cash_counter.voice_input.button"
+            />
           </div>
         )}
       </div>
 
       <div className="flex flex-col gap-4 px-3 pt-4 max-w-lg mx-auto w-full">
-        {/* Denomination Input Table */}
         <div
           className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm"
           data-ocid="cash_counter.denominations.section"

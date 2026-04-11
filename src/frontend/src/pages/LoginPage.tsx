@@ -9,7 +9,6 @@ import {
   Phone,
   RefreshCw,
   ShieldCheck,
-  Store,
   Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -763,8 +762,19 @@ export function LoginPage() {
           transition={{ duration: 0.35 }}
           className="text-center mb-7"
         >
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary shadow-lg mb-3">
-            <Store className="w-7 h-7 text-primary-foreground" />
+          <div className="inline-flex items-center justify-center mb-3">
+            <img
+              src="/assets/diamond-logo.jpg"
+              alt="DIAMOND Logo"
+              style={{
+                height: "80px",
+                width: "auto",
+                borderRadius: "12px",
+                objectFit: "contain",
+                margin: "0 auto",
+                display: "block",
+              }}
+            />
           </div>
           <h1 className="text-2xl font-bold text-foreground">
             Save Shop System

@@ -1,9 +1,12 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useEffect, useRef, useState } from "react";
+import { PWAInstallModal } from "./components/PWAInstallModal";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import { StoreProvider, useStore } from "./context/StoreContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import { AdminPage } from "./pages/AdminPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { BillingPage } from "./pages/BillingPage";
@@ -11,11 +14,13 @@ import { CashCounterPage } from "./pages/CashCounterPage";
 import { CustomerOrdersPage } from "./pages/CustomerOrdersPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DiamondRewardsPage } from "./pages/DiamondRewardsPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { LowPriceAlertLogPage } from "./pages/LowPriceAlertLogPage";
 import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
+import { RankingsPage } from "./pages/RankingsPage";
 import { ReminderLogPage } from "./pages/ReminderLogPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ReturnsPage } from "./pages/ReturnsPage";
@@ -71,6 +76,8 @@ const PAGE_TITLES: Record<NavPage, string> = {
   "purchase-orders": "Purchase Orders",
   "customer-orders": "Customer Orders",
   "cash-counter": "Cash Counter",
+  "diamond-rewards": "💎 Diamond Rewards",
+  rankings: "🏆 Rankings",
 };
 
 function AppContent() {
@@ -82,27 +89,25 @@ function AppContent() {
   const { isLoading } = useStore();
   const [loadingTooLong, setLoadingTooLong] = useState(false);
   const pendingPageRef = useRef<NavPage | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (!isLoading) {
       setLoadingTooLong(false);
       return;
     }
-    const t = setTimeout(() => setLoadingTooLong(true), 5000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setLoadingTooLong(true), 5000);
+    return () => clearTimeout(timer);
   }, [isLoading]);
 
-  // Persist nav state to sessionStorage on every change
   useEffect(() => {
     writeNavState(currentPage, navHistory);
   }, [currentPage, navHistory]);
 
-  // Push current state to browser history for hardware back button support
   useEffect(() => {
     window.history.pushState({ page: currentPage }, "", window.location.href);
   }, [currentPage]);
 
-  // Handle browser hardware back button
   useEffect(() => {
     const onPopState = () => {
       if (navHistory.length > 0) {
@@ -111,7 +116,6 @@ function AppContent() {
         setNavHistory(history);
         doTransition(prev);
       } else {
-        // Push state back so we don't actually leave the app
         window.history.pushState(
           { page: currentPage },
           "",
@@ -126,7 +130,6 @@ function AppContent() {
   const doTransition = (nextPage: NavPage) => {
     setTransitioning(true);
     pendingPageRef.current = nextPage;
-    // Short fade-out, then swap page
     setTimeout(() => {
       setCurrentPage(pendingPageRef.current!);
       setTransitioning(false);
@@ -141,22 +144,25 @@ function AppContent() {
     doTransition(page);
   };
 
-  const handleGoBack = () => {
-    if (navHistory.length === 0) return;
-    const history = [...navHistory];
-    const prev = history.pop()!;
-    setNavHistory(history);
-    doTransition(prev);
+  const handleGoHome = () => {
+    if (currentPage === "dashboard") return;
+    setNavHistory([]);
+    doTransition("dashboard");
   };
-
-  const canGoBack = navHistory.length > 0;
 
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
         return <DashboardPage onNavigate={handleNavigate} />;
       case "inventory":
-        return <InventoryPage onNavigate={handleNavigate} />;
+        return (
+          <InventoryPage
+            onNavigate={handleNavigate}
+            selectedProductId={
+              pageParams.selectedProductId as string | undefined
+            }
+          />
+        );
       case "stock":
         return <StockPage />;
       case "billing":
@@ -199,6 +205,10 @@ function AppContent() {
         return <CustomerOrdersPage />;
       case "cash-counter":
         return <CashCounterPage onNavigate={handleNavigate} />;
+      case "diamond-rewards":
+        return <DiamondRewardsPage />;
+      case "rankings":
+        return <RankingsPage />;
       default:
         return <DashboardPage onNavigate={handleNavigate} />;
     }
@@ -238,14 +248,12 @@ function AppContent() {
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-auto">
-        {/* TopBar with back button */}
         <TopBar
           title={PAGE_TITLES[currentPage] ?? "Save Shop"}
-          goBack={handleGoBack}
-          canGoBack={canGoBack}
+          goHome={handleGoHome}
+          isHome={currentPage === "dashboard"}
         />
 
-        {/* Page content with fade transition */}
         <div
           className={transitioning ? "page-fade-out" : "page-fade-in"}
           style={{ flex: 1, display: "flex", flexDirection: "column" }}
@@ -268,20 +276,23 @@ function AppContent() {
         </footer>
       </main>
 
-      {/* Floating Action Button — New Sale */}
       {currentPage !== "billing" && (
         <button
           type="button"
           data-ocid="fab.new_sale.button"
           onClick={() => handleNavigate("billing")}
-          className="fixed bottom-6 right-5 z-40 flex items-center gap-2 px-5 py-3.5 rounded-full bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 active:scale-95 transition-all duration-150"
+          className="fixed bottom-6 right-5 z-40 flex items-center gap-2 px-5 py-3.5 rounded-full font-bold text-sm text-white shadow-lg hover:opacity-90 active:scale-95 transition-all duration-150"
+          style={{
+            background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+          }}
           aria-label="New Sale"
         >
-          🛒 <span>New Sale</span>
+          🛒 <span>{t("New Sale")}</span>
         </button>
       )}
 
       <Toaster position="bottom-right" richColors />
+      <PWAInstallModal />
     </div>
   );
 }
@@ -310,8 +321,12 @@ function AuthGate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

@@ -14,6 +14,7 @@ export const STORAGE_KEYS = {
   customerOrders: "saveshop_customerOrders",
   vendorRateHistory: "saveshop_vendorRateHistory",
   settings: "saveshop_settings", // combined settings backup
+  diamondRewards: "saveshop_diamond_rewards",
 } as const;
 
 export function saveData<T>(key: string, data: T): void {

@@ -1082,6 +1082,15 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Data Safety Info */}
+        <div className="flex items-center justify-center gap-2 py-4 px-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+          <Shield className="w-4 h-4 text-green-600 flex-shrink-0" />
+          <p className="text-xs text-green-700 dark:text-green-400 text-center">
+            🔒 Aapka data ICP cloud aur browser storage dono mein safe rehta hai
+            — kabhi delete nahi hoga
+          </p>
+        </div>
       </div>
     </div>
   );

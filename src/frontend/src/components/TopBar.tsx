@@ -7,27 +7,42 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Bell, CheckCircle, Search } from "lucide-react";
+import {
+  Bell,
+  CheckCircle,
+  Download,
+  Home,
+  Moon,
+  Search,
+  Sun,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
+import { useTheme } from "../context/ThemeContext";
+import usePWA from "../hooks/usePWA";
 
 interface TopBarProps {
   title: string;
   searchValue?: string;
   onSearchChange?: (v: string) => void;
-  canGoBack?: boolean;
-  goBack?: () => void;
+  goHome?: () => void;
+  isHome?: boolean;
 }
 
 export function TopBar({
   title,
   searchValue,
   onSearchChange,
-  canGoBack = false,
-  goBack,
+  goHome,
+  isHome = false,
 }: TopBarProps) {
-  const { getLowStockProducts, getAllCustomerLedgers } = useStore();
+  const { getLowStockProducts, getAllCustomerLedgers, diamondRewards } =
+    useStore();
   const { currentUser, session, currentShop } = useAuth();
+  const { isDarkMode, toggleTheme } = useTheme();
+  const { language, toggleLanguage } = useLanguage();
+  const { isInstallable, isInstalled, showInstallPrompt } = usePWA();
 
   const lowStockCount = getLowStockProducts().length;
   const dueCount = getAllCustomerLedgers().filter((l) => l.totalDue > 0).length;
@@ -35,6 +50,8 @@ export function TopBar({
   const isStaff = role === "staff";
 
   const totalNotifCount = isStaff ? lowStockCount : lowStockCount + dueCount;
+
+  const totalDiamonds = diamondRewards.reduce((s, r) => s + r.diamondCount, 0);
 
   // Compute dynamic initials from current user name or mobile
   const initials = (() => {
@@ -73,35 +90,48 @@ export function TopBar({
       className="bg-card border-b border-border px-3 md:px-5 py-2.5 flex items-center gap-2 sticky top-0 z-30 shadow-sm"
       data-ocid="topbar.header"
     >
-      {/* Back button OR mobile spacer */}
-      {canGoBack && goBack ? (
+      {/* Home button — visible on all pages except dashboard */}
+      {!isHome && goHome ? (
         <Button
           variant="ghost"
           size="sm"
-          onClick={goBack}
-          data-ocid="topbar.back_button"
+          onClick={goHome}
+          data-ocid="topbar.home_button"
           className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground px-2 h-8 -ml-1 flex-shrink-0"
-          aria-label="Go back"
+          aria-label="Go to Home"
         >
-          <span className="text-lg font-bold leading-none">←</span>
-          <span className="text-sm font-medium hidden sm:inline">Back</span>
+          <Home size={17} />
+          <span className="text-sm font-medium hidden sm:inline">Home</span>
         </Button>
       ) : (
         <div className="w-10 md:hidden flex-shrink-0" />
       )}
 
-      {/* LEFT: Shop Name (bold, prominent) */}
+      {/* LEFT: Logo + Shop Name (bold, prominent) */}
       <div className="flex-1 min-w-0">
-        <div className="flex flex-col leading-tight">
-          <span className="text-base font-bold text-foreground truncate">
-            {shopName}
-          </span>
-          {/* Page title shown on non-dashboard pages or desktop */}
-          {title !== shopName && (
-            <span className="text-[11px] text-muted-foreground truncate hidden sm:block">
-              {title}
+        <div className="flex items-center gap-2 leading-tight">
+          <img
+            src="/assets/diamond-logo.jpg"
+            alt="DIAMOND Logo"
+            style={{
+              height: "36px",
+              width: "auto",
+              borderRadius: "6px",
+              objectFit: "contain",
+              flexShrink: 0,
+            }}
+          />
+          <div className="flex flex-col leading-tight min-w-0">
+            <span className="text-base font-bold text-foreground truncate">
+              {shopName}
             </span>
-          )}
+            {/* Page title shown on non-dashboard pages or desktop */}
+            {title !== shopName && (
+              <span className="text-[11px] text-muted-foreground truncate hidden sm:block">
+                {title}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -124,8 +154,53 @@ export function TopBar({
         </div>
       )}
 
-      {/* RIGHT: Bell + Profile */}
+      {/* RIGHT: Language toggle + Theme toggle + Install + Bell + Diamond + Profile */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Language toggle: 🇮🇳 H / 🇬🇧 E */}
+        <button
+          type="button"
+          onClick={toggleLanguage}
+          data-ocid="topbar.language_toggle"
+          aria-label={
+            language === "hi" ? "Switch to English" : "Switch to Hindi"
+          }
+          title={language === "hi" ? "Switch to English" : "Switch to Hindi"}
+          className="relative h-8 px-2 rounded-lg bg-secondary flex items-center justify-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-xs font-bold border border-transparent hover:border-border"
+        >
+          <span className="text-sm leading-none">
+            {language === "hi" ? "🇮🇳" : "🇬🇧"}
+          </span>
+          <span className="leading-none">{language === "hi" ? "H" : "E"}</span>
+        </button>
+
+        {/* Dark / Light mode toggle */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          data-ocid="topbar.theme_toggle"
+          aria-label={
+            isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"
+          }
+          title={isDarkMode ? "Light Mode" : "Dark Mode"}
+          className="relative w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+
+        {/* Install App button — only when installable and not in standalone mode */}
+        {isInstallable && !isInstalled && (
+          <button
+            type="button"
+            onClick={showInstallPrompt}
+            data-ocid="topbar.install_app_button"
+            aria-label="Install App"
+            title="Install App"
+            className="relative w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Download size={15} />
+          </button>
+        )}
+
         {/* Notification Bell with popover */}
         <Popover>
           <PopoverTrigger asChild>
@@ -197,16 +272,28 @@ export function TopBar({
           </PopoverContent>
         </Popover>
 
-        {/* Profile: Avatar + name + role badge */}
+        {/* Profile: Avatar + name + role badge + diamond count */}
         <div
-          className="flex items-center gap-1.5 cursor-default"
+          className="flex items-center gap-1.5 cursor-default relative"
           data-ocid="topbar.profile"
         >
-          <Avatar className="w-8 h-8 flex-shrink-0">
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative">
+            <Avatar className="w-8 h-8 flex-shrink-0">
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            {/* Diamond badge on avatar */}
+            {totalDiamonds > 0 && (
+              <span
+                data-ocid="topbar.diamond_badge"
+                className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-violet-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 border-2 border-card shadow-sm"
+                title={`${totalDiamonds} Diamonds`}
+              >
+                💎
+              </span>
+            )}
+          </div>
           <div className="hidden sm:flex flex-col leading-tight">
             <span className="text-xs font-semibold text-foreground truncate max-w-[100px]">
               {displayName}

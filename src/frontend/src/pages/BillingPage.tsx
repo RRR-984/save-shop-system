@@ -40,11 +40,14 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { VoiceInputButton } from "../components/VoiceInputButton";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import type { Invoice, InvoiceItem } from "../types/store";
 import { ROLE_PERMISSIONS } from "../types/store";
 import { clearLeadingZeros } from "../utils/numberInput";
+import type { ParsedVoiceCommand } from "../utils/voiceParser";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -362,6 +365,7 @@ export function BillingPage({
     addAuditLog,
   } = useStore();
   const { currentUser } = useAuth();
+  const { t, language } = useLanguage();
   const userRole = currentUser?.role ?? "staff";
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
 
@@ -395,6 +399,33 @@ export function BillingPage({
   const [pendingInvoiceItems, setPendingInvoiceItems] = useState<InvoiceItem[]>(
     [],
   );
+
+  // Voice input handler for Billing screen
+  const handleBillingVoiceParsed = (parsed: ParsedVoiceCommand) => {
+    let applied = false;
+    if (parsed.customerName !== null) {
+      setCustomerName(parsed.customerName);
+      applied = true;
+    }
+    if (parsed.itemName !== null) {
+      const match = products.find(
+        (p) =>
+          p.name.trim().toLowerCase() === parsed.itemName!.trim().toLowerCase(),
+      );
+      if (match) {
+        setSelectedProductId(match.id);
+        setSelectedBatchId("");
+        applied = true;
+      }
+    }
+    if (parsed.quantity !== null) {
+      setAddQty(String(parsed.quantity));
+      applied = true;
+    }
+    if (applied) {
+      toast.success(t("Voice input applied — please review and save"));
+    }
+  };
 
   const total = cart.reduce(
     (s, item) => s + item.quantity * item.sellingRate,
@@ -1006,7 +1037,7 @@ export function BillingPage({
     <div className="flex flex-col gap-6">
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
         <div>
-          <h1 className="text-xl font-bold">Point of Sale</h1>
+          <h1 className="text-xl font-bold">{t("Point of Sale")}</h1>
           <p className="text-muted-foreground text-sm">
             Create invoices with automatic FIFO stock deduction
           </p>
@@ -1067,15 +1098,17 @@ export function BillingPage({
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Cart / Item Entry */}
-          <div className="lg:col-span-2 flex flex-col gap-4">
-            {/* Customer Info */}
-            <Card className="shadow-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Customer Details</CardTitle>
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            {/* ── Customer Info ─────────────────────────────────────────── */}
+            <Card className="shadow-card border-2 border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/20">
+              <CardHeader className="pb-2 border-b border-blue-200 dark:border-blue-900">
+                <CardTitle className="text-base flex items-center gap-2 text-blue-800 dark:text-blue-300">
+                  👤 {t("Customer Details")}
+                </CardTitle>
               </CardHeader>
-              <CardContent className="p-4 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <CardContent className="p-4 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-sm">
                     Customer Name
@@ -1125,42 +1158,55 @@ export function BillingPage({
               </CardContent>
             </Card>
 
-            {/* Add Items */}
-            <Card className="shadow-card border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Add Items</CardTitle>
+            {/* ── Visual divider between Customer and Items ──────────────── */}
+            <div className="flex items-center gap-3 -my-2">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground font-medium px-2 py-0.5 rounded-full bg-muted border border-border whitespace-nowrap">
+                🛒 Items
+              </span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            {/* ── Add Items ──────────────────────────────────────────────── */}
+            <Card className="shadow-card border-2 border-green-200 dark:border-green-900 bg-green-50/20 dark:bg-green-950/10">
+              <CardHeader className="pb-3 border-b border-green-200 dark:border-green-900">
+                <CardTitle className="text-base flex items-center gap-2 text-green-800 dark:text-green-300">
+                  🧺 {t("Add Items")}
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex gap-2">
-                  <Select
-                    value={selectedProductId}
-                    onValueChange={(v) => {
-                      setSelectedProductId(v);
-                      setSelectedBatchId("");
-                    }}
-                  >
-                    <SelectTrigger
-                      data-ocid="billing.product.select"
-                      className="flex-1"
+              <CardContent className="space-y-3 pt-3">
+                <div className="flex gap-2 items-center">
+                  <div className="flex-1 min-w-0 flex gap-2 items-center">
+                    <Select
+                      value={selectedProductId}
+                      onValueChange={(v) => {
+                        setSelectedProductId(v);
+                        setSelectedBatchId("");
+                      }}
                     >
-                      <SelectValue placeholder="Search & select product..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map((p) => {
-                        const stock = getProductStock(p.id);
-                        const isZero = stock <= 0;
-                        return (
-                          <SelectItem key={p.id} value={p.id}>
-                            <span className={isZero ? "text-orange-500" : ""}>
-                              {isZero ? "⚠️ " : ""}
-                              {p.name} — Stock: {stock} {p.unit} @{" "}
-                              {fmt(p.sellingPrice)}
-                            </span>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                      <SelectTrigger
+                        data-ocid="billing.product.select"
+                        className="flex-1"
+                      >
+                        <SelectValue placeholder="Search & select product..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((p) => {
+                          const stock = getProductStock(p.id);
+                          const isZero = stock <= 0;
+                          return (
+                            <SelectItem key={p.id} value={p.id}>
+                              <span className={isZero ? "text-orange-500" : ""}>
+                                {isZero ? "⚠️ " : ""}
+                                {p.name} — Stock: {stock} {p.unit} @{" "}
+                                {fmt(p.sellingPrice)}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Input
                     data-ocid="billing.qty.input"
                     type="number"
@@ -1173,6 +1219,12 @@ export function BillingPage({
                       if (e.target.value === "0") e.target.select();
                     }}
                     className="w-20"
+                  />
+                  <VoiceInputButton
+                    compact
+                    onParsed={handleBillingVoiceParsed}
+                    lang={language === "hi" ? "hi-IN" : "en-IN"}
+                    data-ocid="billing.voice_input.button"
                   />
                   <Button
                     data-ocid="billing.add_item.button"
@@ -1518,9 +1570,11 @@ export function BillingPage({
 
           {/* Payment Summary */}
           <div className="flex flex-col gap-4">
-            <Card className="shadow-card border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Payment</CardTitle>
+            <Card className="shadow-card border-2 border-amber-200 dark:border-amber-900">
+              <CardHeader className="pb-3 border-b border-amber-200 dark:border-amber-900">
+                <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                  💰 {t("Payment")}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -1544,7 +1598,7 @@ export function BillingPage({
                 {/* Payment Mode Selector */}
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium text-foreground">
-                    Payment Mode
+                    {t("Payment Mode")}
                   </Label>
                   <div className="grid grid-cols-2 gap-2">
                     {(["cash", "upi", "online", "credit"] as PaymentMode[]).map(
@@ -1776,7 +1830,7 @@ export function BillingPage({
                   <Receipt size={16} className="mr-2" />
                   {paymentMode === "cash" && onNavigate
                     ? "💰 Cash Counter se Payment"
-                    : "Generate Invoice"}
+                    : t("Generate Invoice")}
                 </Button>
               </CardContent>
             </Card>

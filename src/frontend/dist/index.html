@@ -10,10 +10,45 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <script type="module" crossorigin src="/assets/index-CEwUFgHZ.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-cRtmYNOp.css">
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#7c3aed" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FIFO Bridge" />
+    <link rel="apple-touch-icon" href="/assets/diamond-logo.jpg" />
+    <script type="module" crossorigin src="/assets/index-Cel7gG3X.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B_c9Fd1v.css">
   </head>
   <body>
+    <!-- Splash Screen -->
+    <div
+      id="splash-screen"
+      style="
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #1a0533 0%, #3b0764 50%, #4c1d95 100%);
+        gap: 20px;
+      "
+    >
+      <img
+        src="/assets/diamond-logo.jpg"
+        alt="FIFO Bridge"
+        style="width: 120px; height: 120px; object-fit: contain; border-radius: 20px; box-shadow: 0 0 40px rgba(124,58,237,0.5);"
+      />
+      <p style="color: #e9d5ff; font-size: 18px; font-weight: 700; font-family: sans-serif; letter-spacing: 0.5px;">
+        FIFO Bridge
+      </p>
+      <div style="width: 36px; height: 36px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #a855f7; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    </div>
+
     <div id="root"></div>
   </body>
 </html>

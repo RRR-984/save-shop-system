@@ -1,31 +1,29 @@
 {
-  "overview": "Save Shop System is a comprehensive mobile-first shop management app for small business owners. It features batch-based FIFO inventory, smart billing with profit tracking, customer credit ledger, multi-user roles (Owner/Manager/Staff), vendor management, purchase orders with auto-reorder, customer order management, staff performance analytics, returns tracking, and dead stock alerts — all backed by ICP cloud storage with real-time multi-device sync.",
+  "overview": "Save Shop System is a premium SaaS shop management platform for Indian small business owners featuring advanced analytics, rankings leaderboard, Diamond Rewards gamification, in-app advertisement system, batch FIFO inventory, multi-role access, and bilingual Hindi/English support.",
   "features": [
-    "Vendor Master with purchase history and ledger tracking",
-    "Purchase orders with auto-fill reorder and WhatsApp/Email dispatch",
-    "Customer order management (Pending/Accepted/Rejected) with sale conversion",
-    "Batch-based FIFO inventory with manual batch selection",
-    "Smart billing with min price lock, staff bonus, and discount control",
-    "Multi-user roles (Owner/Manager/Staff) with PIN login",
-    "Customer credit ledger with payment tracking and WhatsApp reminders",
-    "Staff performance and credit risk analytics",
-    "Returns system with loss tracking and reason logging",
-    "Dead stock alerts with admin-configurable thresholds",
-    "Dashboard with 7-section priority layout and real-time updates",
-    "ICP cloud backend with per-shop data isolation and multi-device sync"
+    "Top Performance Master Card with #1 badges for product, customer, vendor, diamond earner",
+    "Rankings leaderboard — Top 10 lists for products, customers, vendors, staff with medal badges",
+    "Enhanced Diamond Rewards — 4 tiers (Bronze/Silver/Gold/Diamond), 1 diamond per ₹100 sale, progress bar",
+    "Advertisement system — banner carousel, card ads, watch-to-earn rewards, vendor promotions",
+    "Smart Insights — most selling, high profit, low stock, out of stock, low price alerts",
+    "Premium Amazon/Zerodha style compact UI with gold ranking, green profit, red alerts, blue analytics",
+    "Batch FIFO inventory management with advanced costing",
+    "Multi-user roles (Owner/Manager/Staff) with granular permissions",
+    "Hindi/English bilingual toggle with instant switch",
+    "Dark/Light mode with premium color system"
   ],
-  "category": "productivity",
+  "category": "business",
   "tags": [
     "shop-management",
+    "business-dashboard",
+    "analytics",
+    "gamification",
+    "diamond-rewards",
+    "rankings",
+    "advertisements",
     "inventory",
-    "billing",
-    "vendor-management",
-    "purchase-orders",
-    "icp",
-    "mobile-first",
-    "multi-user",
-    "accounting",
-    "business-automation"
+    "india",
+    "saas"
   ],
-  "last_updated": "2026-04-08T15:00:13.336Z"
+  "last_updated": "2026-04-10T18:38:15.702Z"
 }

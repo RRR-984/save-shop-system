@@ -17,6 +17,7 @@ import type {
   Category,
   Customer,
   CustomerOrder,
+  DiamondReward,
   DraftSnapshot,
   FeatureFlags,
   Invoice,
@@ -286,6 +287,11 @@ interface StoreContextValue {
   ) => Promise<void>;
   getLastVendorRate: (vendorId: string, productId: string) => number | null;
   getVendorRateHistoryForVendor: (vendorId: string) => VendorRateHistory[];
+
+  // Diamond Reward System
+  diamondRewards: DiamondReward[];
+  awardDiamond: (productId: string, productName: string) => void;
+  getTotalDiamonds: () => number;
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -362,6 +368,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     VendorRateHistory[]
   >([]);
   const vendorRateHistoryRef = useRef<VendorRateHistory[]>([]);
+
+  // ── Diamond Reward state ──────────────────────────────────────────────────
+  const [diamondRewards, setDiamondRewards] = useState<DiamondReward[]>(() =>
+    loadData<DiamondReward[]>(STORAGE_KEYS.diamondRewards, []),
+  );
+  const diamondRewardsRef = useRef<DiamondReward[]>(
+    loadData<DiamondReward[]>(STORAGE_KEYS.diamondRewards, []),
+  );
+
+  // ── Transaction counter for diamond rewards (1 diamond per 10 transactions) ──
+  // Key is per-shop so different shops don't share a counter
+  const txCounterRef = useRef<number>(
+    loadData<number>(
+      `transactionCounter_${localStorage.getItem("last_shop_id") ?? "shop-default"}`,
+      0,
+    ),
+  );
 
   // ── Shop Settings (localStorage per shop) ──────────────────────────────────────────────
   const [shopSettings, setShopSettings] = useState<ShopSettings>(() => {
@@ -492,6 +515,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [invoices]);
   useEffect(() => {
     shopIdRef.current = shopId;
+    // Reload transaction counter for the new shopId
+    txCounterRef.current = loadData<number>(`transactionCounter_${shopId}`, 0);
   }, [shopId]);
 
   // ── Load all data from ICP backend when shopId & actor are ready ────────────────────────────
@@ -854,7 +879,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       return updated;
     });
-    toast.success("Data saved");
+    toast.success("Data save ho gaya ✓", { duration: 2500 });
     return id;
   }, []);
 
@@ -883,7 +908,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.products, updated);
       return updated;
     });
-    toast.success("Data saved");
+    toast.success("Data save ho gaya ✓", { duration: 2500 });
   }, []);
 
   const deleteProduct = useCallback((id: string) => {
@@ -911,7 +936,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.products, updated);
       return updated;
     });
-    toast.success("Data saved");
+    toast.success("Data save ho gaya ✓", { duration: 2500 });
   }, []);
 
   // ── Stock Helpers ────────────────────────────────────────────────────────────────────────────
@@ -1081,7 +1106,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return updated;
       });
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
     },
     [],
   );
@@ -1159,7 +1184,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
-    toast.success("Data saved");
+    toast.success("Data save ho gaya ✓", { duration: 2500 });
   }, []);
 
   const updateCustomer = useCallback((id: string, c: Partial<Customer>) => {
@@ -1172,7 +1197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
-    toast.success("Data saved");
+    toast.success("Data save ho gaya ✓", { duration: 2500 });
   }, []);
 
   const deleteCustomer = useCallback((id: string) => {
@@ -1185,7 +1210,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
-    toast.success("Data saved");
+    toast.success("Data save ho gaya ✓", { duration: 2500 });
   }, []);
 
   // ── Invoice ────────────────────────────────────────────────────────────────────────────────
@@ -1342,11 +1367,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       saveData(STORAGE_KEYS.sales, updatedInvoices);
       setInvoices(updatedInvoices);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
+
+      // ── Diamond Reward: 1 diamond per 10 completed transactions ──────────────
+      // Increment per-shop transaction counter and award 1 diamond every 10th tx
+      const txCounterKey = `transactionCounter_${shopIdRef.current}`;
+      const newTxCount = txCounterRef.current + 1;
+      txCounterRef.current = newTxCount;
+      saveData(txCounterKey, newTxCount);
+
+      const diamondsEarned =
+        Math.floor(newTxCount / 10) - Math.floor((newTxCount - 1) / 10);
+
+      if (diamondsEarned > 0) {
+        const userName = data.soldByName || currentUser?.name || "Owner";
+        const userId =
+          data.soldByUserId || currentUser?.id || shopIdRef.current;
+
+        const reward: DiamondReward = {
+          id: generateId(),
+          shopId: shopIdRef.current,
+          userId,
+          userName,
+          productId: "sale",
+          productName: `${newTxCount} transactions completed`,
+          cycleCompletedAt: new Date().toISOString(),
+          diamondCount: diamondsEarned,
+        };
+        const updatedRewards = [...diamondRewardsRef.current, reward];
+        diamondRewardsRef.current = updatedRewards;
+        setDiamondRewards(updatedRewards);
+        saveData(STORAGE_KEYS.diamondRewards, updatedRewards);
+
+        const lang = localStorage.getItem("saveshop_language") ?? "en";
+        toast.success(
+          lang === "hi"
+            ? `🎉 Diamond mila! ${newTxCount} transactions complete!`
+            : `🎉 Diamond earned! ${newTxCount} transactions complete!`,
+          { duration: 4000 },
+        );
+
+        // Try to sync to backend if method exists
+        try {
+          (actorRef.current as any)?.saveDiamondRewards?.(
+            shopIdRef.current,
+            JSON.stringify(updatedRewards),
+          );
+        } catch (_) {
+          /* method may not exist yet */
+        }
+      }
 
       return { invoice, mergedExisting };
     },
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentUser],
   );
 
   // ── Payment Tracking ────────────────────────────────────────────────────────────────────────
@@ -1449,7 +1524,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return updated;
         });
       }
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
     },
     [],
   );
@@ -1810,7 +1885,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updatedReturns),
       );
       saveData(STORAGE_KEYS.returns, updatedReturns);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
 
       return true;
     },
@@ -2090,7 +2165,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.vendors, updated);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
     },
     [],
   );
@@ -2107,7 +2182,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.vendors, updated);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
     },
     [],
   );
@@ -2121,7 +2196,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       JSON.stringify(updated),
     );
     saveData(STORAGE_KEYS.vendors, updated);
-    toast.success("Data saved");
+    toast.success("Data save ho gaya ✓", { duration: 2500 });
   }, []);
 
   // ── Purchase Order CRUD ───────────────────────────────────────────────────────
@@ -2143,7 +2218,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.purchaseOrders, updated);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
     },
     [],
   );
@@ -2160,7 +2235,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.purchaseOrders, updated);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
     },
     [],
   );
@@ -2230,7 +2305,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.customerOrders, updated);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
     },
     [],
   );
@@ -2249,7 +2324,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.customerOrders, updated);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
       // Convert to invoice
       const customer = customers.find((c) => c.id === co.customerId);
       const seller = currentUserRef.current;
@@ -2296,7 +2371,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.customerOrders, updated);
-      toast.success("Data saved");
+      toast.success("Data save ho gaya ✓", { duration: 2500 });
     },
     [],
   );
@@ -2552,6 +2627,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addVendorRateHistory,
     getLastVendorRate,
     getVendorRateHistoryForVendor,
+    diamondRewards,
+    awardDiamond: (productId: string, productName: string) => {
+      const reward: DiamondReward = {
+        id: generateId(),
+        shopId: shopIdRef.current,
+        userId: currentUser?.id ?? shopIdRef.current,
+        userName: currentUser?.name ?? "Owner",
+        productId,
+        productName,
+        cycleCompletedAt: new Date().toISOString(),
+        diamondCount: 1,
+      };
+      const updated = [...diamondRewardsRef.current, reward];
+      diamondRewardsRef.current = updated;
+      setDiamondRewards(updated);
+      saveData(STORAGE_KEYS.diamondRewards, updated);
+    },
+    getTotalDiamonds: () =>
+      diamondRewardsRef.current.reduce((s, r) => s + r.diamondCount, 0),
   };
 
   return (

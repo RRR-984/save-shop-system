@@ -11,11 +11,15 @@ import {
   CheckCircle,
   Clock,
   CreditCard,
+  Eye,
+  EyeOff,
+  Filter,
   MessageCircle,
   Package,
   PackageX,
   Plus,
   Receipt,
+  Search,
   ShieldAlert,
   ShoppingCart,
   Skull,
@@ -28,10 +32,14 @@ import {
   Wallet,
   Zap,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AdCardSponsor } from "../components/AdCardSponsor";
 import { AdminSummaryCard } from "../components/AdminSummaryCard";
+import { DiamondRewardCard } from "../components/DiamondRewardCard";
+import { RewardAdButton } from "../components/RewardAdButton";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import type { AppUser, NavPage, UserRole } from "../types/store";
 
@@ -70,7 +78,7 @@ function RoleBadgeInline({ userRole }: { userRole: UserRole }) {
 
 // ─── Props & State ─────────────────────────────────────────────────────────────
 interface DashboardPageProps {
-  onNavigate: (page: NavPage) => void;
+  onNavigate: (page: NavPage, params?: Record<string, unknown>) => void;
 }
 
 type PayMode = "cash" | "upi" | "online";
@@ -82,7 +90,7 @@ interface MarkPaidState {
   success: boolean;
 }
 
-// ─── Smart Summary Card ───────────────────────────────────────────────────────
+// ─── Premium Summary Card ─────────────────────────────────────────────────────
 function SmartSummaryCard({
   icon,
   label,
@@ -103,58 +111,54 @@ function SmartSummaryCard({
   hidden?: boolean;
 }) {
   if (hidden) {
-    // Placeholder to maintain grid layout
-    return <div className="flex-1 min-w-0 rounded-xl bg-transparent" />;
+    return <div className="flex-1 min-w-0 rounded-2xl bg-transparent" />;
   }
 
   const schemes = {
     blue: {
-      bg: "bg-card",
-      border: "border-border",
-      icon: "text-blue-500",
-      label: "text-muted-foreground",
+      iconBg: "bg-blue-50 dark:bg-blue-950/40",
+      iconColor: "text-blue-500",
+      accent: "border-t-2 border-t-blue-400",
       value: "text-foreground",
-      iconBg: "bg-blue-100",
+      badge: "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400",
     },
     green: {
-      bg: "bg-card",
-      border: "border-border",
-      icon: "text-green-500",
-      label: "text-muted-foreground",
+      iconBg: "bg-green-50 dark:bg-green-950/40",
+      iconColor: "text-green-500",
+      accent: "border-t-2 border-t-green-400",
       value: "text-foreground",
-      iconBg: "bg-green-100",
+      badge:
+        "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400",
     },
     red: {
-      bg: "bg-card",
-      border: "border-border",
-      icon: "text-red-500",
-      label: "text-muted-foreground",
-      value: "text-red-600",
-      iconBg: "bg-red-100",
+      iconBg: "bg-red-50 dark:bg-red-950/40",
+      iconColor: "text-red-500",
+      accent: "border-t-2 border-t-red-400",
+      value: "text-red-600 dark:text-red-400",
+      badge: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400",
     },
     amber: {
-      bg: "bg-card",
-      border: "border-border",
-      icon: "text-amber-500",
-      label: "text-muted-foreground",
+      iconBg: "bg-amber-50 dark:bg-amber-950/40",
+      iconColor: "text-amber-500",
+      accent: "border-t-2 border-t-amber-400",
       value: "text-foreground",
-      iconBg: "bg-amber-100",
+      badge:
+        "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
     },
     purple: {
-      bg: "bg-card",
-      border: "border-border",
-      icon: "text-primary",
-      label: "text-muted-foreground",
+      iconBg: "bg-primary/8 dark:bg-primary/10",
+      iconColor: "text-primary",
+      accent: "border-t-2 border-t-primary",
       value: "text-foreground",
-      iconBg: "bg-primary/10",
+      badge: "bg-primary/8 text-primary",
     },
     emerald: {
-      bg: "bg-card",
-      border: "border-border",
-      icon: "text-green-600",
-      label: "text-muted-foreground",
-      value: "text-green-600",
-      iconBg: "bg-green-100",
+      iconBg: "bg-emerald-50 dark:bg-emerald-950/40",
+      iconColor: "text-emerald-600",
+      accent: "border-t-2 border-t-emerald-500",
+      value: "text-emerald-600 dark:text-emerald-400",
+      badge:
+        "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
     },
   }[colorScheme];
 
@@ -163,26 +167,24 @@ function SmartSummaryCard({
       type="button"
       data-ocid={ocid}
       onClick={onClick}
-      className={`flex-1 min-w-0 flex flex-col gap-2 rounded-xl p-3 border shadow-card ${schemes.bg} ${schemes.border} active:scale-95 transition-transform duration-150 text-left`}
+      className={`flex-1 min-w-0 flex flex-col gap-2.5 rounded-2xl p-3.5 bg-card border border-border shadow-card active:scale-[0.96] transition-all duration-150 ease-out text-left ${schemes.accent} overflow-hidden`}
     >
       <div
-        className={`w-8 h-8 rounded-lg flex items-center justify-center ${schemes.iconBg} flex-shrink-0`}
+        className={`w-9 h-9 rounded-xl flex items-center justify-center ${schemes.iconBg} flex-shrink-0`}
       >
-        <span className={schemes.icon}>{icon}</span>
+        <span className={schemes.iconColor}>{icon}</span>
       </div>
       <div className="min-w-0">
-        <div
-          className={`text-[10px] font-semibold uppercase tracking-wide ${schemes.label} leading-none mb-1`}
-        >
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-none mb-1.5">
           {label}
         </div>
         <div
-          className={`text-lg font-extrabold ${schemes.value} leading-none truncate`}
+          className={`text-[18px] font-extrabold ${schemes.value} leading-none truncate`}
         >
           {value}
         </div>
         {sub && (
-          <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+          <div className="text-[10px] text-muted-foreground mt-1 truncate">
             {sub}
           </div>
         )}
@@ -191,46 +193,74 @@ function SmartSummaryCard({
   );
 }
 
-// ─── Quick Action Button ──────────────────────────────────────────────────────
+// ─── Pastel Quick Action Card ─────────────────────────────────────────────────
+type PastelColor = "purple" | "orange" | "yellow" | "blue" | "green";
+
 function QuickActionBtn({
-  emoji,
+  icon,
   label,
   onClick,
-  colorScheme,
+  pastelColor,
   ocid,
   badge,
 }: {
-  emoji: string;
+  icon: React.ReactNode;
   label: string;
   onClick: () => void;
-  colorScheme: "blue" | "green" | "orange" | "teal";
+  pastelColor: PastelColor;
   ocid?: string;
   badge?: number;
 }) {
-  const schemes = {
-    blue: "bg-blue-600 hover:bg-blue-700 text-white",
-    green: "bg-green-600 hover:bg-green-700 text-white",
-    orange: "bg-orange-500 hover:bg-orange-600 text-white",
-    teal: "bg-teal-600 hover:bg-teal-700 text-white",
-  }[colorScheme];
+  const pastelConfig: Record<
+    PastelColor,
+    { bg: string; iconColor: string; border: string }
+  > = {
+    purple: {
+      bg: "bg-pastel-purple",
+      iconColor: "text-violet-600 dark:text-violet-400",
+      border: "border-violet-200 dark:border-violet-800/50",
+    },
+    orange: {
+      bg: "bg-pastel-orange",
+      iconColor: "text-orange-600 dark:text-orange-400",
+      border: "border-orange-200 dark:border-orange-800/50",
+    },
+    yellow: {
+      bg: "bg-pastel-yellow",
+      iconColor: "text-amber-600 dark:text-amber-400",
+      border: "border-amber-200 dark:border-amber-800/50",
+    },
+    blue: {
+      bg: "bg-pastel-blue",
+      iconColor: "text-blue-600 dark:text-blue-400",
+      border: "border-blue-200 dark:border-blue-800/50",
+    },
+    green: {
+      bg: "bg-pastel-green",
+      iconColor: "text-green-700 dark:text-green-400",
+      border: "border-green-200 dark:border-green-800/50",
+    },
+  };
+
+  const cfg = pastelConfig[pastelColor];
 
   return (
-    <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+    <div className="flex flex-col items-center gap-2 flex-shrink-0">
       <button
         type="button"
         data-ocid={ocid}
         onClick={onClick}
-        className={`relative w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm active:scale-95 transition-transform duration-150 ${schemes}`}
         aria-label={label}
+        className={`relative w-[72px] h-[72px] rounded-[18px] flex items-center justify-center shadow-card border ${cfg.bg} ${cfg.border} active:scale-[0.93] transition-all duration-150 ease-out`}
       >
-        <span className="text-2xl leading-none">{emoji}</span>
+        <span className={cfg.iconColor}>{icon}</span>
         {badge !== undefined && badge > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-1 border-2 border-card">
+          <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center px-1 border-2 border-card">
             {badge}
           </span>
         )}
       </button>
-      <span className="text-[11px] font-semibold text-foreground text-center leading-tight max-w-[60px]">
+      <span className="text-[11px] font-semibold text-foreground text-center leading-tight max-w-[72px]">
         {label}
       </span>
     </div>
@@ -271,7 +301,7 @@ function ProductCard({
       type="button"
       data-ocid={ocid}
       onClick={onClick}
-      className={`flex flex-col gap-2 rounded-xl p-3 border ${cardBg} active:scale-[0.97] transition-transform duration-150 text-left w-full`}
+      className={`flex flex-col gap-2 rounded-2xl p-3 border ${cardBg} active:scale-[0.96] transition-all duration-150 ease-out text-left w-full`}
     >
       <div className="flex items-start justify-between gap-1">
         <p className="text-sm font-bold text-foreground leading-tight line-clamp-2 flex-1 min-w-0">
@@ -279,7 +309,7 @@ function ProductCard({
         </p>
         {showProfit && profitPct !== null && (
           <span
-            className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+            className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-lg ${
               isProfit ? "bg-green-500 text-white" : "bg-red-500 text-white"
             }`}
           >
@@ -324,6 +354,112 @@ function ProductCard({
   );
 }
 
+// ─── Section Header ───────────────────────────────────────────────────────────
+function SectionHeader({
+  children,
+  right,
+}: {
+  children: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between px-0.5 mb-2.5">
+      <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+        {children}
+      </span>
+      {right}
+    </div>
+  );
+}
+
+// ─── Smart Filter Bar ─────────────────────────────────────────────────────────
+type FilterKey =
+  | "all"
+  | "lowStock"
+  | "deadStock"
+  | "paymentPending"
+  | "outOfStock"
+  | "expiryAlert";
+
+interface FilterChip {
+  key: FilterKey;
+  emoji: string;
+  labelEn: string;
+  labelHi: string;
+  count: number;
+  color: {
+    active: string;
+    activeBg: string;
+    inactiveBg: string;
+    inactiveBorder: string;
+    badge: string;
+  };
+  show: boolean;
+}
+
+function SmartFilterBar({
+  chips,
+  active,
+  onSelect,
+  language,
+}: {
+  chips: FilterChip[];
+  active: FilterKey;
+  onSelect: (key: FilterKey) => void;
+  language: "en" | "hi";
+}) {
+  const visibleChips = chips.filter((c) => c.show);
+  return (
+    <div data-ocid="dashboard.smart_filter.section">
+      <div className="flex items-center justify-between px-0.5 mb-2">
+        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+          {language === "hi" ? "त्वरित फ़िल्टर" : "Quick Filter"}
+        </span>
+      </div>
+      <div
+        className="flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5"
+        style={
+          {
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+          } as React.CSSProperties
+        }
+      >
+        {visibleChips.map((chip) => {
+          const isActive = active === chip.key;
+          const label = language === "hi" ? chip.labelHi : chip.labelEn;
+          return (
+            <button
+              key={chip.key}
+              type="button"
+              data-ocid={`dashboard.filter.${chip.key}`}
+              aria-pressed={isActive}
+              onClick={() => onSelect(chip.key)}
+              className={`flex-shrink-0 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold border transition-all duration-200 active:scale-95 min-h-[36px] ${
+                isActive
+                  ? `${chip.color.activeBg} ${chip.color.active} border-transparent shadow-sm`
+                  : `${chip.color.inactiveBg} text-foreground ${chip.color.inactiveBorder}`
+              }`}
+            >
+              <span className="text-base leading-none">{chip.emoji}</span>
+              <span className="whitespace-nowrap text-[13px]">{label}</span>
+              {chip.count > 0 && (
+                <span
+                  className={`ml-0.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1 ${
+                    isActive ? "bg-white/30 text-inherit" : chip.color.badge
+                  }`}
+                >
+                  {chip.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const {
@@ -349,9 +485,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     rejectReminderRequest,
     purchaseOrders,
     customerOrders,
+    vendors,
+    diamondRewards,
+    awardDiamond,
   } = useStore();
 
   const { currentShop, session, currentUser } = useAuth();
+  const { t } = useLanguage();
+  const { language } = useLanguage();
 
   const role = currentUser?.role ?? "staff";
   const isOwner = role === "owner";
@@ -361,9 +502,29 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     "all" | "highProfit" | "lowStock" | "fastSelling"
   >("all");
 
+  const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Section refs for scroll-to navigation
+  const refLowStock = useRef<HTMLDivElement>(null);
+  const refDeadStock = useRef<HTMLDivElement>(null);
+  const refPaymentPending = useRef<HTMLDivElement>(null);
+  const refOutOfStock = useRef<HTMLDivElement>(null);
+  const refExpiryAlert = useRef<HTMLDivElement>(null);
+
   const [markPaidOpen, setMarkPaidOpen] = useState<
     Record<string, MarkPaidState>
   >({});
+
+  // Amounts visibility (synced with AdminSummaryCard via localStorage)
+  // Default: hidden — user must explicitly tap eye to reveal amounts
+  const [amountsVisible, setAmountsVisible] = useState<boolean>(
+    () => localStorage.getItem("amountsVisible") === "true",
+  );
+  useEffect(() => {
+    localStorage.setItem("amountsVisible", amountsVisible ? "true" : "false");
+  }, [amountsVisible]);
+  const showAmt = (value: string) => (amountsVisible ? value : "₹••••");
 
   // ── Date constants ────────────────────────────────────────────────────────
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -516,7 +677,78 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     [lowPriceAlertLogs, todayStr],
   );
 
-  // ── Inventory Health ────────────────────────────────────────────────────────
+  // ── Top Performance data ────────────────────────────────────────────────────
+  const topPerformanceData = useMemo(() => {
+    // Top product by total revenue
+    const revenueMap = new Map<string, { name: string; revenue: number }>();
+    for (const inv of invoices) {
+      for (const item of inv.items) {
+        const existing = revenueMap.get(item.productId);
+        const revenue = item.quantity * item.sellingRate;
+        if (existing) {
+          existing.revenue += revenue;
+        } else {
+          revenueMap.set(item.productId, {
+            name: item.productName ?? item.productId,
+            revenue,
+          });
+        }
+      }
+    }
+    const topProduct =
+      [...revenueMap.values()].sort((a, b) => b.revenue - a.revenue)[0] ?? null;
+
+    // Top customer by total purchases
+    const customerMap = new Map<string, { name: string; total: number }>();
+    for (const inv of invoices) {
+      if (!inv.customerName) continue;
+      const key = inv.customerName;
+      const existing = customerMap.get(key);
+      if (existing) {
+        existing.total += inv.totalAmount;
+      } else {
+        customerMap.set(key, {
+          name: inv.customerName,
+          total: inv.totalAmount,
+        });
+      }
+    }
+    const topCustomer =
+      [...customerMap.values()].sort((a, b) => b.total - a.total)[0] ?? null;
+
+    // Top vendor by purchase order count
+    const vendorOrderMap = new Map<string, { name: string; count: number }>();
+    for (const po of purchaseOrders) {
+      const vendorId = po.vendorId ?? "";
+      const vendor = vendors.find((v) => v.id === vendorId);
+      const vName = vendor?.name ?? vendorId;
+      if (!vName) continue;
+      const existing = vendorOrderMap.get(vendorId || vName);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        vendorOrderMap.set(vendorId || vName, { name: vName, count: 1 });
+      }
+    }
+    const topVendor =
+      [...vendorOrderMap.values()].sort((a, b) => b.count - a.count)[0] ?? null;
+
+    // Top diamond earner by user
+    const diamondMap = new Map<string, { name: string; count: number }>();
+    for (const reward of diamondRewards) {
+      const uName = reward.userName ?? "Owner";
+      const existing = diamondMap.get(uName);
+      if (existing) {
+        existing.count += reward.diamondCount ?? 1;
+      } else {
+        diamondMap.set(uName, { name: uName, count: reward.diamondCount ?? 1 });
+      }
+    }
+    const topDiamondEarner =
+      [...diamondMap.values()].sort((a, b) => b.count - a.count)[0] ?? null;
+
+    return { topProduct, topCustomer, topVendor, topDiamondEarner };
+  }, [invoices, purchaseOrders, vendors, diamondRewards]);
   const threshold = shopSettings.deadStockThresholdDays ?? 90;
   const halfThreshold = Math.floor(threshold / 2);
 
@@ -652,8 +884,96 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     [myInvoices, transactions, products, isStaff],
   );
 
-  // ── Over-sell count ──────────────────────────────────────────────────────────
-  // (Included in outOfStockItems; kept here for future use)
+  // ── Search filtering ────────────────────────────────────────────────────────
+  const searchLower = searchQuery.trim().toLowerCase();
+
+  // Detect if the search query is a filter keyword and which filter it maps to
+  const searchKeywordFilter = useMemo((): FilterKey | null => {
+    if (!searchLower) return null;
+    if (
+      searchLower === "low" ||
+      searchLower === "low stock" ||
+      searchLower === "lowstock"
+    )
+      return "lowStock";
+    if (
+      searchLower === "dead" ||
+      searchLower === "dead stock" ||
+      searchLower === "deadstock"
+    )
+      return "deadStock";
+    if (
+      searchLower === "pending" ||
+      searchLower === "payment pending" ||
+      searchLower === "udhaar" ||
+      searchLower === "payment"
+    )
+      return "paymentPending";
+    if (
+      searchLower === "out" ||
+      searchLower === "out of stock" ||
+      searchLower === "outofstock"
+    )
+      return "outOfStock";
+    if (searchLower === "expiry" || searchLower === "expiry alert")
+      return "expiryAlert";
+    return null;
+  }, [searchLower]);
+
+  const searchFilteredProducts = useMemo(() => {
+    if (!searchLower) return null; // null = no search active
+    if (searchKeywordFilter) return null; // keyword maps to a filter chip — handled separately
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(searchLower) ||
+        (p.categoryId ?? "").toLowerCase().includes(searchLower),
+    );
+  }, [products, searchLower, searchKeywordFilter]);
+
+  const searchFilteredCustomers = useMemo(() => {
+    if (!searchLower) return null;
+    if (searchKeywordFilter) return null; // keyword maps to a filter chip
+    return allLedgers.filter(
+      (l) =>
+        l.customerName.toLowerCase().includes(searchLower) ||
+        (l.customerMobile ?? "").includes(searchLower),
+    );
+  }, [allLedgers, searchLower, searchKeywordFilter]);
+
+  // ── Active filter product list (for filter chips) ────────────────────────────
+  const filterChipProducts = useMemo(() => {
+    if (activeFilter === "all" || activeFilter === "paymentPending")
+      return null;
+    const withStock = products.map((p) => ({
+      ...p,
+      currentStock: getProductStock(p.id),
+      profitPct:
+        p.purchasePrice && p.purchasePrice > 0
+          ? ((p.sellingPrice - p.purchasePrice) / p.purchasePrice) * 100
+          : null,
+    }));
+    switch (activeFilter) {
+      case "lowStock":
+        return withStock.filter(
+          (p) => p.currentStock > 0 && p.currentStock <= p.minStockAlert,
+        );
+      case "deadStock":
+        return withStock.filter((p) =>
+          deadStockItems.some((d) => d.id === p.id),
+        );
+      case "outOfStock":
+        return withStock.filter((p) => p.currentStock === 0);
+      case "expiryAlert":
+        return withStock.filter((p) =>
+          expiryAlerts.some((e) => {
+            const prod = products.find((pr) => pr.name === e.productName);
+            return prod?.id === p.id;
+          }),
+        );
+      default:
+        return null;
+    }
+  }, [activeFilter, products, getProductStock, deadStockItems, expiryAlerts]);
   const _overSellCount = useMemo(() => {
     const seen = new Set<string>();
     for (const inv of invoices) {
@@ -724,6 +1044,30 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const greeting =
     h < 12 ? "Good Morning" : h < 17 ? "Good Afternoon" : "Good Evening";
 
+  // ── Filter select handler (scroll to section) ─────────────────────────────
+  function handleFilterSelect(key: FilterKey) {
+    if (key === activeFilter || key === "all") {
+      setActiveFilter("all");
+      return;
+    }
+    setActiveFilter(key);
+    const refMap: Partial<
+      Record<FilterKey, React.RefObject<HTMLDivElement | null>>
+    > = {
+      lowStock: refLowStock,
+      deadStock: refDeadStock,
+      paymentPending: refPaymentPending,
+      outOfStock: refOutOfStock,
+      expiryAlert: refExpiryAlert,
+    };
+    const ref = refMap[key];
+    if (ref?.current) {
+      setTimeout(() => {
+        ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+    }
+  }
+
   // ── Pending Orders ────────────────────────────────────────────────────────
   const pendingVendorOrders = purchaseOrders.filter(
     (po) => po.status === "pending",
@@ -747,86 +1091,201 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           </p>
         </div>
 
-        <div className="flex flex-col gap-4 px-3 pt-4">
-          {/* Staff Summary Cards */}
-          <div className="grid grid-cols-2 gap-2">
-            <SmartSummaryCard
-              icon={<ShoppingCart size={16} />}
-              label="Meri Sales"
-              value={fmt(myTodaySales)}
-              sub="Aaj ki"
-              colorScheme="blue"
-              onClick={() => onNavigate("billing")}
-              ocid="dashboard.staff.my_today_sales"
+        <div className="flex flex-col gap-5 px-3 pt-4">
+          {/* ── Search Bar ── */}
+          <div className="relative">
+            <Search
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
             />
-            <SmartSummaryCard
-              icon={<Receipt size={16} />}
-              label="Invoices"
-              value={String(myTodayInvoices.length)}
-              sub="Aaj ke"
-              colorScheme="purple"
-              ocid="dashboard.staff.my_today_invoices"
-            />
-            <SmartSummaryCard
-              icon={<AlertTriangle size={16} />}
-              label="Low Stock"
-              value={String(lowStockItems.length)}
-              sub="Items"
-              colorScheme={lowStockItems.length > 0 ? "amber" : "green"}
-              onClick={() => onNavigate("inventory")}
-              ocid="dashboard.staff.low_stock"
-            />
-            <SmartSummaryCard
-              icon={<PackageX size={16} />}
-              label="Out of Stock"
-              value={String(outOfStockItems.length)}
-              sub="Items"
-              colorScheme={outOfStockItems.length > 0 ? "red" : "green"}
-              onClick={() => onNavigate("inventory")}
-              ocid="dashboard.staff.out_of_stock"
+            <input
+              type="search"
+              placeholder={t("Search products, customers...")}
+              data-ocid="dashboard.search.input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-full bg-muted/60 dark:bg-card border border-border pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 transition-all"
             />
           </div>
 
-          {/* Staff Quick Actions */}
-          <div className="bg-card rounded-2xl border border-border p-4">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
-              Quick Actions
-            </p>
-            <div className="flex gap-4 justify-around">
-              <QuickActionBtn
-                emoji="📦"
-                label="Add Stock"
-                onClick={() => onNavigate("stock")}
-                colorScheme="green"
-                ocid="dashboard.add_stock.button"
-              />
-              <QuickActionBtn
-                emoji="💸"
-                label="Sell"
-                onClick={() => onNavigate("billing")}
+          {/* ── Search Results (staff) ── */}
+          {searchLower && (
+            <div
+              className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
+              data-ocid="dashboard.search_results.section"
+            >
+              <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
+                <span className="text-sm font-bold text-foreground">
+                  🔍 {language === "hi" ? "खोज परिणाम" : "Search Results"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="text-[11px] text-primary font-semibold hover:underline"
+                >
+                  {language === "hi" ? "साफ करें" : "Clear"}
+                </button>
+              </div>
+              <div className="px-4 py-3">
+                {/* Keyword filter redirect */}
+                {searchKeywordFilter ? (
+                  <button
+                    type="button"
+                    data-ocid="dashboard.search_results.filter_redirect"
+                    onClick={() => {
+                      handleFilterSelect(searchKeywordFilter);
+                      setSearchQuery("");
+                    }}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 active:scale-[0.98] transition-all text-left"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
+                      <Filter size={18} className="text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-primary">
+                        {searchKeywordFilter === "lowStock" &&
+                          (language === "hi"
+                            ? "कम स्टॉक दिखाएं"
+                            : "Show Low Stock items")}
+                        {searchKeywordFilter === "deadStock" &&
+                          (language === "hi"
+                            ? "डेड स्टॉक दिखाएं"
+                            : "Show Dead Stock items")}
+                        {searchKeywordFilter === "paymentPending" &&
+                          (language === "hi"
+                            ? "बाकी भुगतान दिखाएं"
+                            : "Show Payment Pending customers")}
+                        {searchKeywordFilter === "outOfStock" &&
+                          (language === "hi"
+                            ? "स्टॉक खत्म दिखाएं"
+                            : "Show Out of Stock items")}
+                        {searchKeywordFilter === "expiryAlert" &&
+                          (language === "hi"
+                            ? "एक्सपायरी अलर्ट दिखाएं"
+                            : "Show Expiry Alert items")}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {language === "hi"
+                          ? "फ़िल्टर लगाने के लिए टैप करें"
+                          : "Tap to apply filter"}
+                      </p>
+                    </div>
+                    <span className="text-xs text-primary font-semibold flex-shrink-0">
+                      Apply →
+                    </span>
+                  </button>
+                ) : (searchFilteredProducts?.length ?? 0) === 0 ? (
+                  <div
+                    data-ocid="dashboard.search_results.empty_state"
+                    className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-sm"
+                  >
+                    <Search size={22} className="text-muted-foreground/30" />
+                    <p>
+                      {language === "hi"
+                        ? "कोई परिणाम नहीं मिला"
+                        : "No results found"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {searchFilteredProducts?.map((p, idx) => {
+                      const stock = getProductStock(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          data-ocid={`dashboard.search_results.item.${idx + 1}`}
+                          onClick={() =>
+                            onNavigate("inventory", { selectedProductId: p.id })
+                          }
+                          className="flex items-center gap-3 p-2.5 rounded-xl border border-border bg-card hover:bg-secondary/30 active:scale-[0.98] transition-all text-left"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center flex-shrink-0">
+                            <Package size={13} className="text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate">
+                              {p.name}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {p.categoryId ?? ""} ·{" "}
+                              <span
+                                className={
+                                  stock <= 0
+                                    ? "text-red-600 font-semibold"
+                                    : "text-foreground"
+                                }
+                              >
+                                {stock} {p.unit}
+                              </span>
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold text-foreground flex-shrink-0">
+                            {fmt(p.sellingPrice)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Staff Summary Cards */}
+          <div>
+            <SectionHeader>{t("Today's Summary")}</SectionHeader>
+            <div className="grid grid-cols-2 gap-2.5">
+              <SmartSummaryCard
+                icon={<ShoppingCart size={18} />}
+                label="Meri Sales"
+                value={fmt(myTodaySales)}
+                sub="Aaj ki"
                 colorScheme="blue"
-                ocid="dashboard.new_sale.button"
+                onClick={() => onNavigate("billing")}
+                ocid="dashboard.staff.my_today_sales"
               />
-              <QuickActionBtn
-                emoji="💰"
-                label="Collect Payment"
-                onClick={() => onNavigate("cash-counter")}
-                colorScheme="orange"
-                ocid="dashboard.staff.collect_payment.button"
+              <SmartSummaryCard
+                icon={<Receipt size={18} />}
+                label="Invoices"
+                value={String(myTodayInvoices.length)}
+                sub="Aaj ke"
+                colorScheme="purple"
+                ocid="dashboard.staff.my_today_invoices"
+              />
+              <SmartSummaryCard
+                icon={<AlertTriangle size={18} />}
+                label={t("Low Stock")}
+                value={String(lowStockItems.length)}
+                sub="Items"
+                colorScheme={lowStockItems.length > 0 ? "amber" : "green"}
+                onClick={() => onNavigate("inventory")}
+                ocid="dashboard.staff.low_stock"
+              />
+              <SmartSummaryCard
+                icon={<PackageX size={18} />}
+                label={t("Out of Stock")}
+                value={String(outOfStockItems.length)}
+                sub="Items"
+                colorScheme={outOfStockItems.length > 0 ? "red" : "green"}
+                onClick={() => onNavigate("inventory")}
+                ocid="dashboard.staff.out_of_stock"
               />
             </div>
           </div>
 
           {/* Staff Recent Activity */}
           <div
-            className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden"
+            className="bg-card rounded-2xl shadow-card border border-border overflow-hidden"
             data-ocid="dashboard.recent_activity.section"
           >
             <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
               <span className="text-sm font-bold text-foreground">
                 🕐 Recent Sales
               </span>
-              <span className="text-[11px] text-muted-foreground">Last 10</span>
+              <span className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
+                Last 10
+              </span>
             </div>
             <div className="px-4 py-3">
               {activityFeed.length === 0 ? (
@@ -852,8 +1311,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                       data-ocid={`dashboard.recent_activity.item.${idx + 1}`}
                       className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0"
                     >
-                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                        <ShoppingCart size={14} className="text-green-600" />
+                      <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-950/40 flex items-center justify-center flex-shrink-0">
+                        <ShoppingCart
+                          size={14}
+                          className="text-green-600 dark:text-green-400"
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-foreground truncate">
@@ -901,262 +1363,727 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 px-3 pt-3">
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION 1 — SMART SUMMARY CARDS (2×2 on mobile, 4-in-a-row on md+)
-        ══════════════════════════════════════════════════════════════════ */}
-        <div
-          className="grid grid-cols-2 md:grid-cols-4 gap-2"
-          data-ocid="dashboard.summary.section"
-        >
-          {/* Card 1: Total Sale */}
-          <SmartSummaryCard
-            icon={<ShoppingCart size={16} />}
-            label="Total Sale"
-            value={fmt(todaySales)}
-            sub="Aaj ka"
-            colorScheme="blue"
-            onClick={() => onNavigate("reports")}
-            ocid="dashboard.summary.today_sales"
+      <div className="flex flex-col gap-5 px-3 pt-4">
+        {/* ── Search Bar ── */}
+        <div className="relative">
+          <Search
+            size={16}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
           />
-
-          {/* Card 2: Profit (hidden from staff, already handled above) */}
-          <SmartSummaryCard
-            icon={<TrendingUp size={16} />}
-            label="Profit"
-            value={fmt(todayProfit)}
-            sub="Aaj ka"
-            colorScheme={todayProfit >= 0 ? "emerald" : "red"}
-            onClick={() => onNavigate("reports")}
-            ocid="dashboard.summary.today_profit"
-          />
-
-          {/* Card 3: Cash / UPI split */}
-          <button
-            type="button"
-            data-ocid="dashboard.summary.cash_upi"
-            onClick={() => onNavigate("reports")}
-            className="flex flex-col gap-1.5 rounded-xl p-3 border border-border bg-card shadow-card active:scale-95 transition-transform duration-150 text-left"
-          >
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <Banknote size={16} className="text-primary" />
-            </div>
-            <div className="min-w-0 w-full">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground leading-none mb-1.5">
-                Cash / Online
-              </div>
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <span className="text-[11px] text-muted-foreground">
-                  💵 Cash
-                </span>
-                <span className="text-sm font-bold text-foreground">
-                  {fmt(cashToday)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <span className="text-[11px] text-muted-foreground">
-                  📱 UPI
-                </span>
-                <span className="text-sm font-bold text-foreground">
-                  {fmt(upiToday)}
-                </span>
-              </div>
-              <div className="border-t border-border/60 pt-1 flex items-center justify-between gap-1">
-                <span className="text-[11px] font-semibold text-foreground">
-                  Total
-                </span>
-                <span className="text-sm font-bold text-primary">
-                  {fmt(cashToday + upiToday)}
-                </span>
-              </div>
-            </div>
-          </button>
-
-          {/* Card 4: Alerts count */}
-          <SmartSummaryCard
-            icon={<AlertCircle size={16} />}
-            label="Alerts"
-            value={String(totalAlertsCount)}
-            sub={totalAlertsCount === 0 ? "All clear ✅" : "Active"}
-            colorScheme={
-              totalAlertsCount === 0
-                ? "green"
-                : totalAlertsCount > 5
-                  ? "red"
-                  : "amber"
-            }
-            onClick={() => onNavigate("inventory")}
-            ocid="dashboard.summary.alerts"
+          <input
+            type="search"
+            placeholder={t("Search products, customers...")}
+            data-ocid="dashboard.search.input"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-full bg-muted/60 dark:bg-card border border-border pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 transition-all"
           />
         </div>
 
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION 2 — QUICK ACTION BUTTONS
-        ══════════════════════════════════════════════════════════════════ */}
-        <div
-          className="bg-card rounded-2xl border border-border p-4"
-          data-ocid="dashboard.quick_actions.section"
-        >
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
-            Quick Actions
-          </p>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+        {/* ── Search Results (owner/manager) ── */}
+        {searchLower && (
+          <div
+            className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
+            data-ocid="dashboard.search_results.section"
+          >
+            <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
+              <span className="text-sm font-bold text-foreground">
+                🔍 {language === "hi" ? "खोज परिणाम" : "Search Results"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-[11px] text-primary font-semibold hover:underline"
+              >
+                {language === "hi" ? "साफ करें" : "Clear"}
+              </button>
+            </div>
+            <div className="px-4 py-3 flex flex-col gap-3">
+              {/* Keyword filter redirect */}
+              {searchKeywordFilter ? (
+                <button
+                  type="button"
+                  data-ocid="dashboard.search_results.filter_redirect"
+                  onClick={() => {
+                    handleFilterSelect(searchKeywordFilter);
+                    setSearchQuery("");
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 active:scale-[0.98] transition-all text-left"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
+                    <Filter size={18} className="text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-primary">
+                      {searchKeywordFilter === "lowStock" &&
+                        (language === "hi"
+                          ? "कम स्टॉक दिखाएं"
+                          : "Show Low Stock items")}
+                      {searchKeywordFilter === "deadStock" &&
+                        (language === "hi"
+                          ? "डेड स्टॉक दिखाएं"
+                          : "Show Dead Stock items")}
+                      {searchKeywordFilter === "paymentPending" &&
+                        (language === "hi"
+                          ? "बाकी भुगतान दिखाएं"
+                          : "Show Payment Pending customers")}
+                      {searchKeywordFilter === "outOfStock" &&
+                        (language === "hi"
+                          ? "स्टॉक खत्म दिखाएं"
+                          : "Show Out of Stock items")}
+                      {searchKeywordFilter === "expiryAlert" &&
+                        (language === "hi"
+                          ? "एक्सपायरी अलर्ट दिखाएं"
+                          : "Show Expiry Alert items")}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {language === "hi"
+                        ? "फ़िल्टर लगाने के लिए टैप करें"
+                        : "Tap to apply filter"}
+                    </p>
+                  </div>
+                  <span className="text-xs text-primary font-semibold flex-shrink-0">
+                    Apply →
+                  </span>
+                </button>
+              ) : (
+                <>
+                  {/* Products */}
+                  {(searchFilteredProducts?.length ?? 0) > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                        {language === "hi" ? "उत्पाद" : "Products"} (
+                        {searchFilteredProducts?.length})
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {searchFilteredProducts?.map((p, idx) => {
+                          const stock = getProductStock(p.id);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              data-ocid={`dashboard.search_results.product.${idx + 1}`}
+                              onClick={() =>
+                                onNavigate("inventory", {
+                                  selectedProductId: p.id,
+                                })
+                              }
+                              className="flex items-center gap-3 p-2.5 rounded-xl border border-border bg-card hover:bg-secondary/30 active:scale-[0.98] transition-all text-left"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center flex-shrink-0">
+                                <Package size={13} className="text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-foreground truncate">
+                                  {p.name}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {p.categoryId ?? ""} ·{" "}
+                                  <span
+                                    className={
+                                      stock <= 0
+                                        ? "text-red-600 font-semibold"
+                                        : "text-foreground"
+                                    }
+                                  >
+                                    {stock} {p.unit}
+                                  </span>
+                                </p>
+                              </div>
+                              <span className="text-xs font-bold text-foreground flex-shrink-0">
+                                {fmt(p.sellingPrice)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {/* Customers */}
+                  {!isStaff && (searchFilteredCustomers?.length ?? 0) > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                        {language === "hi" ? "ग्राहक" : "Customers"} (
+                        {searchFilteredCustomers?.length})
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {searchFilteredCustomers?.map((l, idx) => (
+                          <button
+                            key={l.customerMobile || l.customerName}
+                            type="button"
+                            data-ocid={`dashboard.search_results.customer.${idx + 1}`}
+                            onClick={() => onNavigate("customers")}
+                            className="flex items-center gap-3 p-2.5 rounded-xl border border-border bg-card hover:bg-secondary/30 active:scale-[0.98] transition-all text-left"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-bold text-primary">
+                                {l.customerName.slice(0, 1).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-foreground truncate">
+                                {l.customerName}
+                              </p>
+                              {l.customerMobile && (
+                                <p className="text-[11px] text-muted-foreground">
+                                  {l.customerMobile}
+                                </p>
+                              )}
+                            </div>
+                            {l.totalDue > 0 && (
+                              <span className="text-xs font-bold text-red-600 flex-shrink-0">
+                                {fmt(l.totalDue)}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* No results */}
+                  {(searchFilteredProducts?.length ?? 0) === 0 &&
+                    (isStaff ||
+                      (searchFilteredCustomers?.length ?? 0) === 0) && (
+                      <div
+                        data-ocid="dashboard.search_results.empty_state"
+                        className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-sm"
+                      >
+                        <Search
+                          size={22}
+                          className="text-muted-foreground/30"
+                        />
+                        <p>
+                          {language === "hi"
+                            ? "कोई परिणाम नहीं मिला"
+                            : "No results found"}
+                        </p>
+                      </div>
+                    )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        <div data-ocid="dashboard.quick_actions.section">
+          <SectionHeader>Quick Actions</SectionHeader>
+          <div className="flex gap-3.5 overflow-x-auto scrollbar-hide pb-1 -mx-0.5 px-0.5">
             <QuickActionBtn
-              emoji="📦"
-              label="Add Stock"
+              icon={<Package size={24} />}
+              label={t("Add Stock")}
               onClick={() => onNavigate("stock")}
-              colorScheme="green"
+              pastelColor="purple"
               ocid="dashboard.add_stock.button"
             />
             <QuickActionBtn
-              emoji="👨‍💼"
-              label="Add Staff"
-              onClick={() => onNavigate("staff-management")}
-              colorScheme="blue"
-              ocid="dashboard.add_staff.button"
-            />
-            <QuickActionBtn
-              emoji="💸"
-              label="Sell"
+              icon={<ShoppingCart size={24} />}
+              label={t("Sell")}
               onClick={() => onNavigate("billing")}
-              colorScheme="teal"
+              pastelColor="orange"
               ocid="dashboard.new_sale.button"
             />
             <QuickActionBtn
-              emoji="💰"
-              label="Collect Payment"
+              icon={<Banknote size={24} />}
+              label={t("Collect Payment")}
               onClick={() => onNavigate("cash-counter")}
-              colorScheme="orange"
+              pastelColor="yellow"
               ocid="dashboard.collect_payment.button"
             />
             {isOwner && (
               <QuickActionBtn
-                emoji="📊"
-                label="View Reports"
+                icon={<BarChart2 size={24} />}
+                label={t("Reports")}
                 onClick={() => onNavigate("reports")}
-                colorScheme="blue"
+                pastelColor="blue"
                 ocid="dashboard.view_reports.button"
               />
             )}
             <QuickActionBtn
-              emoji="👥"
-              label="Customers"
+              icon={<Users size={24} />}
+              label={t("Customers")}
               onClick={() => onNavigate("customers")}
-              colorScheme="orange"
+              pastelColor="green"
               ocid="dashboard.customers.button"
+            />
+            <QuickActionBtn
+              icon={<Receipt size={24} />}
+              label={t("Add Staff")}
+              onClick={() => onNavigate("staff-management")}
+              pastelColor="blue"
+              ocid="dashboard.add_staff.button"
             />
           </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 3 — SMART ALERT CARD
+            SMART FILTER BAR — between Quick Actions and Today's Summary
+        ══════════════════════════════════════════════════════════════════ */}
+        {(() => {
+          const filterChips: FilterChip[] = [
+            {
+              key: "all",
+              emoji: "🏠",
+              labelEn: "All",
+              labelHi: "सभी",
+              count: 0,
+              color: {
+                active: "text-white",
+                activeBg: "bg-blue-600",
+                inactiveBg: "bg-blue-50 dark:bg-blue-950/30",
+                inactiveBorder: "border-blue-200 dark:border-blue-800/40",
+                badge: "bg-blue-100 text-blue-700",
+              },
+              show: true,
+            },
+            {
+              key: "lowStock",
+              emoji: "⚠️",
+              labelEn: "Low Stock",
+              labelHi: "कम स्टॉक",
+              count: lowStockItems.length,
+              color: {
+                active: "text-white",
+                activeBg: "bg-amber-500",
+                inactiveBg: "bg-amber-50 dark:bg-amber-950/30",
+                inactiveBorder: "border-amber-200 dark:border-amber-800/40",
+                badge:
+                  "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
+              },
+              show: true,
+            },
+            {
+              key: "deadStock",
+              emoji: "💀",
+              labelEn: "Dead Stock",
+              labelHi: "डेड स्टॉक",
+              count: deadStockItems.length,
+              color: {
+                active: "text-white",
+                activeBg: "bg-red-600",
+                inactiveBg: "bg-red-50 dark:bg-red-950/30",
+                inactiveBorder: "border-red-200 dark:border-red-800/40",
+                badge:
+                  "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400",
+              },
+              show: true,
+            },
+            {
+              key: "paymentPending",
+              emoji: "💳",
+              labelEn: "Payment Pending",
+              labelHi: "भुगतान बाकी",
+              count: dueCustomers.length,
+              color: {
+                active: "text-white",
+                activeBg: "bg-violet-600",
+                inactiveBg: "bg-violet-50 dark:bg-violet-950/30",
+                inactiveBorder: "border-violet-200 dark:border-violet-800/40",
+                badge:
+                  "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400",
+              },
+              show: !isStaff,
+            },
+            {
+              key: "outOfStock",
+              emoji: "📦",
+              labelEn: "Out of Stock",
+              labelHi: "स्टॉक खत्म",
+              count: outOfStockItems.length,
+              color: {
+                active: "text-white",
+                activeBg: "bg-red-500",
+                inactiveBg: "bg-red-50 dark:bg-red-950/30",
+                inactiveBorder: "border-red-200 dark:border-red-800/40",
+                badge:
+                  "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400",
+              },
+              show: true,
+            },
+            {
+              key: "expiryAlert",
+              emoji: "⏰",
+              labelEn: "Expiry Alert",
+              labelHi: "एक्सपायरी",
+              count: expiryWithin30,
+              color: {
+                active: "text-white",
+                activeBg: "bg-orange-600",
+                inactiveBg: "bg-orange-50 dark:bg-orange-950/30",
+                inactiveBorder: "border-orange-200 dark:border-orange-800/40",
+                badge:
+                  "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400",
+              },
+              show: appConfig.featureFlags.expiry,
+            },
+          ];
+          return (
+            <SmartFilterBar
+              chips={filterChips}
+              active={activeFilter}
+              onSelect={handleFilterSelect}
+              language={language}
+            />
+          );
+        })()}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            SECTION 2 — TODAY'S SUMMARY (4 premium cards)
+        ══════════════════════════════════════════════════════════════════ */}
+        <div data-ocid="dashboard.summary.section">
+          <SectionHeader
+            right={
+              <button
+                type="button"
+                data-ocid="dashboard.summary.toggle_visibility"
+                aria-label={amountsVisible ? "Hide amounts" : "Show amounts"}
+                onClick={() => setAmountsVisible((v) => !v)}
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+              >
+                {amountsVisible ? (
+                  <Eye className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <EyeOff className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            }
+          >
+            {t("Today's Summary")}
+          </SectionHeader>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+            {/* Card 1: Total Sale */}
+            <SmartSummaryCard
+              icon={<ShoppingCart size={18} />}
+              label={t("Total Sales")}
+              value={showAmt(fmt(todaySales))}
+              sub="Aaj ka"
+              colorScheme="blue"
+              onClick={() => onNavigate("reports")}
+              ocid="dashboard.summary.today_sales"
+            />
+
+            {/* Card 2: Profit */}
+            <SmartSummaryCard
+              icon={<TrendingUp size={18} />}
+              label={t("Profit")}
+              value={showAmt(fmt(todayProfit))}
+              sub="Aaj ka"
+              colorScheme={todayProfit >= 0 ? "emerald" : "red"}
+              onClick={() => onNavigate("reports")}
+              ocid="dashboard.summary.today_profit"
+            />
+
+            {/* Card 3: Cash / UPI split — premium inline breakdown */}
+            <button
+              type="button"
+              data-ocid="dashboard.summary.cash_upi"
+              onClick={() => onNavigate("reports")}
+              className="flex flex-col gap-2.5 rounded-2xl p-3.5 border-t-2 border-t-amber-400 border border-border bg-card shadow-card active:scale-[0.96] transition-all duration-150 ease-out text-left overflow-hidden"
+            >
+              <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center flex-shrink-0">
+                <Banknote size={18} className="text-amber-500" />
+              </div>
+              <div className="min-w-0 w-full">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-none mb-2">
+                  {t("Cash & Online")}
+                </div>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    💵 Cash
+                  </span>
+                  <span className="text-[13px] font-bold text-foreground">
+                    {showAmt(fmt(cashToday))}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-1 mb-1.5">
+                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    📱 UPI
+                  </span>
+                  <span className="text-[13px] font-bold text-foreground">
+                    {showAmt(fmt(upiToday))}
+                  </span>
+                </div>
+                <div className="border-t border-border/60 pt-1.5 flex items-center justify-between gap-1">
+                  <span className="text-[11px] font-semibold text-foreground">
+                    Total
+                  </span>
+                  <span className="text-[13px] font-extrabold text-amber-600">
+                    {showAmt(fmt(cashToday + upiToday))}
+                  </span>
+                </div>
+              </div>
+            </button>
+
+            {/* Card 4: Alerts count */}
+            <SmartSummaryCard
+              icon={<AlertCircle size={18} />}
+              label={t("Alerts")}
+              value={String(totalAlertsCount)}
+              sub={totalAlertsCount === 0 ? "All clear ✅" : "Active"}
+              colorScheme={
+                totalAlertsCount === 0
+                  ? "green"
+                  : totalAlertsCount > 5
+                    ? "red"
+                    : "amber"
+              }
+              onClick={() => onNavigate("inventory")}
+              ocid="dashboard.summary.alerts"
+            />
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════
+            TOP PERFORMANCE MASTER CARD — Premium
+        ══════════════════════════════════════════════════════════════════ */}
+        {!isStaff && (
+          <div
+            className="rounded-2xl overflow-hidden relative"
+            data-ocid="dashboard.top_performance.section"
+            style={{
+              background: "var(--top-perf-bg, white)",
+              boxShadow:
+                "0 0 0 2px #F59E0B, 0 0 20px rgba(245,158,11,0.22), 0 4px 16px rgba(0,0,0,0.08)",
+            }}
+          >
+            {/* Inner card with gradient background */}
+            <div className="bg-gradient-to-br from-card to-amber-50/40 dark:from-card dark:to-amber-950/10 rounded-2xl overflow-hidden">
+              {/* Header */}
+              <div className="px-4 pt-3 pb-2.5 border-b border-amber-200/60 dark:border-amber-800/30 flex items-center gap-2">
+                <span className="text-base">⭐</span>
+                <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tracking-wide">
+                  {language === "hi" ? "टॉप परफॉर्मेंस" : "Top Performance"}
+                </span>
+                {/* PREMIUM badge — top-right */}
+                <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-sm tracking-wide">
+                  ✦ PREMIUM
+                </span>
+              </div>
+
+              {/* 2×2 Grid */}
+              <div className="grid grid-cols-2 divide-x divide-y divide-amber-200/40 dark:divide-amber-800/20">
+                {/* #1 Product */}
+                <div className="flex items-start gap-2 px-3 py-2.5">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-400/25 text-yellow-800 dark:text-yellow-400 border border-yellow-400/40">
+                      🥇 Product
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {topPerformanceData.topProduct ? (
+                      <>
+                        <p className="text-xs font-bold text-foreground truncate leading-tight">
+                          {topPerformanceData.topProduct.name}
+                        </p>
+                        <p className="text-[10px] text-green-600 dark:text-green-400 font-semibold mt-0.5">
+                          {fmt(topPerformanceData.topProduct.revenue)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">—</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* #1 Customer */}
+                <div className="flex items-start gap-2 px-3 py-2.5">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-400/20 text-blue-800 dark:text-blue-400 border border-blue-400/30">
+                      🥇 Customer
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {topPerformanceData.topCustomer ? (
+                      <>
+                        <p className="text-xs font-bold text-foreground truncate leading-tight">
+                          {topPerformanceData.topCustomer.name}
+                        </p>
+                        <p className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
+                          {fmt(topPerformanceData.topCustomer.total)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">—</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* #1 Vendor */}
+                <div className="flex items-start gap-2 px-3 py-2.5">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-400/20 text-orange-800 dark:text-orange-400 border border-orange-400/30">
+                      🥇 Vendor
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {topPerformanceData.topVendor ? (
+                      <>
+                        <p className="text-xs font-bold text-foreground truncate leading-tight">
+                          {topPerformanceData.topVendor.name}
+                        </p>
+                        <p className="text-[10px] text-orange-600 dark:text-orange-400 font-semibold mt-0.5">
+                          {topPerformanceData.topVendor.count} order
+                          {topPerformanceData.topVendor.count !== 1 ? "s" : ""}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">—</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* #1 Diamond Earner */}
+                <div className="flex items-start gap-2 px-3 py-2.5">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-400/20 text-purple-800 dark:text-purple-400 border border-purple-400/30">
+                      💎 Performer
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {topPerformanceData.topDiamondEarner ? (
+                      <>
+                        <p className="text-xs font-bold text-foreground truncate leading-tight">
+                          {topPerformanceData.topDiamondEarner.name}
+                        </p>
+                        <p className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
+                          {topPerformanceData.topDiamondEarner.count} 💎
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">—</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            DIAMOND REWARD CARD — after Today's Summary
+        ══════════════════════════════════════════════════════════════════ */}
+        <DiamondRewardCard
+          amountsVisible={amountsVisible}
+          onViewAll={() => onNavigate("diamond-rewards")}
+        />
+
+        {/* ── Watch Ad → Earn Diamonds ── */}
+        <RewardAdButton
+          onEarnDiamond={() => awardDiamond("ad-reward", "Watch Ad Reward")}
+        />
+
+        {/* ══════════════════════════════════════════════════════════════════
+            SECTION 3 — SMART ALERTS
         ══════════════════════════════════════════════════════════════════ */}
         <div
-          className="bg-card rounded-2xl border border-border overflow-hidden"
+          ref={refLowStock}
+          className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
           data-ocid="dashboard.smart_alerts.section"
         >
-          <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center gap-2">
+          <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
+              <AlertCircle size={14} className="text-amber-500" />
+            </div>
             <span className="text-sm font-bold text-foreground">
-              ⚠️ Smart Alerts
+              {t("Smart Alerts")}
             </span>
             {totalAlertsCount === 0 ? (
-              <Badge className="bg-green-100 text-green-700 border-green-200 border text-[10px] ml-auto">
+              <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-full bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/40">
                 ✅ All Clear
-              </Badge>
+              </span>
             ) : (
-              <Badge className="bg-red-100 text-red-700 border-red-200 border text-[10px] ml-auto">
+              <span className="ml-auto text-[10px] font-bold px-2 py-1 rounded-full bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/40">
                 {totalAlertsCount} Active
-              </Badge>
+              </span>
             )}
           </div>
 
           {totalAlertsCount === 0 && !profitMarginLow ? (
-            <div className="px-4 py-5 flex items-center gap-3">
-              <CheckCircle size={20} className="text-green-500 flex-shrink-0" />
-              <span className="text-sm text-green-700 font-medium">
+            <div className="px-4 py-4 flex items-center gap-3">
+              <CheckCircle size={18} className="text-green-500 flex-shrink-0" />
+              <span className="text-sm text-green-700 dark:text-green-400 font-medium">
                 Sab kuch sahi hai — koi alert nahi ✅
               </span>
             </div>
           ) : (
-            <div className="divide-y divide-border/60">
+            <div className="divide-y divide-border/50">
               {/* Low Stock */}
               {lowStockItems.length > 0 && (
                 <button
                   type="button"
                   onClick={() => onNavigate("inventory")}
                   data-ocid="dashboard.alerts.low_stock"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-amber-50/50 active:bg-amber-50 transition-colors text-left border-l-4 border-l-amber-400"
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-amber-50/40 dark:hover:bg-amber-950/10 active:bg-amber-50/60 transition-colors text-left border-l-4 border-l-amber-400"
                 >
                   <AlertTriangle
-                    size={16}
+                    size={15}
                     className="text-amber-500 flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-amber-800">
+                    <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">
                       Low Stock Alert
                     </div>
-                    <div className="text-[11px] text-amber-600">
+                    <div className="text-[11px] text-amber-600 dark:text-amber-500">
                       {lowStockItems.length} item
                       {lowStockItems.length !== 1 ? "s" : ""} neeche minimum
                       level
                     </div>
                   </div>
-                  <Badge className="bg-amber-100 text-amber-700 border-amber-300 border text-[10px] flex-shrink-0">
+                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 flex-shrink-0">
                     {lowStockItems.length}
-                  </Badge>
+                  </span>
                 </button>
               )}
 
-              {/* Low Profit (owner/manager only) */}
+              {/* Low Profit */}
               {!isStaff && profitMarginLow && todaySales > 0 && (
                 <button
                   type="button"
                   onClick={() => onNavigate("reports")}
                   data-ocid="dashboard.alerts.low_profit"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/50 active:bg-red-50 transition-colors text-left border-l-4 border-l-red-500"
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-500"
                 >
                   <TrendingDown
-                    size={16}
+                    size={15}
                     className="text-red-500 flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-red-700">
+                    <div className="text-sm font-semibold text-red-700 dark:text-red-400">
                       Low Profit Alert
                     </div>
-                    <div className="text-[11px] text-red-600">
+                    <div className="text-[11px] text-red-600 dark:text-red-500">
                       Aaj ka profit margin 10% se kum hai
                     </div>
                   </div>
-                  <Badge className="bg-red-100 text-red-700 border-red-200 border text-[10px] flex-shrink-0">
+                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
                     ⚠️
-                  </Badge>
+                  </span>
                 </button>
               )}
 
-              {/* Payment Due (owner/manager only) */}
+              {/* Payment Due */}
               {!isStaff && dueCustomers.length > 0 && (
                 <button
                   type="button"
                   onClick={() => onNavigate("customers")}
                   data-ocid="dashboard.alerts.payment_due"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/50 active:bg-red-50 transition-colors text-left border-l-4 border-l-red-500"
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-500"
                 >
                   <CreditCard
-                    size={16}
+                    size={15}
                     className="text-red-500 flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-red-700">
+                    <div className="text-sm font-semibold text-red-700 dark:text-red-400">
                       Payment Due Alert
                     </div>
-                    <div className="text-[11px] text-red-600">
+                    <div className="text-[11px] text-red-600 dark:text-red-500">
                       {fmt(totalDue)} pending — {dueCustomers.length} customer
                       {dueCustomers.length !== 1 ? "s" : ""}
                     </div>
                   </div>
-                  <Badge className="bg-red-100 text-red-700 border-red-200 border text-[10px] flex-shrink-0">
+                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
                     {dueCustomers.length}
-                  </Badge>
+                  </span>
                 </button>
               )}
 
@@ -1166,21 +2093,21 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   type="button"
                   onClick={() => onNavigate("inventory")}
                   data-ocid="dashboard.alerts.out_of_stock"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/50 active:bg-red-50 transition-colors text-left border-l-4 border-l-red-600"
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-600"
                 >
-                  <PackageX size={16} className="text-red-600 flex-shrink-0" />
+                  <PackageX size={15} className="text-red-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-red-700">
+                    <div className="text-sm font-semibold text-red-700 dark:text-red-400">
                       Out of Stock
                     </div>
-                    <div className="text-[11px] text-red-600">
+                    <div className="text-[11px] text-red-600 dark:text-red-500">
                       {outOfStockItems.length} product
                       {outOfStockItems.length !== 1 ? "s" : ""} ka stock khatam
                     </div>
                   </div>
-                  <Badge className="bg-red-100 text-red-700 border-red-200 border text-[10px] flex-shrink-0">
+                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
                     {outOfStockItems.length}
-                  </Badge>
+                  </span>
                 </button>
               )}
             </div>
@@ -1188,17 +2115,363 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
+            SMART INSIGHTS CARDS (compact horizontal scrolls)
+        ══════════════════════════════════════════════════════════════════ */}
+        {!isStaff && (
+          <div
+            className="bg-card rounded-2xl border border-border p-3.5 shadow-card"
+            data-ocid="dashboard.smart_insights_cards.section"
+          >
+            <div className="flex items-center justify-between px-0.5 mb-2.5">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                💡 {language === "hi" ? "स्मार्ट इनसाइट्स" : "Smart Insights"}
+              </span>
+            </div>
+
+            {/* Row 1: Most Selling + High Profit */}
+            <div
+              className="flex gap-2 overflow-x-auto pb-1"
+              style={{ scrollbarWidth: "none" } as React.CSSProperties}
+            >
+              {/* Most Selling */}
+              <div className="flex-shrink-0 w-44 rounded-xl border border-border bg-secondary/30 p-2.5 border-l-4 border-l-green-400">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-sm">🔥</span>
+                  <span className="text-[11px] font-bold text-foreground">
+                    {language === "hi" ? "सबसे ज्यादा बिका" : "Most Selling"}
+                  </span>
+                </div>
+                {mostSellingProducts.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    {language === "hi" ? "डेटा नहीं" : "No data yet"}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {mostSellingProducts.map((item, i) => (
+                      <div key={item.name} className="flex items-center gap-1">
+                        <span className="text-[9px] font-bold text-muted-foreground w-3">
+                          #{i + 1}
+                        </span>
+                        <span className="text-[10px] font-medium text-foreground flex-1 truncate">
+                          {item.name}
+                        </span>
+                        <span className="text-[9px] font-semibold text-green-700 dark:text-green-400">
+                          {item.qty}u
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* High Profit */}
+              <div className="flex-shrink-0 w-44 rounded-xl border border-border bg-secondary/30 p-2.5 border-l-4 border-l-primary">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-sm">💰</span>
+                  <span className="text-[11px] font-bold text-foreground">
+                    {language === "hi" ? "ज्यादा मुनाफा" : "High Profit"}
+                  </span>
+                </div>
+                {highProfitItems.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    {language === "hi" ? "डेटा नहीं" : "No data yet"}
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {highProfitItems.map((item, i) => (
+                      <div key={item.name} className="flex items-center gap-1">
+                        <span className="text-[9px] font-bold text-muted-foreground w-3">
+                          #{i + 1}
+                        </span>
+                        <span className="text-[10px] font-medium text-foreground flex-1 truncate">
+                          {item.name}
+                        </span>
+                        <span className="text-[9px] font-semibold text-primary">
+                          {fmt(item.profit)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: Low Stock + Out of Stock + Low Price */}
+            <div
+              className="flex gap-2 overflow-x-auto pb-1 mt-2"
+              style={{ scrollbarWidth: "none" } as React.CSSProperties}
+            >
+              {/* Low Stock */}
+              <div
+                className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${lowStockItems.length > 0 ? "border-l-4 border-l-amber-400" : ""}`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold text-foreground">
+                    ⚠️ {language === "hi" ? "कम स्टॉक" : "Low Stock"}
+                  </span>
+                  <span
+                    className={`text-sm font-extrabold ${lowStockItems.length > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600"}`}
+                  >
+                    {lowStockItems.length}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {lowStockItems.slice(0, 2).map((p) => (
+                    <p
+                      key={p.id}
+                      className="text-[10px] text-muted-foreground truncate"
+                    >
+                      {p.name}
+                    </p>
+                  ))}
+                  {lowStockItems.length === 0 && (
+                    <p className="text-[10px] text-green-600">
+                      ✅ {language === "hi" ? "सब सही है" : "All good"}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Out of Stock */}
+              <div
+                className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${outOfStockItems.length > 0 ? "border-l-4 border-l-red-500" : ""}`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold text-foreground">
+                    🚫 {language === "hi" ? "स्टॉक खत्म" : "Out of Stock"}
+                  </span>
+                  <span
+                    className={`text-sm font-extrabold ${outOfStockItems.length > 0 ? "text-red-600 dark:text-red-400" : "text-green-600"}`}
+                  >
+                    {outOfStockItems.length}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {outOfStockItems.slice(0, 2).map((p) => (
+                    <p
+                      key={p.id}
+                      className="text-[10px] text-muted-foreground truncate"
+                    >
+                      {p.name}
+                    </p>
+                  ))}
+                  {outOfStockItems.length === 0 && (
+                    <p className="text-[10px] text-green-600">
+                      ✅ {language === "hi" ? "सब उपलब्ध" : "All in stock"}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Low Price Alerts (Owner only) */}
+              {isOwner && (
+                <div
+                  className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${lowPriceAttemptsToday > 0 ? "border-l-4 border-l-red-400" : ""}`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-foreground">
+                      🔻 {language === "hi" ? "कम दाम अलर्ट" : "Low Price"}
+                    </span>
+                    <span
+                      className={`text-sm font-extrabold ${lowPriceAttemptsToday > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                    >
+                      {lowPriceAttemptsToday}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {language === "hi" ? "आज के प्रयास" : "Attempts today"}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Sponsored Ad Card ── */}
+        <AdCardSponsor />
+
+        {/* ══════════════════════════════════════════════════════════════════
+            FILTER CHIP RESULTS — shown when a filter chip is active
+        ══════════════════════════════════════════════════════════════════ */}
+        {filterChipProducts !== null && (
+          <div
+            className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
+            data-ocid="dashboard.filter_results.section"
+          >
+            <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
+              <span className="text-sm font-bold text-foreground">
+                {activeFilter === "deadStock" && (
+                  <span className="flex items-center gap-1.5">
+                    💀 {language === "hi" ? "डेड स्टॉक आइटम" : "Dead Stock Items"}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      ({filterChipProducts.length})
+                    </span>
+                  </span>
+                )}
+                {activeFilter === "lowStock" && (
+                  <span className="flex items-center gap-1.5">
+                    ⚠️ {language === "hi" ? "कम स्टॉक आइटम" : "Low Stock Items"}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      ({filterChipProducts.length})
+                    </span>
+                  </span>
+                )}
+                {activeFilter === "outOfStock" && (
+                  <span className="flex items-center gap-1.5">
+                    📦 {language === "hi" ? "स्टॉक खत्म" : "Out of Stock"}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      ({filterChipProducts.length})
+                    </span>
+                  </span>
+                )}
+                {activeFilter === "expiryAlert" && (
+                  <span className="flex items-center gap-1.5">
+                    ⏰{" "}
+                    {language === "hi" ? "एक्सपायरी अलर्ट" : "Expiry Alert Items"}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      ({filterChipProducts.length})
+                    </span>
+                  </span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveFilter("all")}
+                className="text-[11px] text-primary font-semibold hover:underline"
+              >
+                {language === "hi" ? "साफ करें ✕" : "Clear ✕"}
+              </button>
+            </div>
+            <div className="p-3">
+              {filterChipProducts.length === 0 ? (
+                <div
+                  data-ocid="dashboard.filter_results.empty_state"
+                  className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-sm"
+                >
+                  <CheckCircle size={22} className="text-green-500/60" />
+                  <p>
+                    {language === "hi"
+                      ? "इस श्रेणी में कोई आइटम नहीं ✅"
+                      : "No items in this category ✅"}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {filterChipProducts.map((p, idx) => {
+                    const daysSince = (() => {
+                      if (activeFilter !== "deadStock") return null;
+                      const last = getLastSoldDate(p.id);
+                      if (!last) return null;
+                      return Math.floor(
+                        (todayMs - new Date(last).getTime()) / 86400000,
+                      );
+                    })();
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        data-ocid={`dashboard.filter_results.item.${idx + 1}`}
+                        onClick={() => onNavigate("inventory")}
+                        className={`flex items-center gap-3 p-2.5 rounded-xl border bg-card hover:bg-secondary/20 active:scale-[0.98] transition-all text-left ${
+                          activeFilter === "deadStock"
+                            ? "border-red-200 dark:border-red-900/50 border-l-4 border-l-red-500"
+                            : activeFilter === "lowStock"
+                              ? "border-amber-200 dark:border-amber-900/50 border-l-4 border-l-amber-400"
+                              : activeFilter === "outOfStock"
+                                ? "border-red-200 dark:border-red-900/50 border-l-4 border-l-red-600"
+                                : "border-orange-200 dark:border-orange-900/50 border-l-4 border-l-orange-400"
+                        }`}
+                      >
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                            activeFilter === "deadStock"
+                              ? "bg-red-50 dark:bg-red-950/30"
+                              : activeFilter === "lowStock"
+                                ? "bg-amber-50 dark:bg-amber-950/30"
+                                : activeFilter === "outOfStock"
+                                  ? "bg-red-50 dark:bg-red-950/30"
+                                  : "bg-orange-50 dark:bg-orange-950/30"
+                          }`}
+                        >
+                          {activeFilter === "deadStock" ? (
+                            <Skull
+                              size={14}
+                              className="text-red-600 dark:text-red-400"
+                            />
+                          ) : activeFilter === "lowStock" ? (
+                            <AlertTriangle
+                              size={14}
+                              className="text-amber-600 dark:text-amber-400"
+                            />
+                          ) : activeFilter === "outOfStock" ? (
+                            <PackageX
+                              size={14}
+                              className="text-red-600 dark:text-red-400"
+                            />
+                          ) : (
+                            <Clock
+                              size={14}
+                              className="text-orange-600 dark:text-orange-400"
+                            />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {p.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {language === "hi" ? "स्टॉक" : "Stock"}:{" "}
+                            <span
+                              className={
+                                p.currentStock <= 0
+                                  ? "text-red-600 font-semibold"
+                                  : p.currentStock <= 5
+                                    ? "text-amber-600 font-semibold"
+                                    : "text-foreground"
+                              }
+                            >
+                              {p.currentStock} {p.unit}
+                            </span>
+                            {daysSince !== null && (
+                              <span className="ml-1.5 text-red-500 font-semibold">
+                                · {daysSince}{" "}
+                                {language === "hi"
+                                  ? "दिन से नहीं बिका"
+                                  : "days not sold"}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <span className="text-xs font-bold text-foreground flex-shrink-0">
+                          {fmt(p.sellingPrice)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
             SECTION 4 — CUSTOMER DUE (CRED-style)
         ══════════════════════════════════════════════════════════════════ */}
         {!isStaff && (
           <div
-            className="bg-card rounded-2xl border border-border overflow-hidden"
+            ref={refPaymentPending}
+            className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
             data-ocid="dashboard.customer_due.section"
           >
-            <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
-              <span className="text-sm font-bold text-foreground">
-                💳 Customer Due
-              </span>
+            <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-primary/8 flex items-center justify-center">
+                  <CreditCard size={14} className="text-primary" />
+                </div>
+                <span className="text-sm font-bold text-foreground">
+                  {t("Customer Due")}
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => onNavigate("customers")}
@@ -1209,11 +2482,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             </div>
 
             {totalDue > 0 && (
-              <div className="px-4 py-2 border-b border-border flex items-center justify-between gap-2">
+              <div className="px-4 py-2.5 border-b border-border bg-red-50/30 dark:bg-red-950/10 flex items-center justify-between gap-2">
                 <span className="text-xs text-muted-foreground font-medium">
                   Total Pending
                 </span>
-                <span className="text-lg font-extrabold text-red-600">
+                <span className="text-lg font-extrabold text-red-600 dark:text-red-400">
                   {fmt(totalDue)}
                 </span>
               </div>
@@ -1222,7 +2495,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             {top3DueCustomers.length === 0 ? (
               <div
                 data-ocid="dashboard.customer_due.empty_state"
-                className="flex items-center gap-2 justify-center py-5 text-green-600 text-sm font-medium"
+                className="flex items-center gap-2 justify-center py-5 text-green-600 dark:text-green-400 text-sm font-medium"
               >
                 <CheckCircle size={17} />
                 Koi udhaar nahi ✅
@@ -1261,14 +2534,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                           )}
                         </div>
 
-                        {/* Due amount (large, bold red) */}
+                        {/* Due amount */}
                         <div className="flex flex-col items-end flex-shrink-0">
                           <span
                             className={`text-base font-extrabold ${
                               l.totalDue > 5000
-                                ? "text-red-600"
+                                ? "text-red-600 dark:text-red-400"
                                 : l.totalDue > 500
-                                  ? "text-amber-600"
+                                  ? "text-amber-600 dark:text-amber-400"
                                   : "text-foreground"
                             }`}
                           >
@@ -1277,10 +2550,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                           <span
                             className={`text-[9px] font-medium px-1.5 py-0 rounded-full border ${
                               l.totalDue > 5000
-                                ? "bg-red-100 text-red-700 border-red-300"
+                                ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800/40"
                                 : l.totalDue > 500
-                                  ? "bg-amber-100 text-amber-700 border-amber-300"
-                                  : "bg-green-100 text-green-700 border-green-300"
+                                  ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/40"
+                                  : "bg-green-100 text-green-700 border-green-300 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800/40"
                             }`}
                           >
                             {l.totalDue > 5000
@@ -1302,7 +2575,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                             target="_blank"
                             rel="noopener noreferrer"
                             data-ocid={`dashboard.customer_due.remind.${idx + 1}`}
-                            className="flex items-center gap-1.5 text-xs text-green-700 font-semibold bg-green-100 border border-green-200 rounded-lg px-3 py-1.5 hover:bg-green-200 transition-colors"
+                            className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400 font-semibold bg-green-100 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-3 py-1.5 hover:bg-green-200 transition-colors"
                           >
                             <MessageCircle size={12} />
                             Send Reminder 🔔
@@ -1427,7 +2700,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 className="bg-card rounded-2xl shadow-card border border-border overflow-hidden"
                 data-ocid="dashboard.pending_reminders.section"
               >
-                <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center gap-2">
+                <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center gap-2">
                   <span className="text-sm font-bold text-foreground">
                     ⏳ Pending Reminder Requests
                   </span>
@@ -1456,7 +2729,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                           </span>
                           {req.customerMobile && ` · ${req.customerMobile}`}
                         </div>
-                        <div className="text-xs text-red-600 font-semibold mt-0.5">
+                        <div className="text-xs text-red-600 dark:text-red-400 font-semibold mt-0.5">
                           Due: ₹
                           {Math.round(req.dueAmount).toLocaleString("en-IN")}
                         </div>
@@ -1521,7 +2794,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
             data-ocid="dashboard.pending_orders.section"
           >
-            <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center gap-2">
+            <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center gap-2">
               <span className="text-sm font-bold text-foreground">
                 🛒 Pending Orders
               </span>
@@ -1529,12 +2802,12 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 {pendingVendorOrders + pendingCustomerOrders} Pending
               </Badge>
             </div>
-            <div className="flex gap-2 p-3">
+            <div className="flex gap-2.5 p-3">
               <button
                 type="button"
                 data-ocid="dashboard.pending_orders.vendor_orders"
                 onClick={() => onNavigate("purchase-orders")}
-                className="flex-1 flex flex-col gap-1.5 rounded-xl p-3 bg-card border border-border border-l-4 border-l-amber-400 shadow-card active:scale-95 transition-transform text-left"
+                className="flex-1 flex flex-col gap-1.5 rounded-2xl p-3 bg-card border border-border border-l-4 border-l-amber-400 shadow-card active:scale-[0.96] transition-all duration-150 text-left"
               >
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[11px] font-semibold text-foreground">
@@ -1553,7 +2826,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 type="button"
                 data-ocid="dashboard.pending_orders.customer_orders"
                 onClick={() => onNavigate("customer-orders")}
-                className="flex-1 flex flex-col gap-1.5 rounded-xl p-3 bg-card border border-border border-l-4 border-l-primary shadow-card active:scale-95 transition-transform text-left"
+                className="flex-1 flex flex-col gap-1.5 rounded-2xl p-3 bg-card border border-border border-l-4 border-l-primary shadow-card active:scale-[0.96] transition-all duration-150 text-left"
               >
                 <div className="flex items-center justify-between gap-1">
                   <span className="text-[11px] font-semibold text-foreground">
@@ -1576,7 +2849,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             SECTION 6 — PRODUCT TABS + PRODUCT CARDS
         ══════════════════════════════════════════════════════════════════ */}
         <div
-          className="bg-card rounded-2xl border border-border overflow-hidden"
+          className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
           data-ocid="dashboard.products.section"
         >
           {/* Tab bar */}
@@ -1643,18 +2916,17 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             STOCK CONTROL SECTION
         ══════════════════════════════════════════════════════════════════ */}
         <div
-          className="bg-card rounded-2xl border border-border p-4"
+          ref={refOutOfStock}
+          className="bg-card rounded-2xl border border-border p-4 shadow-card"
           data-ocid="dashboard.stock_control.section"
         >
-          <p className="text-sm font-bold text-foreground mb-3">
-            📦 Stock Control
-          </p>
+          <SectionHeader>Stock Control</SectionHeader>
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               data-ocid="dashboard.stock.low_stock"
               onClick={() => onNavigate("inventory")}
-              className={`flex flex-col gap-1.5 rounded-xl p-3 border shadow-card active:scale-95 transition-transform text-left bg-card border-border ${
+              className={`flex flex-col gap-1.5 rounded-2xl p-3 border shadow-card active:scale-[0.96] transition-all duration-150 text-left bg-card border-border ${
                 lowStockItems.length > 0 ? "border-l-4 border-l-amber-400" : ""
               }`}
             >
@@ -1666,7 +2938,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               />
               <span
                 className={`text-xl font-extrabold leading-none ${
-                  lowStockItems.length > 0 ? "text-amber-700" : "text-green-700"
+                  lowStockItems.length > 0
+                    ? "text-amber-700 dark:text-amber-400"
+                    : "text-green-700 dark:text-green-400"
                 }`}
               >
                 {lowStockItems.length}
@@ -1674,18 +2948,18 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <span
                 className={`text-[10px] font-semibold ${
                   lowStockItems.length > 0
-                    ? "text-amber-600"
+                    ? "text-amber-600 dark:text-amber-500"
                     : "text-muted-foreground"
                 }`}
               >
-                Low Stock
+                {t("Low Stock")}
               </span>
             </button>
             <button
               type="button"
               data-ocid="dashboard.stock.out_of_stock"
               onClick={() => onNavigate("inventory")}
-              className={`flex flex-col gap-1.5 rounded-xl p-3 border shadow-card active:scale-95 transition-transform text-left bg-card border-border ${
+              className={`flex flex-col gap-1.5 rounded-2xl p-3 border shadow-card active:scale-[0.96] transition-all duration-150 text-left bg-card border-border ${
                 outOfStockItems.length > 0 ? "border-l-4 border-l-red-500" : ""
               }`}
             >
@@ -1697,7 +2971,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               />
               <span
                 className={`text-xl font-extrabold leading-none ${
-                  outOfStockItems.length > 0 ? "text-red-700" : "text-green-700"
+                  outOfStockItems.length > 0
+                    ? "text-red-700 dark:text-red-400"
+                    : "text-green-700 dark:text-green-400"
                 }`}
               >
                 {outOfStockItems.length}
@@ -1705,25 +2981,25 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <span
                 className={`text-[10px] font-semibold ${
                   outOfStockItems.length > 0
-                    ? "text-red-600"
+                    ? "text-red-600 dark:text-red-500"
                     : "text-muted-foreground"
                 }`}
               >
-                Out of Stock
+                {t("Out of Stock")}
               </span>
             </button>
             <button
               type="button"
               data-ocid="dashboard.stock.value"
               onClick={() => onNavigate("inventory")}
-              className="flex flex-col gap-1.5 rounded-xl p-3 border border-border bg-card shadow-card active:scale-95 transition-transform text-left"
+              className="flex flex-col gap-1.5 rounded-2xl p-3 border border-border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left"
             >
               <Wallet size={15} className="text-primary" />
               <span className="text-base font-extrabold leading-none text-foreground truncate">
                 {fmt(totalValue)}
               </span>
               <span className="text-[10px] font-semibold text-muted-foreground">
-                Stock Value
+                {t("Stock Value")}
               </span>
             </button>
           </div>
@@ -1733,23 +3009,26 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             SMART INSIGHTS SECTION
         ══════════════════════════════════════════════════════════════════ */}
         <div
-          className="bg-card rounded-2xl border border-border p-4"
+          className="bg-card rounded-2xl border border-border p-4 shadow-card"
           data-ocid="dashboard.smart_insights.section"
         >
-          <p className="text-sm font-bold text-foreground mb-3">
-            📊 Smart Insights
-          </p>
+          <SectionHeader>Smart Insights</SectionHeader>
           <div className="flex flex-col gap-2">
             {/* Most Selling */}
             <button
               type="button"
-              className="rounded-xl border border-border bg-card shadow-card p-3 active:scale-[0.99] transition-transform text-left w-full border-l-4 border-l-green-400"
+              className="rounded-2xl border border-border bg-card shadow-card p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-green-400"
               data-ocid="dashboard.insights.most_selling"
               onClick={() => onNavigate("reports")}
             >
-              <div className="flex items-center gap-2 mb-2">
-                <Star size={13} className="text-green-600" />
-                <span className="text-xs font-semibold text-foreground">
+              <div className="flex items-center gap-2 mb-2.5">
+                <div className="w-6 h-6 rounded-lg bg-green-50 dark:bg-green-950/30 flex items-center justify-center">
+                  <Star
+                    size={12}
+                    className="text-green-600 dark:text-green-400"
+                  />
+                </div>
+                <span className="text-xs font-bold text-foreground">
                   Most Selling Products
                 </span>
               </div>
@@ -1767,9 +3046,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                       <span className="text-xs font-medium text-foreground flex-1 truncate">
                         {item.name}
                       </span>
-                      <Badge className="bg-secondary text-foreground border-border border text-[10px]">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-secondary text-foreground border border-border">
                         {item.qty} units
-                      </Badge>
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1779,13 +3058,15 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             {/* High Profit Items */}
             <button
               type="button"
-              className="rounded-xl border border-border bg-card shadow-card p-3 active:scale-[0.99] transition-transform text-left w-full border-l-4 border-l-primary"
+              className="rounded-2xl border border-border bg-card shadow-card p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-primary"
               data-ocid="dashboard.insights.high_profit"
               onClick={() => onNavigate("reports")}
             >
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp size={13} className="text-primary" />
-                <span className="text-xs font-semibold text-foreground">
+              <div className="flex items-center gap-2 mb-2.5">
+                <div className="w-6 h-6 rounded-lg bg-primary/8 flex items-center justify-center">
+                  <TrendingUp size={12} className="text-primary" />
+                </div>
+                <span className="text-xs font-bold text-foreground">
                   High Profit Items
                 </span>
               </div>
@@ -1803,9 +3084,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                       <span className="text-xs font-medium text-foreground flex-1 truncate">
                         {item.name}
                       </span>
-                      <Badge className="bg-green-100 text-green-700 border-green-200 border text-[10px]">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/40">
                         {fmt(item.profit)}
-                      </Badge>
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1816,28 +3097,33 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             {isOwner && (
               <button
                 type="button"
-                className="rounded-xl border border-border bg-card shadow-card p-3 active:scale-[0.99] transition-transform text-left w-full border-l-4 border-l-amber-400"
+                className="rounded-2xl border border-border bg-card shadow-card p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-amber-400"
                 data-ocid="dashboard.insights.low_price"
                 onClick={() => onNavigate("low-price-log")}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <ShieldAlert size={13} className="text-amber-600" />
-                    <span className="text-xs font-semibold text-foreground">
+                    <div className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
+                      <ShieldAlert
+                        size={12}
+                        className="text-amber-600 dark:text-amber-400"
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-foreground">
                       Low Price Attempts Today
                     </span>
                   </div>
                   <span
                     className={`text-xl font-extrabold ${
                       lowPriceAttemptsToday > 0
-                        ? "text-amber-700"
+                        ? "text-amber-700 dark:text-amber-400"
                         : "text-muted-foreground"
                     }`}
                   >
                     {lowPriceAttemptsToday}
                   </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1">
+                <p className="text-[11px] text-muted-foreground mt-1.5 pl-8">
                   Tap to view full log →
                 </p>
               </button>
@@ -1849,37 +3135,49 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             INVENTORY HEALTH SECTION
         ══════════════════════════════════════════════════════════════════ */}
         <div
-          className="bg-card rounded-2xl border border-border p-4"
+          ref={(el) => {
+            (
+              refDeadStock as React.MutableRefObject<HTMLDivElement | null>
+            ).current = el;
+            (
+              refExpiryAlert as React.MutableRefObject<HTMLDivElement | null>
+            ).current = el;
+          }}
+          className="bg-card rounded-2xl border border-border p-4 shadow-card"
           data-ocid="dashboard.inventory_health.section"
         >
-          <p className="text-sm font-bold text-foreground mb-3">
-            🏥 Inventory Health
-          </p>
+          <SectionHeader>Inventory Health</SectionHeader>
           <div className="flex gap-2">
             {appConfig.featureFlags.expiry && (
               <button
                 type="button"
                 data-ocid="dashboard.health.expiry"
                 onClick={() => onNavigate("inventory")}
-                className={`flex-1 min-w-0 flex flex-col gap-2 rounded-xl p-3 border bg-card shadow-card active:scale-95 transition-transform text-left border-border ${
+                className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
                   expiryWithin30 > 0 ? "border-l-4 border-l-orange-400" : ""
                 }`}
               >
                 <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    expiryWithin30 > 0 ? "bg-orange-100" : "bg-green-100"
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                    expiryWithin30 > 0
+                      ? "bg-orange-50 dark:bg-orange-950/30"
+                      : "bg-green-50 dark:bg-green-950/30"
                   }`}
                 >
                   <Clock
                     size={15}
                     className={
-                      expiryWithin30 > 0 ? "text-orange-600" : "text-green-600"
+                      expiryWithin30 > 0
+                        ? "text-orange-600 dark:text-orange-400"
+                        : "text-green-600 dark:text-green-400"
                     }
                   />
                 </div>
                 <span
                   className={`text-xl font-extrabold leading-none ${
-                    expiryWithin30 > 0 ? "text-orange-700" : "text-green-700"
+                    expiryWithin30 > 0
+                      ? "text-orange-700 dark:text-orange-400"
+                      : "text-green-700 dark:text-green-400"
                   }`}
                 >
                   {expiryWithin30}
@@ -1899,29 +3197,31 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 type="button"
                 data-ocid="dashboard.health.dead_stock"
                 onClick={() => onNavigate("inventory")}
-                className={`flex-1 min-w-0 flex flex-col gap-2 rounded-xl p-3 border bg-card shadow-card active:scale-95 transition-transform text-left border-border ${
+                className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
                   deadStockItems.length > 0 ? "border-l-4 border-l-red-500" : ""
                 }`}
               >
                 <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    deadStockItems.length > 0 ? "bg-red-100" : "bg-green-100"
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                    deadStockItems.length > 0
+                      ? "bg-red-50 dark:bg-red-950/30"
+                      : "bg-green-50 dark:bg-green-950/30"
                   }`}
                 >
                   <Skull
                     size={15}
                     className={
                       deadStockItems.length > 0
-                        ? "text-red-600"
-                        : "text-green-600"
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-green-600 dark:text-green-400"
                     }
                   />
                 </div>
                 <span
                   className={`text-xl font-extrabold leading-none ${
                     deadStockItems.length > 0
-                      ? "text-red-700"
-                      : "text-green-700"
+                      ? "text-red-700 dark:text-red-400"
+                      : "text-green-700 dark:text-green-400"
                   }`}
                 >
                   {deadStockItems.length}
@@ -1940,31 +3240,33 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               type="button"
               data-ocid="dashboard.health.slow_moving"
               onClick={() => onNavigate("inventory")}
-              className={`flex-1 min-w-0 flex flex-col gap-2 rounded-xl p-3 border bg-card shadow-card active:scale-95 transition-transform text-left border-border ${
+              className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
                 slowMovingItems.length > 0
                   ? "border-l-4 border-l-amber-400"
                   : ""
               }`}
             >
               <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  slowMovingItems.length > 0 ? "bg-amber-100" : "bg-green-100"
+                className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  slowMovingItems.length > 0
+                    ? "bg-amber-50 dark:bg-amber-950/30"
+                    : "bg-green-50 dark:bg-green-950/30"
                 }`}
               >
                 <TrendingDown
                   size={15}
                   className={
                     slowMovingItems.length > 0
-                      ? "text-amber-600"
-                      : "text-green-600"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-green-600 dark:text-green-400"
                   }
                 />
               </div>
               <span
                 className={`text-xl font-extrabold leading-none ${
                   slowMovingItems.length > 0
-                    ? "text-amber-700"
-                    : "text-green-700"
+                    ? "text-amber-700 dark:text-amber-400"
+                    : "text-green-700 dark:text-green-400"
                 }`}
               >
                 {slowMovingItems.length}
@@ -1985,15 +3287,20 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             RECENT ACTIVITY SECTION
         ══════════════════════════════════════════════════════════════════ */}
         <div
-          className="bg-card rounded-2xl border border-border overflow-hidden"
+          className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
           data-ocid="dashboard.recent_activity.section"
         >
-          <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
-            <span className="text-sm font-bold text-foreground">
-              🕐 Recent Activity
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              Last 10 actions
+          <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center">
+                <Zap size={13} className="text-muted-foreground" />
+              </div>
+              <span className="text-sm font-bold text-foreground">
+                {t("Recent Activity")}
+              </span>
+            </div>
+            <span className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
+              Last 10
             </span>
           </div>
           <div className="px-4 py-3">
@@ -2016,20 +3323,26 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         item.kind === "invoice"
-                          ? "bg-green-100"
+                          ? "bg-green-100 dark:bg-green-950/40"
                           : item.kind === "txn" && item.type === "in"
-                            ? "bg-blue-100"
-                            : "bg-orange-100"
+                            ? "bg-blue-100 dark:bg-blue-950/40"
+                            : "bg-orange-100 dark:bg-orange-950/40"
                       }`}
                     >
                       {item.kind === "invoice" ? (
-                        <ShoppingCart size={14} className="text-green-600" />
+                        <ShoppingCart
+                          size={14}
+                          className="text-green-600 dark:text-green-400"
+                        />
                       ) : item.kind === "txn" && item.type === "in" ? (
-                        <ArrowDownToLine size={14} className="text-blue-600" />
+                        <ArrowDownToLine
+                          size={14}
+                          className="text-blue-600 dark:text-blue-400"
+                        />
                       ) : (
                         <ArrowUpFromLine
                           size={14}
-                          className="text-orange-500"
+                          className="text-orange-500 dark:text-orange-400"
                         />
                       )}
                     </div>
@@ -2061,23 +3374,28 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             type="button"
             data-ocid="dashboard.low_price_banner"
             onClick={() => onNavigate("low-price-log")}
-            className="bg-red-50 border border-red-200 rounded-2xl p-4 text-left active:scale-[0.99] transition-transform"
+            className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-2xl p-4 text-left active:scale-[0.99] transition-all duration-150"
           >
-            <div className="flex items-center gap-2">
-              <ShieldAlert size={16} className="text-red-600 flex-shrink-0" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-950/40 flex items-center justify-center flex-shrink-0">
+                <ShieldAlert
+                  size={15}
+                  className="text-red-600 dark:text-red-400"
+                />
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-red-700">
+                <p className="text-sm font-bold text-red-700 dark:text-red-400">
                   ⚠️ Low Price Attempts Today
                 </p>
-                <p className="text-xs text-red-600 mt-0.5">
+                <p className="text-xs text-red-600 dark:text-red-500 mt-0.5">
                   {lowPriceAttemptsToday} attempt
                   {lowPriceAttemptsToday !== 1 ? "s" : ""} recorded — Tap to
                   view full log
                 </p>
               </div>
-              <Badge className="bg-red-600 text-white border-0 text-xs flex-shrink-0">
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-red-600 text-white flex-shrink-0">
                 {lowPriceAttemptsToday}
-              </Badge>
+              </span>
             </div>
           </button>
         )}
@@ -2085,14 +3403,13 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         {/* Empty State for fresh shop */}
         {products.length === 0 && invoices.length === 0 && (
           <div
-            className="rounded-2xl border border-dashed border-muted-foreground/30 bg-card p-6 text-center"
+            className="rounded-2xl border border-dashed border-muted-foreground/30 bg-card p-6 text-center shadow-card"
             data-ocid="dashboard.empty_state"
           >
-            <Package
-              size={32}
-              className="mx-auto text-muted-foreground/40 mb-3"
-            />
-            <p className="font-semibold text-base text-foreground mb-1">
+            <div className="w-14 h-14 rounded-2xl bg-primary/8 flex items-center justify-center mx-auto mb-3">
+              <Package size={28} className="text-primary/60" />
+            </div>
+            <p className="font-bold text-base text-foreground mb-1">
               Shop abhi khali hai
             </p>
             <p className="text-sm text-muted-foreground mb-4">

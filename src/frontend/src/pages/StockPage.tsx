@@ -36,9 +36,12 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { TopBar } from "../components/TopBar";
+import { VoiceInputButton } from "../components/VoiceInputButton";
+import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import type { Product, StockBatch } from "../types/store";
 import { clearLeadingZeros } from "../utils/numberInput";
+import type { ParsedVoiceCommand } from "../utils/voiceParser";
 
 /** Format qty display for mixed-unit products */
 function formatBatchQty(product: Product, batch: StockBatch): string {
@@ -68,6 +71,7 @@ export function StockPage() {
     categories,
     shopId,
   } = useStore();
+  const { t, language } = useLanguage();
 
   // Debug: log products when Stock page loads
   useEffect(() => {
@@ -169,6 +173,32 @@ export function StockPage() {
     setInLengthQty("");
     setInWeightQty("");
     setInQty("");
+  };
+
+  // Voice input handler for Stock In form
+  const handleVoiceParsed = (parsed: ParsedVoiceCommand) => {
+    let applied = false;
+    if (parsed.quantity !== null) {
+      setInQty(String(parsed.quantity));
+      applied = true;
+    }
+    if (parsed.price !== null) {
+      setInRate(String(parsed.price));
+      applied = true;
+    }
+    if (parsed.itemName !== null) {
+      const match = products.find(
+        (p) =>
+          p.name.trim().toLowerCase() === parsed.itemName!.trim().toLowerCase(),
+      );
+      if (match) {
+        handleInProductChange(match.id);
+        applied = true;
+      }
+    }
+    if (applied) {
+      toast.success(t("Voice input applied — please review and save"));
+    }
   };
 
   const handleStockIn = () => {
@@ -322,7 +352,15 @@ export function StockPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-sm">Product *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Product *</Label>
+                    <VoiceInputButton
+                      compact
+                      onParsed={handleVoiceParsed}
+                      lang={language === "hi" ? "hi-IN" : "en-IN"}
+                      data-ocid="stock.in.voice_input.button"
+                    />
+                  </div>
                   <Select
                     value={inProduct}
                     onValueChange={handleInProductChange}

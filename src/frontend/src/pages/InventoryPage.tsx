@@ -38,7 +38,7 @@ import {
   Search,
   ShoppingCart,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { NavPage, Product, StockBatch } from "../types/store";
@@ -274,8 +274,10 @@ function BatchViewDialog({
 
 export function InventoryPage({
   onNavigate,
+  selectedProductId: initialSelectedProductId,
 }: {
   onNavigate?: (page: NavPage, params?: Record<string, unknown>) => void;
+  selectedProductId?: string;
 }) {
   const {
     products,
@@ -290,10 +292,25 @@ export function InventoryPage({
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(
+    initialSelectedProductId ?? null,
+  );
   const [batchDialogProduct, setBatchDialogProduct] = useState<Product | null>(
     null,
   );
+  const highlightedCardRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll to highlighted product on mount
+  useEffect(() => {
+    if (!initialSelectedProductId) return;
+    const timer = setTimeout(() => {
+      highlightedCardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [initialSelectedProductId]);
 
   const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
@@ -391,33 +408,43 @@ export function InventoryPage({
             const lastPO = purchaseOrders
               .filter((po) => po.productId === p.id)
               .sort((a, b) => b.createdAt - a.createdAt)[0];
+            const isHighlighted = p.id === initialSelectedProductId;
 
             return (
-              <ProductCard
+              <div
                 key={p.id}
-                product={p}
-                idx={idx}
-                isExpanded={expandedProduct === p.id}
-                onToggle={(id) =>
-                  setExpandedProduct(expandedProduct === id ? null : id)
+                ref={isHighlighted ? highlightedCardRef : null}
+                className={
+                  isHighlighted
+                    ? "ring-2 ring-primary ring-offset-2 rounded-xl transition-all duration-300"
+                    : ""
                 }
-                getProductStock={getProductStock}
-                getProductBatches={getProductBatches}
-                onViewBatches={(prod) => setBatchDialogProduct(prod)}
-                canViewCost={canViewCost}
-                canEdit={ROLE_PERMISSIONS.canEditProduct(userRole)}
-                canDelete={ROLE_PERMISSIONS.canDeleteProducts(userRole)}
-                onReorder={
-                  onNavigate
-                    ? () =>
-                        onNavigate("purchase-orders", {
-                          reorderProductId: p.id,
-                          reorderVendorId: lastPO?.vendorId,
-                          reorderRate: lastPO?.rate,
-                        })
-                    : undefined
-                }
-              />
+              >
+                <ProductCard
+                  product={p}
+                  idx={idx}
+                  isExpanded={expandedProduct === p.id}
+                  onToggle={(id) =>
+                    setExpandedProduct(expandedProduct === id ? null : id)
+                  }
+                  getProductStock={getProductStock}
+                  getProductBatches={getProductBatches}
+                  onViewBatches={(prod) => setBatchDialogProduct(prod)}
+                  canViewCost={canViewCost}
+                  canEdit={ROLE_PERMISSIONS.canEditProduct(userRole)}
+                  canDelete={ROLE_PERMISSIONS.canDeleteProducts(userRole)}
+                  onReorder={
+                    onNavigate
+                      ? () =>
+                          onNavigate("purchase-orders", {
+                            reorderProductId: p.id,
+                            reorderVendorId: lastPO?.vendorId,
+                            reorderRate: lastPO?.rate,
+                          })
+                      : undefined
+                  }
+                />
+              </div>
             );
           })}
         </div>
