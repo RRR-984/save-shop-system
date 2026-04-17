@@ -1,29 +1,29 @@
 {
-  "overview": "Save Shop System is a premium SaaS shop management platform for Indian small business owners featuring advanced analytics, rankings leaderboard, Diamond Rewards gamification, in-app advertisement system, batch FIFO inventory, multi-role access, and bilingual Hindi/English support.",
+  "overview": "Save Shop System (FIFO Bridge) is a modern mobile-first shop management platform for Indian small business owners. It supports multi-shop management from one account, batch-wise FIFO inventory, smart billing, advanced analytics, Diamond Rewards gamification, and bilingual (Hindi/English) support.",
   "features": [
-    "Top Performance Master Card with #1 badges for product, customer, vendor, diamond earner",
-    "Rankings leaderboard — Top 10 lists for products, customers, vendors, staff with medal badges",
-    "Enhanced Diamond Rewards — 4 tiers (Bronze/Silver/Gold/Diamond), 1 diamond per ₹100 sale, progress bar",
-    "Advertisement system — banner carousel, card ads, watch-to-earn rewards, vendor promotions",
-    "Smart Insights — most selling, high profit, low stock, out of stock, low price alerts",
-    "Premium Amazon/Zerodha style compact UI with gold ranking, green profit, red alerts, blue analytics",
-    "Batch FIFO inventory management with advanced costing",
-    "Multi-user roles (Owner/Manager/Staff) with granular permissions",
-    "Hindi/English bilingual toggle with instant switch",
-    "Dark/Light mode with premium color system"
+    "Multi-shop management from one mobile number",
+    "Per-shop data isolation (inventory, sales, customers, staff)",
+    "Shop switcher dropdown in header",
+    "Combined owner dashboard with totals across all shops",
+    "Batch-wise FIFO inventory management",
+    "Smart billing with barcode/QR scanner",
+    "Diamond Rewards gamification",
+    "Animated tutorial guides",
+    "PWA installable app",
+    "Bilingual Hindi/English support",
+    "3-mode UI (Normal/Advance/Super)",
+    "Staff management with roles and attendance"
   ],
   "category": "business",
   "tags": [
     "shop-management",
-    "business-dashboard",
-    "analytics",
-    "gamification",
-    "diamond-rewards",
-    "rankings",
-    "advertisements",
     "inventory",
+    "billing",
     "india",
-    "saas"
+    "multi-shop",
+    "pwa",
+    "hindi",
+    "small-business"
   ],
-  "last_updated": "2026-04-10T18:38:15.702Z"
+  "last_updated": "2026-04-16T16:44:54.001Z"
 }

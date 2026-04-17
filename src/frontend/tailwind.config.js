@@ -88,7 +88,8 @@ export default {
       boxShadow: {
         xs: "0 1px 2px 0 rgba(0,0,0,0.04)",
         card: "0 6px 16px 0 rgba(0,0,0,0.06)",
-        "card-hover": "0 12px 24px 0 rgba(0,0,0,0.10)",
+        "card-lift": "0 8px 20px 0 rgba(0,0,0,0.09)",
+        "card-hover": "0 16px 32px 0 rgba(0,0,0,0.14)",
         soft: "0 6px 16px 0 rgba(0,0,0,0.06)",
       },
       keyframes: {
@@ -116,6 +117,11 @@ export default {
           "0%": { transform: "scale(1)" },
           "100%": { transform: "scale(0.96)" },
         },
+        "bounce-in": {
+          "0%": { transform: "scale(0.95)", opacity: "0.8" },
+          "60%": { transform: "scale(1.02)", opacity: "1" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -124,6 +130,7 @@ export default {
         "slide-in-left": "slide-in-left 0.3s ease-out",
         "float": "float 3s ease-in-out infinite",
         "scale-tap": "scale-tap 0.15s cubic-bezier(0.4, 0, 0.2, 1)",
+        "bounce-in": "bounce-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both",
       },
     },
   },

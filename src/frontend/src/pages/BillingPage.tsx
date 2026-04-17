@@ -28,23 +28,31 @@ import {
 } from "@/components/ui/table";
 import {
   AlertTriangle,
+  FileText,
   Layers,
   Lock,
-  MessageCircle,
   Minus,
+  PenLine,
   Plus,
-  Printer,
   Receipt,
   ShieldAlert,
   Trash2,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { InvoiceShareModal } from "../components/InvoiceShareModal";
+import { QRScannerToggle } from "../components/QRScannerToggle";
 import { VoiceInputButton } from "../components/VoiceInputButton";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
-import type { Invoice, InvoiceItem } from "../types/store";
+import type {
+  CartDraftItem,
+  DraftSale,
+  Invoice,
+  InvoiceItem,
+} from "../types/store";
 import { ROLE_PERMISSIONS } from "../types/store";
 import { clearLeadingZeros } from "../utils/numberInput";
 import type { ParsedVoiceCommand } from "../utils/voiceParser";
@@ -66,7 +74,17 @@ interface CartItem {
   sellingRate: number;
   unit: string;
   selectedBatchId?: string;
-  basePrice: number; // original selling price from product
+  basePrice: number;
+}
+
+const AUTO_DRAFT_KEY = "billing_auto_draft";
+const RESUME_DRAFT_KEY = "billing_resume_draft";
+
+interface AutoDraft {
+  customerName: string;
+  customerMobile: string;
+  cartItems: CartItem[];
+  savedAt: string;
 }
 
 // ─── Smart Pricing Helpers ────────────────────────────────────────────────────
@@ -135,10 +153,12 @@ function LowPriceAlertModal({
       const next = pinAttempts + 1;
       setPinAttempts(next);
       if (next >= MAX_ATTEMPTS) {
-        setPinError(`${MAX_ATTEMPTS} baar galat PIN — sale blocked`);
+        setPinError(`${MAX_ATTEMPTS} incorrect PIN attempts — sale blocked`);
         setTimeout(() => onCancel(), 1500);
       } else {
-        setPinError(`Galat PIN — ${MAX_ATTEMPTS - next} attempt bache hain`);
+        setPinError(
+          `Incorrect PIN — ${MAX_ATTEMPTS - next} attempts remaining`,
+        );
         setPinInput("");
       }
     }
@@ -159,9 +179,7 @@ function LowPriceAlertModal({
 
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Neeche diye items minimum profit price se{" "}
-            <span className="text-red-600 font-semibold">kam rate</span> par
-            bech rahe hain:
+            The following items are being sold below the minimum profit price:
           </p>
 
           <div className="space-y-2">
@@ -175,7 +193,7 @@ function LowPriceAlertModal({
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="flex flex-col">
-                    <span className="text-muted-foreground">Lagat</span>
+                    <span className="text-muted-foreground">Cost</span>
                     <span className="font-medium">
                       {new Intl.NumberFormat("en-IN", {
                         style: "currency",
@@ -222,7 +240,6 @@ function LowPriceAlertModal({
           </div>
 
           {!isLockMode ? (
-            // WARNING MODE — allow with warning (all roles)
             <div className="space-y-3">
               <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-300">
                 <AlertTriangle
@@ -230,9 +247,9 @@ function LowPriceAlertModal({
                   className="text-amber-600 mt-0.5 flex-shrink-0"
                 />
                 <p className="text-xs text-amber-700">
-                  <strong>Warning Mode:</strong> Sale allowed hai — lekin
-                  minimum profit se neeche bech rahe hain. Kya aap jaari rakhna
-                  chahte hain?
+                  <strong>Warning Mode:</strong> Sale is allowed but you are
+                  selling below the minimum profit price. Do you want to
+                  continue?
                 </p>
               </div>
               <div className="flex gap-2">
@@ -249,18 +266,17 @@ function LowPriceAlertModal({
                   className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
                   onClick={() => onContinue(false, false)}
                 >
-                  Sale Jaari Rakhein
+                  Continue Sale
                 </Button>
               </div>
             </div>
           ) : isOwner ? (
-            // LOCK MODE + OWNER — show PIN input
             <div className="space-y-3">
               <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-300">
                 <Lock size={16} className="text-red-600 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-red-700">
-                  <strong>Lock Mode:</strong> Sale blocked hai. Apna Owner PIN
-                  daalein override ke liye.
+                  <strong>Lock Mode:</strong> Sale is blocked. Enter Owner PIN
+                  to override.
                 </p>
               </div>
               <div className="space-y-2">
@@ -271,7 +287,7 @@ function LowPriceAlertModal({
                   <Input
                     data-ocid="billing.low_price_alert.pin.input"
                     type="password"
-                    placeholder="PIN enter karein (4-6 digits)"
+                    placeholder="Enter PIN (4-6 digits)"
                     value={pinInput}
                     onChange={(e) => {
                       setPinInput(e.target.value);
@@ -298,7 +314,7 @@ function LowPriceAlertModal({
                 )}
                 {!ownerPin && (
                   <p className="text-xs text-muted-foreground">
-                    💡 Settings mein Owner PIN set karein pehle
+                    💡 Please set an Owner PIN in Settings first
                   </p>
                 )}
               </div>
@@ -312,7 +328,6 @@ function LowPriceAlertModal({
               </Button>
             </div>
           ) : (
-            // LOCK MODE + NON-OWNER (Manager / Staff) — blocked with message
             <div className="space-y-3">
               <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-300">
                 <ShieldAlert
@@ -324,9 +339,8 @@ function LowPriceAlertModal({
                     Access Denied — Owner Approval Required
                   </p>
                   <p className="text-xs text-red-700">
-                    Sirf Owner override kar sakta hai / Only Owner can approve
-                    low price sales. Apne Owner se PIN lein aur unhe login karne
-                    dein.
+                    Only the Owner can approve low price sales. Please ask your
+                    Owner to enter their PIN or log in.
                   </p>
                 </div>
               </div>
@@ -340,6 +354,46 @@ function LowPriceAlertModal({
               </Button>
             </div>
           )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── New Sale Confirmation Dialog ─────────────────────────────────────────────
+
+function NewSaleConfirmDialog({
+  open,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <Dialog open={open} onOpenChange={onCancel}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Receipt size={18} /> Start New Sale?
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Start a new sale? Your current items will be saved as a draft.
+        </p>
+        <div className="flex gap-2 mt-2">
+          <Button variant="outline" className="flex-1" onClick={onCancel}>
+            Go Back
+          </Button>
+          <Button
+            data-ocid="billing.new_sale_confirm.button"
+            className="flex-1"
+            onClick={onConfirm}
+          >
+            Save & Start New
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -363,11 +417,26 @@ export function BillingPage({
     appConfig,
     addLowPriceAlertLog,
     addAuditLog,
+    saveDraft,
+    deleteDraft,
+    markDraftCompleted,
   } = useStore();
   const { currentUser } = useAuth();
   const { t, language } = useLanguage();
   const userRole = currentUser?.role ?? "staff";
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
+
+  // ── Draft / Edit state ────────────────────────────────────────────────────
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [autoDraftActive, setAutoDraftActive] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const lastSavedAtRef = useRef<Date | null>(null);
+
+  // ── QR/Barcode scanner qty input ref (for focus after scan) ─────────────
+  const qtyInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ── Async payment loading state ──────────────────────────────────────────
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
 
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
@@ -385,13 +454,13 @@ export function BillingPage({
     null,
   );
   const [showInvoice, setShowInvoice] = useState(false);
+  const [showNewSaleConfirm, setShowNewSaleConfirm] = useState(false);
 
   // Low Price Alert Modal state
   const [showLowPriceModal, setShowLowPriceModal] = useState(false);
   const [pendingLowPriceItems, setPendingLowPriceItems] = useState<
     LowPriceItem[]
   >([]);
-  // Holds the resolved invoice data waiting for user decision
   const [pendingInvoiceData, setPendingInvoiceData] = useState<Omit<
     Invoice,
     "id" | "invoiceNumber"
@@ -400,7 +469,222 @@ export function BillingPage({
     [],
   );
 
-  // Voice input handler for Billing screen
+  // ── On mount: restore from resume_draft or auto_draft ────────────────────
+  useEffect(() => {
+    try {
+      // Priority 1: explicit resume (from DraftSalesPage)
+      const resumeRaw = sessionStorage.getItem(RESUME_DRAFT_KEY);
+      if (resumeRaw) {
+        const draft = JSON.parse(resumeRaw) as DraftSale;
+        sessionStorage.removeItem(RESUME_DRAFT_KEY);
+        restoreFromDraft(draft);
+        setEditingDraftId(draft.draftId);
+        toast.info(`Editing draft for "${draft.customerName || "Walk-in"}"`, {
+          description: `${draft.cartItems.length} item(s) loaded`,
+        });
+        return;
+      }
+
+      // Priority 2: auto-draft (navigated away mid-billing)
+      const autoRaw = sessionStorage.getItem(AUTO_DRAFT_KEY);
+      if (autoRaw) {
+        const auto = JSON.parse(autoRaw) as AutoDraft;
+        // Only restore if cart has items — avoid restoring empty drafts
+        if (auto.cartItems && auto.cartItems.length > 0) {
+          setCustomerName(auto.customerName);
+          setCustomerMobile(auto.customerMobile);
+          setCart(auto.cartItems);
+          const inputs: Record<string, string> = {};
+          for (const item of auto.cartItems) {
+            inputs[item.selectedBatchId ?? item.productId] = String(
+              item.quantity,
+            );
+          }
+          setQtyInputs(inputs);
+          setAutoDraftActive(true);
+          toast.info("Previous sale restored — continue or discard", {
+            description: `${auto.cartItems.length} item(s) from ${new Date(auto.savedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`,
+          });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // ── Auto-save draft every 30s while billing has data ─────────────────────
+  useEffect(() => {
+    if (cart.length === 0 && !customerName && !customerMobile) return;
+    const interval = setInterval(() => {
+      if (cart.length === 0) return;
+      try {
+        const autoDraft = {
+          customerName,
+          customerMobile,
+          cartItems: cart,
+          savedAt: new Date().toISOString(),
+        };
+        sessionStorage.setItem(AUTO_DRAFT_KEY, JSON.stringify(autoDraft));
+        const now = new Date();
+        lastSavedAtRef.current = now;
+        setLastSavedAt(now);
+        toast.info("Draft auto-saved", { duration: 1500 });
+      } catch {
+        /* ignore */
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [cart, customerName, customerMobile]);
+
+  function restoreFromDraft(draft: DraftSale) {
+    setCustomerName(draft.customerName);
+    setCustomerMobile(draft.customerMobile);
+    const cartItems: CartItem[] = draft.cartItems.map((ci) => ({
+      productId: ci.productId,
+      productName: ci.productName,
+      quantity: ci.quantity,
+      sellingRate: ci.sellingRate,
+      unit: ci.unit,
+      selectedBatchId: ci.batchId,
+      basePrice: ci.sellingRate,
+    }));
+    setCart(cartItems);
+    const inputs: Record<string, string> = {};
+    for (const item of cartItems) {
+      inputs[item.selectedBatchId ?? item.productId] = String(item.quantity);
+    }
+    setQtyInputs(inputs);
+  }
+
+  // ── Save auto-draft when navigating away ─────────────────────────────────
+  function saveAutoDraft() {
+    if (cart.length === 0) return;
+    try {
+      const autoDraft: AutoDraft = {
+        customerName,
+        customerMobile,
+        cartItems: cart,
+        savedAt: new Date().toISOString(),
+      };
+      sessionStorage.setItem(AUTO_DRAFT_KEY, JSON.stringify(autoDraft));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // ── Build DraftSale from current form state ───────────────────────────────
+  function buildDraftSale(draftId: string): DraftSale {
+    const now = new Date().toISOString();
+    const cartDraftItems: CartDraftItem[] = cart.map((item) => {
+      const costP = getProductCostPrice(item.productId);
+      const profit = (item.sellingRate - costP) * item.quantity;
+      const profitPercent =
+        costP > 0 ? ((item.sellingRate - costP) / costP) * 100 : 0;
+      return {
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        sellingRate: item.sellingRate,
+        purchaseCost: costP,
+        unit: item.unit,
+        batchId: item.selectedBatchId,
+        batchNumber: item.selectedBatchId
+          ? `B${String(
+              getProductBatches(item.productId).findIndex(
+                (b) => b.id === item.selectedBatchId,
+              ) + 1,
+            ).padStart(3, "0")}`
+          : undefined,
+        profit,
+        profitPercent,
+      };
+    });
+
+    return {
+      draftId,
+      customerName,
+      customerMobile,
+      cartItems: cartDraftItems,
+      createdAt: now,
+      updatedAt: now,
+      totalAmount: cart.reduce((s, i) => s + i.quantity * i.sellingRate, 0),
+      status: "draft",
+    };
+  }
+
+  // ── Handle Save Draft button ──────────────────────────────────────────────
+  function handleSaveDraft() {
+    if (cart.length === 0 && !customerName.trim()) {
+      toast.error("Add items or a customer name before saving a draft");
+      return;
+    }
+    const draftId =
+      editingDraftId ??
+      `draft_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const draft = buildDraftSale(draftId);
+    saveDraft(draft);
+    if (!editingDraftId) setEditingDraftId(draftId);
+    // Clear auto-draft since we've explicitly saved
+    sessionStorage.removeItem(AUTO_DRAFT_KEY);
+    setAutoDraftActive(false);
+    toast.success("Draft saved ✓", {
+      description: `${cart.length} item(s) — ${customerName.trim() || "Walk-in"}`,
+    });
+  }
+
+  // ── Handle Discard ────────────────────────────────────────────────────────
+  function handleDiscard() {
+    if (editingDraftId) {
+      deleteDraft(editingDraftId);
+      sessionStorage.removeItem(RESUME_DRAFT_KEY);
+      toast.info("Draft discarded");
+    } else {
+      sessionStorage.removeItem(AUTO_DRAFT_KEY);
+      toast.info("Sale discarded");
+    }
+    clearForm();
+  }
+
+  function clearForm() {
+    setCustomerName("");
+    setCustomerMobile("");
+    setCart([]);
+    setQtyInputs({});
+    setItemErrors({});
+    setPaidAmountStr("");
+    setIsPartial(false);
+    setPaymentMode("cash");
+    setManualBatchMode(false);
+    setSelectedBatchId("");
+    setSelectedProductId("");
+    setAddQty("1");
+    setEditingDraftId(null);
+    setAutoDraftActive(false);
+  }
+
+  // ── Handle New Sale button ────────────────────────────────────────────────
+  function handleNewSale() {
+    if (cart.length > 0) {
+      setShowNewSaleConfirm(true);
+    } else {
+      clearForm();
+    }
+  }
+
+  function handleNewSaleConfirm() {
+    setShowNewSaleConfirm(false);
+    // Save current as draft before clearing
+    const draftId =
+      editingDraftId ??
+      `draft_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const draft = buildDraftSale(draftId);
+    saveDraft(draft);
+    sessionStorage.removeItem(AUTO_DRAFT_KEY);
+    toast.success("Current items saved as draft");
+    clearForm();
+  }
+
+  // Voice input handler
   const handleBillingVoiceParsed = (parsed: ParsedVoiceCommand) => {
     let applied = false;
     if (parsed.customerName !== null) {
@@ -427,12 +711,25 @@ export function BillingPage({
     }
   };
 
+  // QR/Barcode scanner handler
+  const handleProductScanned = (productId: string) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    setSelectedProductId(productId);
+    setSelectedBatchId("");
+    setAddQty("1");
+    toast.success(
+      language === "hi"
+        ? `${product.name} स्कैन हुआ — मात्रा डालें`
+        : `${product.name} scanned — enter quantity`,
+    );
+  };
+
   const total = cart.reduce(
     (s, item) => s + item.quantity * item.sellingRate,
     0,
   );
 
-  // Compute effective paid and due amounts
   const computedPaid = (() => {
     if (paymentMode === "credit") return 0;
     if (
@@ -450,7 +747,6 @@ export function BillingPage({
 
   const computedDue = total - computedPaid;
 
-  // Build per-item over-sell details (batch-aware)
   const overSellItems = cart
     .map((item) => {
       const available = item.selectedBatchId
@@ -500,7 +796,6 @@ export function BillingPage({
     let resolvedBatchId: string | undefined;
 
     if (manualBatchMode && selectedBatchId) {
-      // OPTION B: Manual batch selection — cap qty to batch quantity
       const batch = getProductBatches(selectedProductId).find(
         (b) => b.id === selectedBatchId,
       );
@@ -519,7 +814,7 @@ export function BillingPage({
       const available = getProductStock(selectedProductId);
       if (qty > available) {
         toast.warning(
-          `⚠️ Over Sell: Sirf ${available} ${product.unit} available hai`,
+          `⚠️ Over Sell: Only ${available} ${product.unit} available in stock`,
         );
       }
     }
@@ -635,12 +930,12 @@ export function BillingPage({
     if (batchId) {
       const batch = getProductBatches(productId).find((b) => b.id === batchId);
       if (batch && newQty > batch.quantity) {
-        toast.warning(`⚠️ Batch stock sirf ${batch.quantity} ${item.unit} hai`);
+        toast.warning(`⚠️ Batch stock is only ${batch.quantity} ${item.unit}`);
       }
     } else {
       const available = getProductStock(productId);
       if (newQty > available) {
-        toast.warning(`⚠️ Over Sell: Sirf ${available} ${item.unit} available`);
+        toast.warning(`⚠️ Over Sell: Only ${available} ${item.unit} available`);
       }
     }
     setCart((prev) =>
@@ -660,7 +955,6 @@ export function BillingPage({
         i.productId === productId ? { ...i, sellingRate: rate } : i,
       ),
     );
-    // Validate smart pricing rules
     const product = products.find((p) => p.id === productId);
     if (!product) return;
     const costPrice = getProductCostPrice(productId);
@@ -670,22 +964,22 @@ export function BillingPage({
     const discountPct = getDiscountPct(basePrice, rate);
     let error = "";
     if (!rate || rate <= 0 || Number.isNaN(rate)) {
-      error = "Invalid price — 0 ya negative price allowed nahi hai";
+      error = "Invalid price — 0 or negative price is not allowed";
     } else if (costPrice > 0 && rate < minPrice) {
-      error = `Minimum price ₹${minPrice.toFixed(0)} se kam nahi ho sakta (Cost + Min Profit)`;
+      error = `Minimum price ₹${minPrice.toFixed(0)} cannot be lower (Cost + Min Profit)`;
     } else if (
       userRole !== "owner" &&
       userRole !== "manager" &&
       rate < basePrice &&
       discountPct > 18
     ) {
-      error = `Staff maximum 18% discount de sakta hai (Min rate: ₹${(basePrice * 0.82).toFixed(0)})`;
+      error = `Staff can apply a maximum 18% discount (Min rate: ₹${(basePrice * 0.82).toFixed(0)})`;
     } else if (
       (userRole === "owner" || userRole === "manager") &&
       rate < basePrice &&
       discountPct > 20
     ) {
-      error = `Owner/Manager maximum 20% discount de sakta hai (Min rate: ₹${(basePrice * 0.8).toFixed(0)})`;
+      error = `Owner/Manager can apply a maximum 20% discount (Min rate: ₹${(basePrice * 0.8).toFixed(0)})`;
     }
     setItemErrors((prev) => {
       const next = { ...prev };
@@ -704,29 +998,27 @@ export function BillingPage({
       return;
     }
     if (Object.keys(itemErrors).length > 0) {
-      toast.error("Pricing errors fix karein pehle");
+      toast.error("Please fix pricing errors first");
       return;
     }
     if (cart.some((i) => i.quantity === 0)) {
-      toast.error("Kuch items ka qty 0 hai — pehle theek karein ya hatayein");
+      toast.error("Some items have 0 quantity — please fix or remove them");
       return;
     }
     if (paymentMode === "credit" && !customerName.trim()) {
-      toast.error("Credit sale ke liye Customer Name required hai");
+      toast.error("Customer Name is required for credit sales");
       return;
     }
-    // Validation: mobile required for credit sale
     if (paymentMode === "credit" && !customerMobile.trim()) {
-      toast.error("⚠️ Credit sale ke liye Mobile Number zaroori hai");
+      toast.error("⚠️ Mobile Number is required for credit sales");
       return;
     }
-    // Also block due > 0 without mobile (partial payment case)
     if (
       computedDue > 0 &&
       !customerMobile.trim() &&
       !isWalkIn(customerName.trim())
     ) {
-      toast.error("⚠️ Udhaar sale ke liye Mobile Number daalna zaroori hai");
+      toast.error("⚠️ Mobile Number is required for sales with pending dues");
       return;
     }
 
@@ -758,7 +1050,6 @@ export function BillingPage({
       };
     });
 
-    // ── Low Price Check ──────────────────────────────────────────────────────
     const lowPriceItems: LowPriceItem[] = cart
       .map((item) => {
         const product = products.find((p) => p.id === item.productId);
@@ -779,7 +1070,6 @@ export function BillingPage({
       })
       .filter(Boolean) as LowPriceItem[];
 
-    // Build invoice data now (used after modal decision)
     const invoiceTotalProfit = invoiceItems.reduce(
       (s, item) => s + (item.totalProfit ?? 0),
       0,
@@ -818,7 +1108,6 @@ export function BillingPage({
     };
 
     if (lowPriceItems.length > 0) {
-      // Show modal — save pending data
       setPendingLowPriceItems(lowPriceItems);
       setPendingInvoiceData(invoiceData);
       setPendingInvoiceItems(invoiceItems);
@@ -826,9 +1115,9 @@ export function BillingPage({
       return;
     }
 
-    // No low price issues — proceed directly
-    // For cash payments, route through Cash Counter
     if (paymentMode === "cash" && onNavigate) {
+      // Save auto-draft before leaving so state is preserved if they come back
+      saveAutoDraft();
       try {
         sessionStorage.setItem(
           PENDING_CASH_KEY,
@@ -850,7 +1139,6 @@ export function BillingPage({
     pinUsed: boolean,
     lowItems: LowPriceItem[],
   ) {
-    // Log each low price item
     for (const item of lowItems) {
       const attemptType = wasBlocked
         ? "blocked"
@@ -869,14 +1157,12 @@ export function BillingPage({
         pinUsed,
         timestamp: new Date().toISOString(),
       });
-      // Audit log for low price attempt
       addAuditLog(
         "low_price_attempt",
         `${item.productName} — entered ₹${item.enteredPrice}, min ₹${item.minSellPrice.toFixed(0)}, status: ${attemptType}`,
         item.productId,
       );
     }
-    // Audit log for low price override approved
     if (pinUsed && lowItems.length > 0) {
       addAuditLog(
         "low_price_override",
@@ -888,30 +1174,26 @@ export function BillingPage({
 
     const { invoice, mergedExisting } = createInvoice(invoiceData);
 
-    // Audit log for sale created
     addAuditLog(
       "sale_created",
       `Invoice ${invoice.invoiceNumber} — ₹${invoice.totalAmount} — ${invoice.paymentMode} — Customer: ${invoice.customerName}`,
       invoice.id,
     );
 
-    // Show merge warning if same mobile was already in ledger
     if (mergedExisting) {
       toast.warning("⚠️ Same mobile detected — merging customer data");
     }
 
+    // Mark draft completed and clean up
+    if (editingDraftId) {
+      markDraftCompleted(editingDraftId);
+    }
+    sessionStorage.removeItem(AUTO_DRAFT_KEY);
+    sessionStorage.removeItem(RESUME_DRAFT_KEY);
+
     setGeneratedInvoice(invoice);
     setShowInvoice(true);
-    setCart([]);
-    setQtyInputs({});
-    setItemErrors({});
-    setCustomerName("");
-    setCustomerMobile("");
-    setPaidAmountStr("");
-    setIsPartial(false);
-    setPaymentMode("cash");
-    setManualBatchMode(false);
-    setSelectedBatchId("");
+    clearForm();
     toast.success(`Invoice ${invoice.invoiceNumber} generated!`);
   }
 
@@ -921,7 +1203,6 @@ export function BillingPage({
     const isLockMode = !(appConfig.allowLowPriceSelling ?? true);
     const isBlocked = isLockMode && !overridden;
     if (isBlocked) {
-      // Log as blocked
       doCreateInvoice(
         pendingInvoiceData,
         pendingInvoiceItems,
@@ -930,7 +1211,6 @@ export function BillingPage({
         pendingLowPriceItems,
       );
     } else {
-      // Log low price items (audit only — invoice not created yet if cash)
       for (const item of pendingLowPriceItems) {
         const attemptType = pinUsed ? "overridden" : "warned";
         addLowPriceAlertLog({
@@ -957,8 +1237,9 @@ export function BillingPage({
           `Owner PIN override — ${pendingLowPriceItems.map((i) => i.productName).join(", ")}`,
         );
       }
-      // For cash payments, route through Cash Counter
       if (pendingInvoiceData.paymentMode === "cash" && onNavigate) {
+        // Save auto-draft before leaving
+        saveAutoDraft();
         try {
           sessionStorage.setItem(
             PENDING_CASH_KEY,
@@ -991,7 +1272,6 @@ export function BillingPage({
   }
 
   function handleLowPriceModalCancel() {
-    // Log as blocked
     if (pendingLowPriceItems.length > 0) {
       for (const item of pendingLowPriceItems) {
         addLowPriceAlertLog({
@@ -1019,7 +1299,6 @@ export function BillingPage({
     setPendingInvoiceItems([]);
   }
 
-  // Helper to check walk-in name (mirrors StoreContext logic)
   function isWalkIn(name: string): boolean {
     return (
       name.trim().toLowerCase() === "walk-in customer" || name.trim() === ""
@@ -1033,17 +1312,87 @@ export function BillingPage({
     credit: "bg-card border-amber-500 text-amber-700 shadow-sm",
   };
 
+  const isEditing = !!editingDraftId;
+  const showDiscardButton = isEditing || autoDraftActive;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
-        <div>
-          <h1 className="text-xl font-bold">{t("Point of Sale")}</h1>
-          <p className="text-muted-foreground text-sm">
-            Create invoices with automatic FIFO stock deduction
-          </p>
+        {/* ── Header row with edit mode indicator ──────────────────────── */}
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-bold">{t("Point of Sale")}</h1>
+              {isEditing && (
+                <Badge
+                  variant="secondary"
+                  className="bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 text-xs"
+                  data-ocid="billing.editing_draft.badge"
+                >
+                  <PenLine size={11} />
+                  Editing Draft
+                  {customerName.trim() ? ` — ${customerName.trim()}` : ""}
+                </Badge>
+              )}
+              {autoDraftActive && !isEditing && (
+                <Badge
+                  variant="secondary"
+                  className="bg-blue-100 text-blue-800 border border-blue-300 flex items-center gap-1 text-xs"
+                  data-ocid="billing.restored_draft.badge"
+                >
+                  <FileText size={11} />
+                  Restored
+                </Badge>
+              )}
+            </div>
+            <p className="text-muted-foreground text-sm">
+              Create invoices with automatic FIFO stock deduction
+            </p>
+          </div>
+
+          {/* Action buttons row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {showDiscardButton && (
+              <Button
+                data-ocid="billing.discard.button"
+                variant="outline"
+                size="sm"
+                className="text-destructive border-destructive/40 hover:bg-destructive/5 gap-1"
+                onClick={handleDiscard}
+              >
+                <X size={14} />
+                {isEditing ? "Discard Draft" : "Discard"}
+              </Button>
+            )}
+            <Button
+              data-ocid="billing.new_sale.button"
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={handleNewSale}
+            >
+              <Plus size={14} />
+              New Sale
+            </Button>
+            {onNavigate && (
+              <Button
+                data-ocid="billing.view_drafts.button"
+                variant="outline"
+                size="sm"
+                className="gap-1 text-amber-700 border-amber-300 hover:bg-amber-50"
+                onClick={() => {
+                  saveAutoDraft();
+                  onNavigate("drafts");
+                }}
+              >
+                <FileText size={14} />
+                Drafts
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Over Sell Detailed Alert Box */}
+        {/* Over Sell Alert */}
         {hasOverSell && (
           <div
             data-ocid="billing.oversell_alert_box"
@@ -1051,7 +1400,8 @@ export function BillingPage({
           >
             <div className="flex items-center gap-2 text-red-700 font-semibold text-sm">
               <AlertTriangle size={18} className="shrink-0" />
-              Over Sell Alert — {overSellItems.length} item(s) ka stock kum hai
+              Over Sell Alert — {overSellItems.length} item(s) have insufficient
+              stock
             </div>
             <div className="flex flex-col gap-2">
               {overSellItems.map((osi) => (
@@ -1092,8 +1442,8 @@ export function BillingPage({
               ))}
             </div>
             <p className="text-xs text-red-600">
-              ⚠️ Invoice ban sakta hai, lekin stock negative ho jaayega. Jaldi
-              stock mangvao.
+              ⚠️ Invoice can be created but stock will go negative. Please
+              replenish soon.
             </p>
           </div>
         )}
@@ -1131,7 +1481,7 @@ export function BillingPage({
                     )}
                     {(paymentMode === "credit" || computedDue > 0) && (
                       <span className="text-[10px] text-amber-600 ml-2 font-normal">
-                        Udhaar ke liye zaroori
+                        Required for dues
                       </span>
                     )}
                   </Label>
@@ -1151,14 +1501,13 @@ export function BillingPage({
                   {(paymentMode === "credit" || computedDue > 0) &&
                     !customerMobile.trim() && (
                       <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-0.5">
-                        ⚠️ Credit sale mein mobile number required hai
+                        ⚠️ Mobile number is required for credit sales
                       </p>
                     )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* ── Visual divider between Customer and Items ──────────────── */}
             <div className="flex items-center gap-3 -my-2">
               <div className="flex-1 h-px bg-border" />
               <span className="text-xs text-muted-foreground font-medium px-2 py-0.5 rounded-full bg-muted border border-border whitespace-nowrap">
@@ -1198,8 +1547,7 @@ export function BillingPage({
                             <SelectItem key={p.id} value={p.id}>
                               <span className={isZero ? "text-orange-500" : ""}>
                                 {isZero ? "⚠️ " : ""}
-                                {p.name} — Stock: {stock} {p.unit} @{" "}
-                                {fmt(p.sellingPrice)}
+                                {p.name} — Stock: {stock} {p.unit}
                               </span>
                             </SelectItem>
                           );
@@ -1208,6 +1556,7 @@ export function BillingPage({
                     </Select>
                   </div>
                   <Input
+                    ref={qtyInputRef}
                     data-ocid="billing.qty.input"
                     type="number"
                     placeholder="Qty"
@@ -1218,14 +1567,23 @@ export function BillingPage({
                     onFocus={(e) => {
                       if (e.target.value === "0") e.target.select();
                     }}
-                    className="w-20"
+                    className="w-28"
                   />
-                  <VoiceInputButton
-                    compact
-                    onParsed={handleBillingVoiceParsed}
-                    lang={language === "hi" ? "hi-IN" : "en-IN"}
-                    data-ocid="billing.voice_input.button"
-                  />
+                  {(appConfig.featureMode ?? 3) === 3 && (
+                    <>
+                      <VoiceInputButton
+                        compact
+                        onParsed={handleBillingVoiceParsed}
+                        lang={language === "hi" ? "hi-IN" : "en-IN"}
+                        data-ocid="billing.voice_input.button"
+                      />
+                      <QRScannerToggle
+                        products={products}
+                        onProductScanned={handleProductScanned}
+                        qtyInputRef={qtyInputRef}
+                      />
+                    </>
+                  )}
                   <Button
                     data-ocid="billing.add_item.button"
                     onClick={handleAddToCart}
@@ -1254,7 +1612,7 @@ export function BillingPage({
                   </label>
                 </div>
 
-                {/* Batch Selector — shown when manual mode is ON and product is selected */}
+                {/* Batch Selector */}
                 {manualBatchMode &&
                   selectedProductId &&
                   (() => {
@@ -1335,7 +1693,6 @@ export function BillingPage({
                           const isOverSell = item.quantity > available;
                           const cartKey =
                             item.selectedBatchId ?? item.productId;
-                          // Find batch number for display
                           const batchInfo = item.selectedBatchId
                             ? getProductBatches(item.productId).find(
                                 (b) => b.id === item.selectedBatchId,
@@ -1352,7 +1709,6 @@ export function BillingPage({
                               <TableCell className="text-sm font-medium">
                                 <div className="flex flex-col gap-0.5">
                                   {item.productName}
-                                  {/* Batch badge for manually selected batch */}
                                   {batchInfo && (
                                     <span className="inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 w-fit">
                                       <Layers size={9} />
@@ -1403,7 +1759,7 @@ export function BillingPage({
                                       if (e.target.value === "0")
                                         e.target.select();
                                     }}
-                                    className={`w-14 h-7 text-sm text-center ${isOverSell ? "border-red-500" : ""}`}
+                                    className={`w-20 h-9 text-sm text-center ${isOverSell ? "border-red-500" : ""}`}
                                   />
                                   <Button
                                     data-ocid={`billing.cart.qty_increment.${idx + 1}`}
@@ -1441,7 +1797,6 @@ export function BillingPage({
                                   );
                                   const sBonus = calcStaffBonus(exProfit);
                                   const errMsg = itemErrors[item.productId];
-                                  // Cost / Min / Sell price info — only for owner/manager
                                   const costP = canViewCost
                                     ? getProductCostPrice(item.productId)
                                     : 0;
@@ -1472,11 +1827,10 @@ export function BillingPage({
                                         }}
                                         className={`w-24 h-7 text-sm ${errMsg || isBelowMin ? "border-red-500 focus-visible:ring-red-400" : ""}`}
                                       />
-                                      {/* Cost / Min / Sell labels — hidden for staff */}
                                       {canViewCost && costP > 0 && (
                                         <div className="flex flex-wrap gap-x-1.5 gap-y-0.5 text-[10px] leading-tight">
                                           <span className="text-muted-foreground">
-                                            Lagat: ₹
+                                            Cost: ₹
                                             {Math.round(costP).toLocaleString(
                                               "en-IN",
                                             )}
@@ -1512,7 +1866,6 @@ export function BillingPage({
                                           Discount: {discPct.toFixed(1)}%
                                         </span>
                                       )}
-                                      {/* Extra profit / staff bonus — hidden for staff role */}
                                       {canViewCost && exProfit > 0 && (
                                         <span className="text-[10px] text-green-600 font-medium">
                                           +₹{exProfit.toFixed(0)} | 🎁 ₹
@@ -1585,7 +1938,7 @@ export function BillingPage({
                   {hasOverSell && (
                     <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 border border-red-300 text-xs text-red-700">
                       <AlertTriangle size={14} className="shrink-0" />
-                      {overSellItems.length} item(s) mein Over Sell hai
+                      {overSellItems.length} item(s) exceed available stock
                     </div>
                   )}
                   <Separator />
@@ -1595,7 +1948,7 @@ export function BillingPage({
                   </div>
                 </div>
 
-                {/* Payment Mode Selector */}
+                {/* Payment Mode */}
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium text-foreground">
                     {t("Payment Mode")}
@@ -1646,7 +1999,7 @@ export function BillingPage({
                   )}
                 </div>
 
-                {/* Partial Payment toggle (for non-credit) */}
+                {/* Partial Payment */}
                 {paymentMode !== "credit" && (
                   <div className="flex items-center gap-2">
                     <Checkbox
@@ -1667,7 +2020,6 @@ export function BillingPage({
                   </div>
                 )}
 
-                {/* Amount Paid input — shown only for partial */}
                 {isPartial && paymentMode !== "credit" && (
                   <div className="space-y-1.5">
                     <Label className="text-sm">Amount Paid (&#8377;)</Label>
@@ -1686,7 +2038,7 @@ export function BillingPage({
                   </div>
                 )}
 
-                {/* Cash / UPI / Credit breakdown card */}
+                {/* Breakdown */}
                 <div className="rounded-lg border border-border bg-card shadow-card overflow-hidden text-sm">
                   {paymentMode === "cash" && (
                     <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
@@ -1743,7 +2095,7 @@ export function BillingPage({
                   )}
                 </div>
 
-                {/* Smart Pricing Summary — hidden for staff role */}
+                {/* Smart Pricing */}
                 {canViewCost &&
                   cart.length > 0 &&
                   (() => {
@@ -1803,7 +2155,7 @@ export function BillingPage({
                               <span className="font-semibold text-green-600">
                                 ₹{staffBonusTotal.toLocaleString("en-IN")}{" "}
                                 <span className="text-[10px] font-normal">
-                                  (Staff ko milega)
+                                  (Earned by staff)
                                 </span>
                               </span>
                             </div>
@@ -1812,25 +2164,63 @@ export function BillingPage({
                         {hasErrors && (
                           <div className="flex items-center gap-1 text-red-600 text-[11px] pt-0.5">
                             <AlertTriangle size={11} />
-                            Pricing errors hain — fix karein
+                            There are pricing errors — please fix them
                           </div>
                         )}
                       </div>
                     );
                   })()}
 
+                {/* Auto-save indicator */}
+                {lastSavedAt && cart.length > 0 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    💾 Draft auto-saved{" "}
+                    {Math.floor((Date.now() - lastSavedAt.getTime()) / 1000) <
+                    60
+                      ? "just now"
+                      : `${Math.floor((Date.now() - lastSavedAt.getTime()) / 60000)}m ago`}
+                  </p>
+                )}
+
+                {/* Save Draft button */}
+                <Button
+                  data-ocid="billing.save_draft.button"
+                  variant="outline"
+                  className="w-full gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                  onClick={handleSaveDraft}
+                  disabled={cart.length === 0 && !customerName.trim()}
+                >
+                  <FileText size={15} />
+                  {isEditing ? "Update Draft" : "Save Draft"}
+                </Button>
+
                 <Button
                   data-ocid="billing.generate_invoice.button"
                   className="w-full h-11 text-base font-semibold"
-                  onClick={handleGenerateInvoice}
+                  onClick={() => {
+                    setIsPaymentProcessing(true);
+                    handleGenerateInvoice();
+                    setTimeout(() => setIsPaymentProcessing(false), 1500);
+                  }}
                   disabled={
-                    cart.length === 0 || Object.keys(itemErrors).length > 0
+                    cart.length === 0 ||
+                    Object.keys(itemErrors).length > 0 ||
+                    isPaymentProcessing
                   }
                 >
-                  <Receipt size={16} className="mr-2" />
-                  {paymentMode === "cash" && onNavigate
-                    ? "💰 Cash Counter se Payment"
-                    : t("Generate Invoice")}
+                  {isPaymentProcessing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Receipt size={16} className="mr-2" />
+                      {paymentMode === "cash" && onNavigate
+                        ? "💰 Pay via Cash Counter"
+                        : t("Generate Invoice")}
+                    </>
+                  )}
                 </Button>
               </CardContent>
             </Card>
@@ -1858,6 +2248,13 @@ export function BillingPage({
           onCancel={handleLowPriceModalCancel}
         />
       )}
+
+      {/* New Sale Confirmation */}
+      <NewSaleConfirmDialog
+        open={showNewSaleConfirm}
+        onConfirm={handleNewSaleConfirm}
+        onCancel={() => setShowNewSaleConfirm(false)}
+      />
     </div>
   );
 }
@@ -1871,202 +2268,6 @@ function InvoiceDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const hasOverSellItems = invoice.items.some((item) => item.isOverSell);
-  const due = invoice.dueAmount ?? invoice.totalAmount - invoice.paidAmount;
-
-  const handleWhatsApp = () => {
-    const itemLines = invoice.items.map(
-      (item) =>
-        `• ${item.productName}: ${item.quantity} x ₹${item.sellingRate} = ₹${item.quantity * item.sellingRate}${
-          item.isOverSell ? " [OVER SELL]" : ""
-        }`,
-    );
-    const balance = due > 0 ? `Balance Due: ₹${due}` : "✅ Fully Paid";
-    const lines = [
-      "*Save Shop System*",
-      `Invoice: ${invoice.invoiceNumber}`,
-      `Date: ${new Date(invoice.date).toLocaleDateString("en-IN")}`,
-      `Customer: ${invoice.customerName}${
-        invoice.customerMobile ? ` (${invoice.customerMobile})` : ""
-      }`,
-      "",
-      "*Items:*",
-      ...itemLines,
-      "",
-      `*Total: ₹${invoice.totalAmount}*`,
-      `Paid: ₹${invoice.paidAmount} (${invoice.paymentMode.toUpperCase()})`,
-      balance,
-      "",
-      "Thank you for shopping with us!",
-    ];
-    const text = encodeURIComponent(lines.join("\n"));
-    window.open(`https://wa.me/?text=${text}`, "_blank");
-  };
-
-  const handlePrint = () => window.print();
-
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent
-        data-ocid="billing.invoice.dialog"
-        className="max-w-md max-h-[90vh] overflow-y-auto"
-      >
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Receipt size={18} className="text-primary" />
-            Invoice Generated
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Header */}
-          <div className="bg-primary/5 rounded-lg p-4 text-center">
-            <div className="font-bold text-lg">Save Shop System</div>
-            <div className="text-muted-foreground text-sm">
-              Invoice #{invoice.invoiceNumber}
-            </div>
-            <div className="text-muted-foreground text-xs">
-              {new Date(invoice.date).toLocaleString("en-IN")}
-            </div>
-          </div>
-
-          {/* Over Sell Warning in Invoice */}
-          {hasOverSellItems && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border-2 border-red-400">
-              <AlertTriangle
-                size={16}
-                className="text-red-600 shrink-0 mt-0.5"
-              />
-              <div>
-                <div className="text-sm font-semibold text-red-700">
-                  Over Sell Warning
-                </div>
-                <div className="text-xs text-red-600 mt-0.5">
-                  Kuch items ka stock available se zyada bika hai. Stock
-                  replenish karein.
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Customer: </span>
-              <span className="font-medium">{invoice.customerName}</span>
-            </div>
-            {invoice.customerMobile && (
-              <div>
-                <span className="text-muted-foreground">Mobile: </span>
-                <span>{invoice.customerMobile}</span>
-              </div>
-            )}
-            <div>
-              <span className="text-muted-foreground">Payment: </span>
-              <Badge variant="outline" className="text-xs capitalize">
-                {invoice.paymentMode}
-              </Badge>
-            </div>
-          </div>
-
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-secondary/50">
-                <TableHead className="text-xs">Item</TableHead>
-                <TableHead className="text-xs text-right">Qty</TableHead>
-                <TableHead className="text-xs text-right">Rate</TableHead>
-                <TableHead className="text-xs text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoice.items.map((item) => (
-                <TableRow
-                  key={item.productId}
-                  style={item.isOverSell ? { backgroundColor: "#ffe5e5" } : {}}
-                >
-                  <TableCell className="text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      <span>{item.productName}</span>
-                      {item.isOverSell && (
-                        <Badge className="w-fit bg-red-600 text-white border-0 text-[9px] uppercase px-1 py-0">
-                          Over Sell Item
-                        </Badge>
-                      )}
-                      {item.isOverSell &&
-                        item.availableStockAtSale !== undefined && (
-                          <span className="text-[10px] text-red-600">
-                            Available: {item.availableStockAtSale} | Sold:{" "}
-                            {item.quantity} | Extra:{" "}
-                            {item.quantity - item.availableStockAtSale}
-                          </span>
-                        )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs text-right">
-                    {item.quantity}
-                  </TableCell>
-                  <TableCell className="text-xs text-right">
-                    &#8377;{item.sellingRate}
-                  </TableCell>
-                  <TableCell className="text-xs text-right font-semibold">
-                    &#8377;{item.quantity * item.sellingRate}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          <div className="border-t border-border pt-3 space-y-1.5">
-            <div className="flex justify-between font-bold text-base">
-              <span>Total</span>
-              <span>&#8377;{invoice.totalAmount}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Paid</span>
-              <span className="text-green-600 font-medium">
-                &#8377;{invoice.paidAmount}
-              </span>
-            </div>
-            {due > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Balance Due</span>
-                <span className="text-red-600 font-bold">&#8377;{due}</span>
-              </div>
-            )}
-            {due === 0 && (
-              <div className="flex items-center gap-1 text-green-600 text-sm font-medium">
-                <span>✅ Fully Paid</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              data-ocid="billing.invoice.whatsapp.button"
-              variant="outline"
-              className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
-              onClick={handleWhatsApp}
-            >
-              <MessageCircle size={16} className="mr-2" /> Share on WhatsApp
-            </Button>
-            <Button
-              data-ocid="billing.invoice.print.button"
-              variant="outline"
-              className="flex-1"
-              onClick={handlePrint}
-            >
-              <Printer size={16} className="mr-2" /> Print
-            </Button>
-          </div>
-
-          <Button
-            data-ocid="billing.invoice.close.button"
-            className="w-full"
-            onClick={onClose}
-          >
-            Close &amp; New Sale
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
+  if (!open) return null;
+  return <InvoiceShareModal invoice={invoice} onClose={onClose} />;
 }

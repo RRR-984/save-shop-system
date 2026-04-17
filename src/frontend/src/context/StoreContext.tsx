@@ -13,13 +13,19 @@ import { createActorWithConfig } from "../config";
 import type {
   AppConfig,
   AppUser,
+  AttendanceRecord,
   AuditLog,
+  CartDraftItem,
   Category,
   Customer,
   CustomerOrder,
+  DashboardSectionConfig,
   DiamondReward,
+  DraftSale,
   DraftSnapshot,
   FeatureFlags,
+  FeedbackEntry,
+  FeedbackType,
   Invoice,
   InvoiceItem,
   LowPriceAlertLog,
@@ -27,6 +33,8 @@ import type {
   Product,
   PurchaseOrder,
   QAChange,
+  ReferralCode,
+  ReferralSignup,
   ReminderLog,
   ReminderRequest,
   ReturnEntry,
@@ -34,10 +42,17 @@ import type {
   ShopUnit,
   StockBatch,
   StockTransaction,
+  UserRole,
   Vendor,
   VendorRateHistory,
 } from "../types/store";
-import { STORAGE_KEYS, loadData, saveData } from "../utils/localStorage";
+import {
+  STORAGE_KEYS,
+  loadData,
+  loadDrafts,
+  saveData,
+  saveDrafts,
+} from "../utils/localStorage";
 import { useAuth, useAuthUserSync } from "./AuthContext";
 
 // Re-export AppUser for compatibility
@@ -45,6 +60,33 @@ export type { AppUser };
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// ─── Device fingerprint for referral fraud prevention ─────────────────────────
+// Returns a stable per-device ID stored in localStorage.
+// Fingerprint = hash of userAgent + screen dimensions + random salt (first time).
+function getDeviceId(): string {
+  const existing = localStorage.getItem("referral_device_id");
+  if (existing) return existing;
+  const raw = `${navigator.userAgent}|${screen.width}x${screen.height}|${Math.random().toString(36)}`;
+  // Simple hash: sum of charCodes converted to base-36
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = (hash * 31 + raw.charCodeAt(i)) >>> 0;
+  }
+  const id = `dev_${hash.toString(36)}_${Date.now().toString(36)}`;
+  localStorage.setItem("referral_device_id", id);
+  return id;
+}
+
+// Returns the referral code this device has already claimed (if any).
+function getDeviceUsedReferralCode(): string | null {
+  return localStorage.getItem("referral_device_used_code");
+}
+
+// Marks a referral code as used on this device (prevents re-use).
+function setDeviceUsedReferralCode(code: string): void {
+  localStorage.setItem("referral_device_used_code", code);
 }
 
 // Walk-in customer identifier — never added to ledger
@@ -105,6 +147,16 @@ interface StoreContextValue {
 
   // Loading state
   isLoading: boolean;
+
+  // Actor connection error (null = no error)
+  actorError: string | null;
+
+  // Refresh system
+  refreshCounter: number;
+  triggerRefresh: () => void;
+
+  // ICP sync indicator
+  isSyncing: boolean;
 
   // Shop Settings
   shopSettings: ShopSettings;
@@ -214,16 +266,30 @@ interface StoreContextValue {
     returnsToday: ReturnEntry[];
   };
 
-  // Draft / History
+  // Draft / History (DraftSnapshot — ICP-backed snapshots)
   getDrafts: () => Promise<DraftSnapshot[]>;
   saveDraftNow: (label: string) => Promise<void>;
   restoreDraft: (snapshotId: string) => Promise<void>;
+
+  // Draft Sale System (localStorage-only — saves in-progress billing sessions)
+  // ICP backend is intentionally out of scope for draft sales (localStorage only).
+  draftSales: DraftSale[];
+  saveDraft: (draft: DraftSale) => void;
+  deleteDraft: (draftId: string) => void;
+  getDraftById: (draftId: string) => DraftSale | undefined;
+  markDraftCompleted: (draftId: string) => void;
 
   // App Config & Feature Flags
   appConfig: AppConfig;
   featureFlags: FeatureFlags;
   saveAppConfig: (config: Partial<AppConfig>) => Promise<void>;
   setFeatureFlag: (flag: keyof FeatureFlags, value: boolean) => Promise<void>;
+  setDashboardSection: (
+    key: keyof DashboardSectionConfig,
+    value: boolean,
+  ) => Promise<void>;
+  /** Set feature mode (1=Simple, 2=Advanced, 3=All) — saved per-shop in localStorage */
+  setFeatureMode: (mode: 1 | 2 | 3) => void;
 
   // Low Price Alert Log
   lowPriceAlertLogs: LowPriceAlertLog[];
@@ -292,6 +358,49 @@ interface StoreContextValue {
   diamondRewards: DiamondReward[];
   awardDiamond: (productId: string, productName: string) => void;
   getTotalDiamonds: () => number;
+
+  // Feedback System
+  feedbackList: FeedbackEntry[];
+  submitFeedback: (
+    type: FeedbackType,
+    title: string,
+    description: string,
+  ) => void;
+  approveFeedback: (feedbackId: string, approvedBy: string) => void;
+  rejectFeedback: (feedbackId: string, reason: string) => void;
+
+  // Referral System
+  referralCodes: ReferralCode[];
+  referralSignups: ReferralSignup[];
+  getOrCreateReferralCode: () => ReferralCode;
+  awardReferralDiamonds: (referralSignupId: string) => void;
+  /** Check if this device has already claimed a referral code different from `code`.
+   *  Returns an error string if blocked, or null if allowed. */
+  checkReferralDeviceFraud: (code: string) => string | null;
+  /** Record a new referral signup from this device with the given referral code.
+   *  Persists deviceId and marks the device as having used this code. */
+  recordReferralSignup: (
+    referralCode: ReferralCode,
+    newUserId: string,
+    newUserName: string,
+    newUserMobile: string,
+  ) => void;
+
+  // Attendance System
+  attendanceRecords: AttendanceRecord[];
+  clockIn: (
+    staffId: string,
+    staffName: string,
+    staffRole: UserRole,
+  ) => AttendanceRecord;
+  clockOut: (staffId: string) => AttendanceRecord | null;
+  getAttendanceForDate: (date: string) => AttendanceRecord[];
+  getAttendanceForStaff: (staffId: string, month: string) => AttendanceRecord[];
+  updateAttendance: (id: string, updates: Partial<AttendanceRecord>) => void;
+
+  // Bulk Reminder
+  bulkReminderSentAt: string | null;
+  sendBulkReminder: () => { sent: number; customers: Customer[] };
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -311,9 +420,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ── Actor state & ref ─────────────────────────────────────────────────────────────────────
   const [actor, setActor] = useState<backendInterface | null>(null);
   const actorRef = useRef<backendInterface | null>(null);
+  const [actorError, setActorError] = useState<string | null>(null);
 
   useEffect(() => {
-    createActorWithConfig().then(setActor).catch(console.error);
+    createActorWithConfig()
+      .then((a) => {
+        setActorError(null);
+        setActor(a);
+      })
+      .catch((err) => {
+        console.error("[StoreContext] Actor creation failed:", err);
+        setActorError(err instanceof Error ? err.message : "Connection failed");
+        // Still mark loading as done so app doesn't stay blank
+        setIsLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -322,6 +442,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ── Loading state ─────────────────────────────────────────────────────────────────────
   const [isLoading, setIsLoading] = useState(true);
+
+  // ── Refresh counter — incremented after every mutation so consumers can react ─
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  const triggerRefresh = useCallback(() => {
+    setRefreshCounter((c) => c + 1);
+  }, []);
+
+  // ── ICP sync status (yellow = in-flight, green = settled) ─────────────────
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // ── Helper: fire ICP call with syncing indicator ───────────────────────────
+  const withSync = useCallback((icpPromise: Promise<unknown> | undefined) => {
+    if (!icpPromise) return;
+    setIsSyncing(true);
+    icpPromise.then(() => setIsSyncing(false)).catch(() => setIsSyncing(false));
+  }, []);
+
+  // Expose withSync as a ref so it can be used in callbacks without stale closure
+  const withSyncRef = useRef(withSync);
+  useEffect(() => {
+    withSyncRef.current = withSync;
+  }, [withSync]);
 
   // Fallback: if actor never initializes, stop loading after 8s so app doesn't stay stuck
   useEffect(() => {
@@ -376,6 +518,60 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const diamondRewardsRef = useRef<DiamondReward[]>(
     loadData<DiamondReward[]>(STORAGE_KEYS.diamondRewards, []),
   );
+
+  // ── Feedback state ────────────────────────────────────────────────────────
+  const [feedbackList, setFeedbackList] = useState<FeedbackEntry[]>(() =>
+    loadData<FeedbackEntry[]>(STORAGE_KEYS.feedback, []),
+  );
+  const feedbackListRef = useRef<FeedbackEntry[]>(
+    loadData<FeedbackEntry[]>(STORAGE_KEYS.feedback, []),
+  );
+
+  // ── Referral state ────────────────────────────────────────────────────────
+  const [referralCodes, setReferralCodes] = useState<ReferralCode[]>(() =>
+    loadData<ReferralCode[]>(STORAGE_KEYS.referralCodes, []),
+  );
+  const referralCodesRef = useRef<ReferralCode[]>(
+    loadData<ReferralCode[]>(STORAGE_KEYS.referralCodes, []),
+  );
+
+  const [referralSignups, setReferralSignups] = useState<ReferralSignup[]>(() =>
+    loadData<ReferralSignup[]>(STORAGE_KEYS.referralSignups, []),
+  );
+  const referralSignupsRef = useRef<ReferralSignup[]>(
+    loadData<ReferralSignup[]>(STORAGE_KEYS.referralSignups, []),
+  );
+
+  // ── Attendance state ──────────────────────────────────────────────────────
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    AttendanceRecord[]
+  >(() =>
+    loadData<AttendanceRecord[]>(
+      `attendanceRecords_${localStorage.getItem("last_shop_id") ?? "shop-default"}`,
+      [],
+    ),
+  );
+  const attendanceRecordsRef = useRef<AttendanceRecord[]>(
+    loadData<AttendanceRecord[]>(
+      `attendanceRecords_${localStorage.getItem("last_shop_id") ?? "shop-default"}`,
+      [],
+    ),
+  );
+
+  // ── Bulk reminder sentAt (per shop) ───────────────────────────────────────
+  const [bulkReminderSentAt, setBulkReminderSentAt] = useState<string | null>(
+    () =>
+      localStorage.getItem(
+        `bulkReminderSentAt_${localStorage.getItem("last_shop_id") ?? "shop-default"}`,
+      ) ?? null,
+  );
+
+  // ── Draft Sale state (localStorage only — ICP backend out of scope) ───────
+  // draftSales is scoped per-shop via loadDrafts/saveDrafts.
+  // shopId is not stable at this point in initialization (may still be default),
+  // so we initialise lazily on first access or on shopId effect below.
+  const [draftSales, setDraftSales] = useState<DraftSale[]>([]);
+  const draftSalesRef = useRef<DraftSale[]>([]);
 
   // ── Transaction counter for diamond rewards (1 diamond per 10 transactions) ──
   // Key is per-shop so different shops don't share a counter
@@ -443,28 +639,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const sid = localStorage.getItem("last_shop_id") ?? "shop-default";
       const raw = localStorage.getItem(`appConfig_${sid}`);
-      if (raw)
-        return { ...DEFAULT_APP_CONFIG, ...JSON.parse(raw) } as AppConfig;
+      const modeRaw = localStorage.getItem(`feature_mode_${sid}`);
+      const featureMode = modeRaw ? (Number(modeRaw) as 1 | 2 | 3) : 3;
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<AppConfig>;
+        return { ...DEFAULT_APP_CONFIG, ...parsed, featureMode } as AppConfig;
+      }
     } catch (_) {
       // ignore parse errors
     }
-    return DEFAULT_APP_CONFIG;
+    return { ...DEFAULT_APP_CONFIG, featureMode: 3 };
   });
 
   // Re-load appConfig when shopId changes
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`appConfig_${shopId}`);
+      const modeRaw = localStorage.getItem(`feature_mode_${shopId}`);
+      const featureMode = modeRaw ? (Number(modeRaw) as 1 | 2 | 3) : 3;
       if (raw) {
+        const parsed = JSON.parse(raw) as Partial<AppConfig>;
         setAppConfig({
           ...DEFAULT_APP_CONFIG,
-          ...JSON.parse(raw),
+          ...parsed,
+          featureMode,
         } as AppConfig);
       } else {
-        setAppConfig(DEFAULT_APP_CONFIG);
+        setAppConfig({ ...DEFAULT_APP_CONFIG, featureMode });
       }
     } catch (_) {
-      setAppConfig(DEFAULT_APP_CONFIG);
+      setAppConfig({ ...DEFAULT_APP_CONFIG, featureMode: 3 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shopId]);
@@ -487,6 +691,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...prev,
           featureFlags: { ...prev.featureFlags, [flag]: value },
         };
+        localStorage.setItem(`appConfig_${shopId}`, JSON.stringify(updated));
+        return updated;
+      });
+    },
+    [shopId],
+  );
+
+  const setDashboardSection = useCallback(
+    async (
+      key: keyof DashboardSectionConfig,
+      value: boolean,
+    ): Promise<void> => {
+      setAppConfig((prev) => {
+        const updated: AppConfig = {
+          ...prev,
+          dashboardSections: { ...prev.dashboardSections, [key]: value },
+        };
+        localStorage.setItem(`appConfig_${shopId}`, JSON.stringify(updated));
+        return updated;
+      });
+    },
+    [shopId],
+  );
+
+  const setFeatureMode = useCallback(
+    (mode: 1 | 2 | 3): void => {
+      localStorage.setItem(`feature_mode_${shopId}`, String(mode));
+      setAppConfig((prev) => {
+        const updated: AppConfig = { ...prev, featureMode: mode };
         localStorage.setItem(`appConfig_${shopId}`, JSON.stringify(updated));
         return updated;
       });
@@ -517,9 +750,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     shopIdRef.current = shopId;
     // Reload transaction counter for the new shopId
     txCounterRef.current = loadData<number>(`transactionCounter_${shopId}`, 0);
+    // Reload draft sales for the new shopId
+    const loaded = loadDrafts(shopId);
+    draftSalesRef.current = loaded;
+    setDraftSales(loaded);
+    // Reload attendance records for the new shopId
+    const loadedAttendance = loadData<AttendanceRecord[]>(
+      `attendanceRecords_${shopId}`,
+      [],
+    );
+    attendanceRecordsRef.current = loadedAttendance;
+    setAttendanceRecords(loadedAttendance);
+    // Reload bulk reminder sentAt for the new shopId
+    const sentAt = localStorage.getItem(`bulkReminderSentAt_${shopId}`) ?? null;
+    setBulkReminderSentAt(sentAt);
   }, [shopId]);
 
-  // ── Load all data from ICP backend when shopId & actor are ready ────────────────────────────
+  // ── Auto-trigger refresh when key data arrays change (post-mutation sync) ──
+  // This is intentionally using individual change tracking via a combined ref
+  const _prevDataSig = useRef("");
+  useEffect(() => {
+    const sig = [
+      products.length,
+      batches.length,
+      invoices.length,
+      customers.length,
+      payments.length,
+      returns.length,
+    ].join(",");
+    if (sig !== _prevDataSig.current) {
+      _prevDataSig.current = sig;
+      triggerRefresh();
+    }
+  });
+
+  // ── Load all data from ICP backend when shopId & actor are ready ─────────
   useEffect(() => {
     if (!shopId || !actor) return;
 
@@ -843,7 +1108,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       [
         {
           type: "product_added",
-          description: `Naya product add kiya: ${p.name}`,
+          description: `New product added: ${p.name}`,
         },
       ],
       productsRef.current,
@@ -879,7 +1144,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       return updated;
     });
-    toast.success("Data save ho gaya ✓", { duration: 2500 });
+    toast.success("Data saved ✓", { duration: 2500 });
     return id;
   }, []);
 
@@ -891,7 +1156,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       [
         {
           type: "product_edited",
-          description: `Product edit kiya: ${existing?.name ?? id}`,
+          description: `Product edited: ${existing?.name ?? id}`,
         },
       ],
       current,
@@ -908,7 +1173,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.products, updated);
       return updated;
     });
-    toast.success("Data save ho gaya ✓", { duration: 2500 });
+    toast.success("Data saved ✓", { duration: 2500 });
   }, []);
 
   const deleteProduct = useCallback((id: string) => {
@@ -919,7 +1184,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       [
         {
           type: "product_deleted",
-          description: `Product delete kiya: ${existing?.name ?? id}`,
+          description: `Product deleted: ${existing?.name ?? id}`,
         },
       ],
       current,
@@ -936,7 +1201,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.products, updated);
       return updated;
     });
-    toast.success("Data save ho gaya ✓", { duration: 2500 });
+    toast.success("Data saved ✓", { duration: 2500 });
   }, []);
 
   // ── Stock Helpers ────────────────────────────────────────────────────────────────────────────
@@ -1044,7 +1309,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         [
           {
             type: "stock_in",
-            description: `Stock add kiya: ${productName} - ${quantity} units @ \u20b9${purchaseRate}`,
+            description: `Stock added: ${productName} - ${quantity} units @ ₹${purchaseRate}`,
           },
         ],
         productsRef.current,
@@ -1080,10 +1345,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
       setBatches((prev) => {
         const updated = [...prev, newBatch];
-        actorRef.current?.saveBatches(
+        const icpPromise = actorRef.current?.saveBatches(
           shopIdRef.current,
           JSON.stringify(updated),
         );
+        withSyncRef.current(icpPromise);
         saveData(STORAGE_KEYS.batches, updated);
         return updated;
       });
@@ -1106,7 +1372,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return updated;
       });
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
   );
@@ -1123,7 +1389,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         [
           {
             type: "stock_out",
-            description: `Stock nikala: ${productName} - ${quantity} units`,
+            description: `Stock removed: ${productName} - ${quantity} units`,
           },
         ],
         productsRef.current,
@@ -1184,7 +1450,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
-    toast.success("Data save ho gaya ✓", { duration: 2500 });
+    toast.success("Data saved ✓", { duration: 2500 });
   }, []);
 
   const updateCustomer = useCallback((id: string, c: Partial<Customer>) => {
@@ -1197,7 +1463,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
-    toast.success("Data save ho gaya ✓", { duration: 2500 });
+    toast.success("Data saved ✓", { duration: 2500 });
   }, []);
 
   const deleteCustomer = useCallback((id: string) => {
@@ -1210,7 +1476,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveData(STORAGE_KEYS.customers, updated);
       return updated;
     });
-    toast.success("Data save ho gaya ✓", { duration: 2500 });
+    toast.success("Data saved ✓", { duration: 2500 });
   }, []);
 
   // ── Invoice ────────────────────────────────────────────────────────────────────────────────
@@ -1367,7 +1633,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       saveData(STORAGE_KEYS.sales, updatedInvoices);
       setInvoices(updatedInvoices);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
 
       // ── Diamond Reward: 1 diamond per 10 completed transactions ──────────────
       // Increment per-shop transaction counter and award 1 diamond every 10th tx
@@ -1393,6 +1659,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           productName: `${newTxCount} transactions completed`,
           cycleCompletedAt: new Date().toISOString(),
           diamondCount: diamondsEarned,
+          rewardType: "transaction",
         };
         const updatedRewards = [...diamondRewardsRef.current, reward];
         diamondRewardsRef.current = updatedRewards;
@@ -1402,7 +1669,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const lang = localStorage.getItem("saveshop_language") ?? "en";
         toast.success(
           lang === "hi"
-            ? `🎉 Diamond mila! ${newTxCount} transactions complete!`
+            ? `🎉 Diamond earned! ${newTxCount} transactions complete!`
             : `🎉 Diamond earned! ${newTxCount} transactions complete!`,
           { duration: 4000 },
         );
@@ -1415,6 +1682,84 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           );
         } catch (_) {
           /* method may not exist yet */
+        }
+      }
+
+      // ── Check referral reward on first transaction ────────────────────────
+      // If this is the user's first invoice, check if they were referred
+      const shopInvoicesAfter = [...invoicesRef.current];
+      const userMobile = data.customerMobile ?? "";
+      const isFirstInvoice = shopInvoicesAfter.length === 1;
+      if (isFirstInvoice && userMobile) {
+        const normalizedMobile = userMobile.replace(/\D/g, "");
+        const pendingSignup = referralSignupsRef.current.find(
+          (s) =>
+            s.newUserMobile.replace(/\D/g, "") === normalizedMobile &&
+            !s.firstTransactionCompleted,
+        );
+        if (pendingSignup) {
+          // Mark first transaction completed
+          const updatedSignups = referralSignupsRef.current.map((s) =>
+            s.id === pendingSignup.id
+              ? { ...s, firstTransactionCompleted: true }
+              : s,
+          );
+          referralSignupsRef.current = updatedSignups;
+          setReferralSignups(updatedSignups);
+          saveData(STORAGE_KEYS.referralSignups, updatedSignups);
+          // Award diamonds to both parties
+          // (we call awardReferralDiamonds inline to avoid stale closure)
+          const signup = pendingSignup;
+          if (!signup.rewardAwardedToReferrer) {
+            const updatedSignups2 = updatedSignups.map((s) =>
+              s.id === signup.id
+                ? {
+                    ...s,
+                    rewardAwardedToReferrer: true,
+                    rewardAwardedToNewUser: true,
+                  }
+                : s,
+            );
+            referralSignupsRef.current = updatedSignups2;
+            setReferralSignups(updatedSignups2);
+            saveData(STORAGE_KEYS.referralSignups, updatedSignups2);
+
+            const referrerReward: DiamondReward = {
+              id: generateId(),
+              shopId: shopIdRef.current,
+              userId: signup.referrerUserId,
+              userName: signup.referrerName,
+              productId: "referral",
+              productName: `Referral: ${signup.newUserName} joined`,
+              cycleCompletedAt: new Date().toISOString(),
+              diamondCount: 10,
+              rewardType: "referral",
+              referralId: signup.id,
+            };
+            const newUserRewardEntry: DiamondReward = {
+              id: generateId(),
+              shopId: shopIdRef.current,
+              userId: signup.newUserId,
+              userName: signup.newUserName,
+              productId: "referral-welcome",
+              productName: "Welcome Bonus — Referral",
+              cycleCompletedAt: new Date().toISOString(),
+              diamondCount: 10,
+              rewardType: "referral",
+              referralId: signup.id,
+            };
+            const rewardsWithReferral = [
+              ...diamondRewardsRef.current,
+              referrerReward,
+              newUserRewardEntry,
+            ];
+            diamondRewardsRef.current = rewardsWithReferral;
+            setDiamondRewards(rewardsWithReferral);
+            saveData(STORAGE_KEYS.diamondRewards, rewardsWithReferral);
+            toast.success(
+              `🎉 Referral reward! 10 💎 each for ${signup.referrerName} & ${signup.newUserName}`,
+            );
+          }
         }
       }
 
@@ -1524,7 +1869,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return updated;
         });
       }
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
   );
@@ -1824,12 +2169,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       const availableToReturn = totalSold - totalAlreadyReturned;
       if (entry.qtyReturned > availableToReturn) {
-        toast.error(`Sirf ${availableToReturn} qty return kar sakte hain`);
+        toast.error(`You can only return up to ${availableToReturn} qty`);
         return false;
       }
 
       if (entry.qtyReturned <= 0) {
-        toast.error("Return qty 0 se zyada honi chahiye");
+        toast.error("Return quantity must be greater than 0");
         return false;
       }
 
@@ -1885,7 +2230,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updatedReturns),
       );
       saveData(STORAGE_KEYS.returns, updatedReturns);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
 
       return true;
     },
@@ -1933,7 +2278,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const buildReminderMessage = useCallback(
     (customerName: string, dueAmount: number): string => {
       const shopName = currentShop?.name ?? "Save Shop System";
-      return `Namaste ${customerName},\nAapka ₹${Math.round(dueAmount).toLocaleString("en-IN")} baki hai.\n\nKripya jaldi payment kare.\n\nDhanyavaad 🙏\n${shopName}`;
+      return `Hello ${customerName},\nYou have an outstanding balance of ₹${Math.round(dueAmount).toLocaleString("en-IN")}.\n\nKindly make the payment at your earliest convenience.\n\nThank you 🙏\n${shopName}`;
     },
     [currentShop],
   );
@@ -2165,7 +2510,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.vendors, updated);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
   );
@@ -2182,7 +2527,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.vendors, updated);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
   );
@@ -2196,7 +2541,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       JSON.stringify(updated),
     );
     saveData(STORAGE_KEYS.vendors, updated);
-    toast.success("Data save ho gaya ✓", { duration: 2500 });
+    toast.success("Data saved ✓", { duration: 2500 });
   }, []);
 
   // ── Purchase Order CRUD ───────────────────────────────────────────────────────
@@ -2218,7 +2563,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.purchaseOrders, updated);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
   );
@@ -2235,7 +2580,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.purchaseOrders, updated);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
   );
@@ -2305,7 +2650,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.customerOrders, updated);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
   );
@@ -2324,7 +2669,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.customerOrders, updated);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
       // Convert to invoice
       const customer = customers.find((c) => c.id === co.customerId);
       const seller = currentUserRef.current;
@@ -2371,7 +2716,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         JSON.stringify(updated),
       );
       saveData(STORAGE_KEYS.customerOrders, updated);
-      toast.success("Data save ho gaya ✓", { duration: 2500 });
+      toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
   );
@@ -2507,7 +2852,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       transactions: transactionsRef.current,
       invoices: invoicesRef.current,
       qaChanges: [
-        { type: "product_added", description: "Manual snapshot liya gaya" },
+        { type: "product_added", description: "Manual snapshot saved" },
       ],
     };
     await ac.saveDrafts(sid, JSON.stringify([snap, ...existing].slice(0, 10)));
@@ -2536,6 +2881,564 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // ── Draft Sale CRUD (localStorage only) ──────────────────────────────────────
+  // ICP backend is intentionally out of scope for draft sales.
+  // Drafts are scoped per-shop via saveDrafts/loadDrafts helpers.
+
+  const saveDraft = useCallback((draft: DraftSale): void => {
+    const existing = draftSalesRef.current;
+    // Upsert by draftId
+    const idx = existing.findIndex((d) => d.draftId === draft.draftId);
+    const updated: DraftSale[] =
+      idx >= 0
+        ? existing.map((d) => (d.draftId === draft.draftId ? draft : d))
+        : [draft, ...existing];
+    draftSalesRef.current = updated;
+    setDraftSales(updated);
+    saveDrafts(updated, shopIdRef.current);
+  }, []);
+
+  const deleteDraft = useCallback((draftId: string): void => {
+    const updated = draftSalesRef.current.filter((d) => d.draftId !== draftId);
+    draftSalesRef.current = updated;
+    setDraftSales(updated);
+    saveDrafts(updated, shopIdRef.current);
+  }, []);
+
+  const getDraftById = useCallback(
+    (draftId: string): DraftSale | undefined =>
+      draftSalesRef.current.find((d) => d.draftId === draftId),
+    [],
+  );
+
+  const markDraftCompleted = useCallback((draftId: string): void => {
+    const updated = draftSalesRef.current.map((d) =>
+      d.draftId === draftId
+        ? {
+            ...d,
+            status: "completed" as const,
+            updatedAt: new Date().toISOString(),
+          }
+        : d,
+    );
+    draftSalesRef.current = updated;
+    setDraftSales(updated);
+    saveDrafts(updated, shopIdRef.current);
+  }, []);
+
+  // ── Feedback Functions ───────────────────────────────────────────────────
+  const submitFeedback = useCallback(
+    (type: FeedbackType, title: string, description: string) => {
+      const user = currentUser;
+      const newEntry: FeedbackEntry = {
+        id: `fb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        userId: user?.id ?? shopIdRef.current,
+        userName: user?.name ?? "Owner",
+        type,
+        title: title.trim(),
+        description: description.trim(),
+        status: "pending",
+        rewardGiven: false,
+        submittedAt: new Date().toISOString(),
+      };
+      const updated = [newEntry, ...feedbackListRef.current];
+      feedbackListRef.current = updated;
+      setFeedbackList(updated);
+      saveData(STORAGE_KEYS.feedback, updated);
+      try {
+        (actorRef.current as any)?.saveFeedback?.(
+          shopIdRef.current,
+          JSON.stringify(updated),
+        );
+      } catch (_) {
+        /* optional backend method */
+      }
+      toast.success(
+        "Feedback submitted! Awaiting approval for diamond reward 💎",
+      );
+    },
+    [currentUser],
+  );
+
+  const approveFeedback = useCallback(
+    (feedbackId: string, approvedBy: string) => {
+      const entry = feedbackListRef.current.find((f) => f.id === feedbackId);
+      if (!entry || entry.status !== "pending") return;
+
+      const updated = feedbackListRef.current.map((f) =>
+        f.id === feedbackId
+          ? {
+              ...f,
+              status: "approved" as const,
+              rewardGiven: true,
+              approvedBy,
+              approvedAt: new Date().toISOString(),
+            }
+          : f,
+      );
+      feedbackListRef.current = updated;
+      setFeedbackList(updated);
+      saveData(STORAGE_KEYS.feedback, updated);
+      try {
+        (actorRef.current as any)?.saveFeedback?.(
+          shopIdRef.current,
+          JSON.stringify(updated),
+        );
+      } catch (_) {
+        /* optional */
+      }
+
+      // Award 10 diamonds to the feedback submitter
+      const reward: DiamondReward = {
+        id: generateId(),
+        shopId: shopIdRef.current,
+        userId: entry.userId,
+        userName: entry.userName,
+        productId: "feedback",
+        productName: `Feedback: ${entry.title}`,
+        cycleCompletedAt: new Date().toISOString(),
+        diamondCount: 10,
+        rewardType: "feedback",
+        feedbackId,
+      };
+      const updatedRewards = [...diamondRewardsRef.current, reward];
+      diamondRewardsRef.current = updatedRewards;
+      setDiamondRewards(updatedRewards);
+      saveData(STORAGE_KEYS.diamondRewards, updatedRewards);
+      try {
+        (actorRef.current as any)?.saveDiamondRewards?.(
+          shopIdRef.current,
+          JSON.stringify(updatedRewards),
+        );
+      } catch (_) {
+        /* optional */
+      }
+      toast.success(
+        `Feedback approved! 10 💎 diamonds awarded to ${entry.userName}`,
+      );
+    },
+    [],
+  );
+
+  const rejectFeedback = useCallback((feedbackId: string, reason: string) => {
+    const updated = feedbackListRef.current.map((f) =>
+      f.id === feedbackId
+        ? { ...f, status: "rejected" as const, rejectionReason: reason }
+        : f,
+    );
+    feedbackListRef.current = updated;
+    setFeedbackList(updated);
+    saveData(STORAGE_KEYS.feedback, updated);
+    try {
+      (actorRef.current as any)?.saveFeedback?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+    } catch (_) {
+      /* optional */
+    }
+    toast.success("Feedback rejected");
+  }, []);
+
+  // ── Referral Functions ────────────────────────────────────────────────────
+  const getOrCreateReferralCode = useCallback((): ReferralCode => {
+    const user = currentUser;
+    const userId = user?.id ?? shopIdRef.current;
+    const existing = referralCodesRef.current.find(
+      (rc) => rc.userId === userId && rc.shopId === shopIdRef.current,
+    );
+    if (existing) return existing;
+
+    // Generate code: first 4 chars of userId + last 4 digits of mobile + 4 random
+    const mobile = user?.mobile ?? "0000";
+    const mobileSuffix = mobile.replace(/\D/g, "").slice(-4).padStart(4, "0");
+    const userPrefix = userId
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(0, 4)
+      .toUpperCase()
+      .padEnd(4, "X");
+    const random = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const code = `${userPrefix}${mobileSuffix}${random}`.slice(0, 12);
+
+    const newCode: ReferralCode = {
+      id: `ref_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      shopId: shopIdRef.current,
+      userId,
+      userName: user?.name ?? "Owner",
+      code,
+      createdAt: new Date().toISOString(),
+      successfulSignups: 0,
+      totalDiamondsEarned: 0,
+    };
+    const updated = [...referralCodesRef.current, newCode];
+    referralCodesRef.current = updated;
+    setReferralCodes(updated);
+    saveData(STORAGE_KEYS.referralCodes, updated);
+    try {
+      (actorRef.current as any)?.saveReferralCodes?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+    } catch (_) {
+      /* optional */
+    }
+    return newCode;
+  }, [currentUser]);
+
+  const awardReferralDiamonds = useCallback((referralSignupId: string) => {
+    const signup = referralSignupsRef.current.find(
+      (s) => s.id === referralSignupId,
+    );
+    if (!signup || signup.rewardAwardedToReferrer) return;
+
+    // Mark signup as rewarded
+    const updatedSignups = referralSignupsRef.current.map((s) =>
+      s.id === referralSignupId
+        ? { ...s, rewardAwardedToReferrer: true, rewardAwardedToNewUser: true }
+        : s,
+    );
+    referralSignupsRef.current = updatedSignups;
+    setReferralSignups(updatedSignups);
+    saveData(STORAGE_KEYS.referralSignups, updatedSignups);
+    try {
+      (actorRef.current as any)?.saveReferralSignups?.(
+        shopIdRef.current,
+        JSON.stringify(updatedSignups),
+      );
+    } catch (_) {
+      /* optional */
+    }
+
+    // Award 10 diamonds to referrer
+    const referrerReward: DiamondReward = {
+      id: generateId(),
+      shopId: shopIdRef.current,
+      userId: signup.referrerUserId,
+      userName: signup.referrerName,
+      productId: "referral",
+      productName: `Referral: ${signup.newUserName} joined`,
+      cycleCompletedAt: new Date().toISOString(),
+      diamondCount: 10,
+      rewardType: "referral",
+      referralId: referralSignupId,
+    };
+    // Award 10 diamonds to new user
+    const newUserReward: DiamondReward = {
+      id: generateId(),
+      shopId: shopIdRef.current,
+      userId: signup.newUserId,
+      userName: signup.newUserName,
+      productId: "referral-welcome",
+      productName: "Welcome Bonus — Referral",
+      cycleCompletedAt: new Date().toISOString(),
+      diamondCount: 10,
+      rewardType: "referral",
+      referralId: referralSignupId,
+    };
+    const updatedRewards = [
+      ...diamondRewardsRef.current,
+      referrerReward,
+      newUserReward,
+    ];
+    diamondRewardsRef.current = updatedRewards;
+    setDiamondRewards(updatedRewards);
+    saveData(STORAGE_KEYS.diamondRewards, updatedRewards);
+    try {
+      (actorRef.current as any)?.saveDiamondRewards?.(
+        shopIdRef.current,
+        JSON.stringify(updatedRewards),
+      );
+    } catch (_) {
+      /* optional */
+    }
+
+    // Update referral code stats
+    const updatedCodes = referralCodesRef.current.map((rc) =>
+      rc.id === signup.referralCodeId
+        ? {
+            ...rc,
+            successfulSignups: rc.successfulSignups + 1,
+            totalDiamondsEarned: rc.totalDiamondsEarned + 10,
+          }
+        : rc,
+    );
+    referralCodesRef.current = updatedCodes;
+    setReferralCodes(updatedCodes);
+    saveData(STORAGE_KEYS.referralCodes, updatedCodes);
+
+    toast.success(
+      `🎉 Referral reward! 10 💎 each for ${signup.referrerName} & ${signup.newUserName}`,
+    );
+  }, []);
+
+  // ── Device-based referral fraud prevention ──────────────────────────────────
+  const checkReferralDeviceFraud = useCallback(
+    (code: string): string | null => {
+      const alreadyUsed = getDeviceUsedReferralCode();
+      if (alreadyUsed && alreadyUsed !== code) {
+        return "This device has already used a referral code";
+      }
+      return null;
+    },
+    [],
+  );
+
+  // ── Record a new referral signup (with deviceId populated) ──────────────────
+  const recordReferralSignup = useCallback(
+    (
+      referralCode: ReferralCode,
+      newUserId: string,
+      newUserName: string,
+      newUserMobile: string,
+    ) => {
+      // Fraud check
+      const fraudError = checkReferralDeviceFraud(referralCode.code);
+      if (fraudError) {
+        toast.error(fraudError);
+        return;
+      }
+
+      // Prevent duplicate signups for the same new user
+      const alreadySignedUp = referralSignupsRef.current.some(
+        (s) =>
+          s.newUserId === newUserId ||
+          s.newUserMobile.replace(/\D/g, "") ===
+            newUserMobile.replace(/\D/g, ""),
+      );
+      if (alreadySignedUp) {
+        toast.error("This user has already used a referral code");
+        return;
+      }
+
+      const deviceId = getDeviceId();
+      const newSignup: ReferralSignup = {
+        id: `rsig_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        referralCodeId: referralCode.id,
+        referrerUserId: referralCode.userId,
+        referrerName: referralCode.userName,
+        newUserId,
+        newUserName,
+        newUserMobile,
+        signupAt: new Date().toISOString(),
+        firstTransactionCompleted: false,
+        rewardAwardedToReferrer: false,
+        rewardAwardedToNewUser: false,
+        deviceId,
+      };
+
+      const updated = [newSignup, ...referralSignupsRef.current];
+      referralSignupsRef.current = updated;
+      setReferralSignups(updated);
+      saveData(STORAGE_KEYS.referralSignups, updated);
+      try {
+        (actorRef.current as any)?.saveReferralSignups?.(
+          shopIdRef.current,
+          JSON.stringify(updated),
+        );
+      } catch (_) {
+        /* optional */
+      }
+
+      // Mark this device as having used the code
+      setDeviceUsedReferralCode(referralCode.code);
+
+      toast.success(
+        "Referral code applied! 10 💎 diamonds will be awarded after your first transaction.",
+      );
+    },
+    [checkReferralDeviceFraud],
+  );
+
+  // ── Attendance CRUD ──────────────────────────────────────────────────────
+  const clockIn = useCallback(
+    (
+      staffId: string,
+      staffName: string,
+      staffRole: UserRole,
+    ): AttendanceRecord => {
+      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date().toISOString();
+      const existing = attendanceRecordsRef.current.find(
+        (r) => r.staffId === staffId && r.date === today,
+      );
+      if (existing) return existing;
+      const record: AttendanceRecord = {
+        id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        shopId: shopIdRef.current,
+        staffId,
+        staffName,
+        staffRole,
+        date: today,
+        clockIn: now,
+        clockOut: null,
+        status: "present",
+        hoursWorked: 0,
+        createdAt: now,
+      };
+      const updated = [record, ...attendanceRecordsRef.current];
+      attendanceRecordsRef.current = updated;
+      setAttendanceRecords(updated);
+      saveData(`attendanceRecords_${shopIdRef.current}`, updated);
+      try {
+        (actorRef.current as any)?.saveAttendanceRecords?.(
+          shopIdRef.current,
+          JSON.stringify(updated),
+        );
+      } catch (_) {
+        /* optional */
+      }
+      return record;
+    },
+    [],
+  );
+
+  const clockOut = useCallback((staffId: string): AttendanceRecord | null => {
+    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    const existing = attendanceRecordsRef.current.find(
+      (r) => r.staffId === staffId && r.date === today,
+    );
+    if (!existing || !existing.clockIn) return null;
+    const hoursWorked =
+      Math.round(
+        ((new Date(now).getTime() - new Date(existing.clockIn).getTime()) /
+          3_600_000) *
+          100,
+      ) / 100;
+    const status: AttendanceRecord["status"] =
+      hoursWorked >= 4 ? "present" : "half-day";
+    const updated = attendanceRecordsRef.current.map((r) =>
+      r.id === existing.id ? { ...r, clockOut: now, hoursWorked, status } : r,
+    );
+    attendanceRecordsRef.current = updated;
+    setAttendanceRecords(updated);
+    saveData(`attendanceRecords_${shopIdRef.current}`, updated);
+    try {
+      (actorRef.current as any)?.saveAttendanceRecords?.(
+        shopIdRef.current,
+        JSON.stringify(updated),
+      );
+    } catch (_) {
+      /* optional */
+    }
+    return updated.find((r) => r.id === existing.id)!;
+  }, []);
+
+  const getAttendanceForDate = useCallback(
+    (date: string): AttendanceRecord[] =>
+      attendanceRecordsRef.current.filter((r) => r.date === date),
+    [],
+  );
+
+  const getAttendanceForStaff = useCallback(
+    (staffId: string, month: string): AttendanceRecord[] =>
+      attendanceRecordsRef.current.filter(
+        (r) => r.staffId === staffId && r.date.startsWith(month),
+      ),
+    [],
+  );
+
+  const updateAttendance = useCallback(
+    (id: string, updates: Partial<AttendanceRecord>) => {
+      const updated = attendanceRecordsRef.current.map((r) =>
+        r.id === id ? { ...r, ...updates } : r,
+      );
+      attendanceRecordsRef.current = updated;
+      setAttendanceRecords(updated);
+      saveData(`attendanceRecords_${shopIdRef.current}`, updated);
+      try {
+        (actorRef.current as any)?.saveAttendanceRecords?.(
+          shopIdRef.current,
+          JSON.stringify(updated),
+        );
+      } catch (_) {
+        /* optional */
+      }
+    },
+    [],
+  );
+
+  // ── Bulk WhatsApp Reminder ───────────────────────────────────────────────
+  const sendBulkReminder = useCallback((): {
+    sent: number;
+    customers: Customer[];
+  } => {
+    const shopName = currentShop?.name ?? "Save Shop System";
+    const ledgers = invoicesRef.current.reduce<
+      Map<string, { name: string; mobile: string; due: number }>
+    >((acc, inv) => {
+      if (isWalkIn(inv.customerName ?? "")) return acc;
+      const due = inv.dueAmount ?? 0;
+      if (due <= 0) return acc;
+      const mobile = normMobile(inv.customerMobile ?? "");
+      const key = mobile || inv.customerName.trim().toLowerCase();
+      const existing = acc.get(key);
+      if (existing) {
+        existing.due += due;
+      } else {
+        acc.set(key, {
+          name: inv.customerName.trim(),
+          mobile: (mobile || inv.customerMobile) ?? "",
+          due,
+        });
+      }
+      return acc;
+    }, new Map());
+
+    const targets = [...ledgers.values()].filter((c) => c.due > 0 && c.mobile);
+    const sentAt = new Date().toISOString();
+
+    for (const c of targets) {
+      const message = `Hi ${c.name}, you have ₹${Math.round(c.due)} pending at ${shopName}. Please settle at your earliest convenience. Thank you!`;
+      window.open(
+        `https://wa.me/91${c.mobile}?text=${encodeURIComponent(message)}`,
+        "_blank",
+        "noopener",
+      );
+    }
+
+    setBulkReminderSentAt(sentAt);
+    localStorage.setItem(`bulkReminderSentAt_${shopIdRef.current}`, sentAt);
+
+    const user = currentUser;
+    const auditEntry: AuditLog = {
+      id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      shopId: shopIdRef.current,
+      userId: user?.id ?? "unknown",
+      userName: user?.name ?? "Unknown",
+      userRole: user?.role ?? "staff",
+      action: "bulk_reminder",
+      details: `Bulk WhatsApp reminder sent to ${targets.length} customers with outstanding dues.`,
+      timestamp: sentAt,
+      deletedUser: false,
+    };
+    const updatedAudit = [auditEntry, ...auditLogsRef.current].slice(0, 500);
+    auditLogsRef.current = updatedAudit;
+    setAuditLogs(updatedAudit);
+    try {
+      (actorRef.current as any)?.saveAuditLogs?.(
+        shopIdRef.current,
+        JSON.stringify(updatedAudit),
+      );
+    } catch (_) {
+      /* optional */
+    }
+
+    const customersNotified: Customer[] = targets.map((c, i) => ({
+      id: `bulk_${i}`,
+      name: c.name,
+      mobile: c.mobile,
+      creditBalance: c.due,
+    }));
+
+    toast.success(
+      `Bulk reminder sent to ${targets.length} customer${targets.length !== 1 ? "s" : ""} 📲`,
+    );
+    return { sent: targets.length, customers: customersNotified };
+  }, [currentShop, currentUser]);
+
   const value: StoreContextValue = {
     categories,
     products,
@@ -2548,6 +3451,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     shopId,
     payments,
     isLoading,
+    refreshCounter,
+    triggerRefresh,
+    isSyncing,
     shopSettings,
     updateShopSettings,
     addCategory,
@@ -2591,6 +3497,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     getDrafts,
     saveDraftNow,
     restoreDraft,
+    draftSales,
+    saveDraft,
+    deleteDraft,
+    getDraftById,
+    markDraftCompleted,
     returns,
     addReturn,
     getReturnReport,
@@ -2598,6 +3509,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     featureFlags: appConfig.featureFlags,
     saveAppConfig,
     setFeatureFlag,
+    setDashboardSection,
+    setFeatureMode,
     lowPriceAlertLogs,
     addLowPriceAlertLog,
     auditLogs,
@@ -2638,6 +3551,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         productName,
         cycleCompletedAt: new Date().toISOString(),
         diamondCount: 1,
+        rewardType: "transaction",
       };
       const updated = [...diamondRewardsRef.current, reward];
       diamondRewardsRef.current = updated;
@@ -2646,6 +3560,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     getTotalDiamonds: () =>
       diamondRewardsRef.current.reduce((s, r) => s + r.diamondCount, 0),
+    feedbackList,
+    submitFeedback,
+    approveFeedback,
+    rejectFeedback,
+    referralCodes,
+    referralSignups,
+    getOrCreateReferralCode,
+    awardReferralDiamonds,
+    checkReferralDeviceFraud,
+    recordReferralSignup,
+    // Attendance
+    attendanceRecords,
+    clockIn,
+    clockOut,
+    getAttendanceForDate,
+    getAttendanceForStaff,
+    updateAttendance,
+    // Bulk Reminder
+    bulkReminderSentAt,
+    sendBulkReminder,
+    actorError,
   };
 
   return (

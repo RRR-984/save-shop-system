@@ -264,10 +264,10 @@ function AuditLogContent() {
           >
             <ClipboardList className="w-12 h-12 text-muted-foreground/40" />
             <p className="text-sm font-medium text-muted-foreground">
-              Koi log entry nahi mili
+              No log entries found
             </p>
             <p className="text-xs text-muted-foreground">
-              Filter ya search change karein
+              Try changing the filter or search
             </p>
           </div>
         ) : (
@@ -296,7 +296,7 @@ export function AuditLogPage() {
           Access Restricted
         </p>
         <p className="text-sm text-muted-foreground">
-          Audit Log sirf Owner dekh sakta hai.
+          Audit Log is accessible to Owner only.
         </p>
       </div>
     );

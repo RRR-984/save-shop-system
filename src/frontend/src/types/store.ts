@@ -31,6 +31,27 @@ export interface FeatureFlags {
   discount: boolean;
 }
 
+export interface DashboardSectionConfig {
+  smartFilterBar?: boolean;
+  todaySummary?: boolean;
+  topPerformance?: boolean;
+  diamondRewards?: boolean;
+  smartAlerts?: boolean;
+  smartInsightsCards?: boolean;
+  customerDue?: boolean;
+  pendingOrders?: boolean;
+  productsList?: boolean;
+  stockControl?: boolean;
+  smartInsights?: boolean;
+  inventoryHealth?: boolean;
+  recentActivity?: boolean;
+  adBannerCarousel?: boolean;
+  quickActions?: boolean;
+  marqueeAlertBar?: boolean;
+  tutorialGuide?: boolean;
+  sponsoredAd?: boolean;
+}
+
 export interface AppConfig {
   featureFlags: FeatureFlags;
   shopName?: string;
@@ -47,6 +68,16 @@ export interface AppConfig {
   staffReminderMode?: "approval" | "simple";
   /** Auto update product cost price when vendor rate changes (default OFF) */
   autoUpdateCostOnVendorRateChange?: boolean;
+  /** Per-section dashboard visibility toggles (Owner only). All default to true. */
+  dashboardSections?: DashboardSectionConfig;
+  /**
+   * Feature mode: controls sidebar nav and dashboard section complexity.
+   * 1 = Simple (minimal nav + minimal dashboard)
+   * 2 = Advanced (common nav + standard dashboard)
+   * 3 = All System (full nav + full dashboard — current default behavior)
+   * Saved per-shop in localStorage as `feature_mode_{shopId}`.
+   */
+  featureMode?: 1 | 2 | 3;
 }
 
 export interface Product {
@@ -196,6 +227,16 @@ export interface AuditLog {
   deletedUser?: boolean;
 }
 
+export interface ShopMeta {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  createdAt: string;
+  ownerMobile: string;
+  isDeleted: boolean;
+}
+
 export interface MobileSession {
   mobile: string;
   shopId: string;
@@ -203,6 +244,8 @@ export interface MobileSession {
   loginAt: string;
   userId?: string;
   userRole?: UserRole;
+  allShopIds?: string[];
+  selectedShopId?: string;
 }
 
 export interface QAChange {
@@ -279,6 +322,90 @@ export interface DiamondReward {
   productName: string;
   cycleCompletedAt: string;
   diamondCount: number;
+  /** How the diamond was earned */
+  rewardType?: "transaction" | "feedback" | "referral";
+  /** Linked feedback entry if rewardType === 'feedback' */
+  feedbackId?: string;
+  /** Linked referral signup if rewardType === 'referral' */
+  referralId?: string;
+}
+
+// ─── Feedback & Reward System ────────────────────────────────────────────────
+
+export type FeedbackType = "bug" | "feature" | "improvement";
+export type FeedbackStatus = "pending" | "approved" | "rejected";
+
+export interface FeedbackEntry {
+  id: string;
+  shopId: string;
+  userId: string;
+  userName: string;
+  type: FeedbackType;
+  title: string;
+  description: string;
+  status: FeedbackStatus;
+  rewardGiven: boolean;
+  submittedAt: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+}
+
+// ─── Referral System ─────────────────────────────────────────────────────────
+
+export interface ReferralCode {
+  id: string;
+  shopId: string;
+  userId: string;
+  userName: string;
+  code: string;
+  createdAt: string;
+  successfulSignups: number;
+  totalDiamondsEarned: number;
+}
+
+export interface ReferralSignup {
+  id: string;
+  shopId: string;
+  referralCodeId: string;
+  referrerUserId: string;
+  referrerName: string;
+  newUserId: string;
+  newUserName: string;
+  newUserMobile: string;
+  signupAt: string;
+  rewardAwardedToReferrer: boolean;
+  rewardAwardedToNewUser: boolean;
+  deviceId: string;
+  firstTransactionCompleted: boolean;
+}
+
+// ─── Draft Sale System ────────────────────────────────────────────────────────
+// Used to save in-progress billing sessions so data is never lost.
+// A DraftSale captures a partial or unsaved sale with customer info and cart items.
+
+export interface CartDraftItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  sellingRate: number;
+  purchaseCost: number;
+  unit: string;
+  batchId?: string;
+  batchNumber?: string;
+  profit: number;
+  profitPercent: number;
+}
+
+export interface DraftSale {
+  draftId: string;
+  customerName: string;
+  customerMobile: string;
+  cartItems: CartDraftItem[];
+  createdAt: string;
+  updatedAt: string;
+  totalAmount: number;
+  status: "draft" | "completed";
 }
 
 export function getDiamondTier(total: number): DiamondTier {
@@ -290,6 +417,7 @@ export function getDiamondTier(total: number): DiamondTier {
 
 export type NavPage =
   | "dashboard"
+  | "owner-dashboard"
   | "inventory"
   | "stock"
   | "billing"
@@ -310,7 +438,12 @@ export type NavPage =
   | "customer-orders"
   | "cash-counter"
   | "diamond-rewards"
-  | "rankings";
+  | "rankings"
+  | "shop-board"
+  | "feedback-page"
+  | "referral-page"
+  | "drafts"
+  | "attendance";
 
 // ─── Vendor & Order System ────────────────────────────────────────────────────
 
@@ -366,6 +499,45 @@ export interface VendorRateHistory {
   changedAt: string;
   changedBy: string;
   notes?: string;
+}
+
+// ─── Attendance System ────────────────────────────────────────────────────────
+
+export interface AttendanceRecord {
+  id: string;
+  shopId: string;
+  staffId: string;
+  staffName: string;
+  staffRole: UserRole;
+  /** ISO date YYYY-MM-DD */
+  date: string;
+  /** ISO timestamp or null if not clocked in yet */
+  clockIn: string | null;
+  /** ISO timestamp or null if not clocked out yet */
+  clockOut: string | null;
+  status: "present" | "absent" | "half-day";
+  /** Calculated from clockIn/clockOut in hours */
+  hoursWorked: number;
+  notes?: string;
+  createdAt: string;
+}
+
+/** Converts fractional hours to a readable string — e.g. 7.5 → '7h 30m', 0 → '—' */
+export function formatHoursWorked(hours: number): string {
+  if (!hours || hours <= 0) return "—";
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+/** Returns the effective attendance status for a record */
+export function getAttendanceStatus(
+  record: AttendanceRecord,
+): "present" | "absent" | "half-day" | "not-clocked-in" {
+  if (!record.clockIn) return "not-clocked-in";
+  return record.status;
 }
 
 // ─── Role-Based Reminder System ──────────────────────────────────────────────

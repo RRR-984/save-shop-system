@@ -136,7 +136,7 @@ export function StaffManagementPage() {
         `Staff edited: ${form.name.trim()} (${form.role})`,
         editingId,
       );
-      toast.success(`${form.name} ka details update ho gaya`);
+      toast.success(`${form.name}'s details updated`);
     } else {
       // Check duplicate mobile
       const dup = users.find(
@@ -146,7 +146,7 @@ export function StaffManagementPage() {
           !u.deleted,
       );
       if (dup) {
-        setFormErrors({ mobile: "Yeh mobile pehle se register hai" });
+        setFormErrors({ mobile: "This mobile number is already registered" });
         return;
       }
       const newUser: Omit<AppUser, "id"> = {
@@ -167,7 +167,7 @@ export function StaffManagementPage() {
         "staff_added",
         `New staff added: ${form.name.trim()} (${form.role})`,
       );
-      toast.success(`${form.name} ko staff list mein add kiya gaya`);
+      toast.success(`${form.name} added to staff list`);
     }
 
     setShowForm(false);
@@ -182,7 +182,7 @@ export function StaffManagementPage() {
       `${user.name} marked as ${newActive ? "active" : "inactive"}`,
       user.id,
     );
-    toast.success(`${user.name} ab ${newActive ? "Active" : "Inactive"} hai`);
+    toast.success(`${user.name} is now ${newActive ? "Active" : "Inactive"}`);
   }
 
   // ── Soft Delete ──────────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ export function StaffManagementPage() {
       `Staff soft-deleted: ${deleteTarget.name}`,
       deleteTarget.id,
     );
-    toast.success(`${deleteTarget.name} ko hata diya gaya (record preserved)`);
+    toast.success(`${deleteTarget.name} removed (record preserved)`);
     setDeleteTarget(null);
   }
 
@@ -206,7 +206,7 @@ export function StaffManagementPage() {
   function handleRestore(user: AppUser) {
     updateUser(user.id, { deleted: false, active: false });
     addAuditLog("staff_restored", `Staff restored: ${user.name}`, user.id);
-    toast.success(`${user.name} restore ho gaya (inactive status mein)`);
+    toast.success(`${user.name} restored (set to inactive)`);
   }
 
   // ── Access guard ─────────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ export function StaffManagementPage() {
         <div className="text-center space-y-3">
           <Shield className="mx-auto w-12 h-12 text-muted-foreground/40" />
           <p className="text-muted-foreground font-medium">
-            Sirf Owner yeh page dekh sakta hai
+            Only the Owner can view this page
           </p>
         </div>
       </div>
@@ -301,7 +301,7 @@ export function StaffManagementPage() {
               >
                 <Users className="w-10 h-10 opacity-30" />
                 <p className="text-sm">
-                  Koi staff nahi hai. "Add Staff" se shuru karein.
+                  No staff yet. Click "Add Staff" to get started.
                 </p>
                 <Button size="sm" variant="outline" onClick={openAdd}>
                   <Plus size={14} className="mr-1" /> Add Staff
@@ -536,7 +536,7 @@ export function StaffManagementPage() {
               <Input
                 id="staff-name"
                 ref={nameRef}
-                placeholder="Staff ka naam"
+                placeholder="Staff member's name"
                 value={form.name}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, name: e.target.value }))
@@ -638,7 +638,7 @@ export function StaffManagementPage() {
                   Active Status
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Inactive staff login nahi kar sakta
+                  Inactive staff cannot log in
                 </p>
               </div>
               <Switch
@@ -683,7 +683,7 @@ export function StaffManagementPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle size={18} />
-              Staff Delete Karein?
+              Delete Staff?
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground leading-relaxed">
@@ -718,7 +718,7 @@ export function StaffManagementPage() {
               data-ocid="staff.delete.confirm"
             >
               <Trash2 size={14} className="mr-1.5" />
-              Haan, Delete Karein
+              Yes, Delete
             </Button>
           </div>
         </DialogContent>

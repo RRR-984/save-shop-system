@@ -124,6 +124,11 @@ const hindiTranslations: Record<string, string> = {
   "Dead Stock": "डेड स्टॉक",
   "Payment Pending": "भुगतान बाकी",
   "Expiry Alert": "एक्सपायरी",
+  "Scan Barcode/QR": "बारकोड/QR स्कैन करें",
+  "Scanning...": "स्कैन हो रहा है...",
+  "Point barcode or QR code at camera...": "कैमरे पर बारकोड रखें...",
+  "Product not found — try again": "उत्पाद नहीं मिला — फिर कोशिश करें",
+  "Try Again": "फिर कोशिश करें",
 };
 
 interface LanguageContextValue {

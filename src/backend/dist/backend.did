@@ -1,5 +1,49 @@
 type UserProfile = record {name: text;};
+type UpdateShopResult = 
+ record {
+   error: opt text;
+   success: bool;
+ };
+type ShopStats = 
+ record {
+   customers: nat;
+   products: nat;
+   profit: int;
+   sales: nat;
+   shopId: text;
+   shopName: text;
+   transactions: nat;
+ };
+type ShopMeta = 
+ record {
+   address: text;
+   city: text;
+   createdAt: text;
+   id: text;
+   isDeleted: bool;
+   name: text;
+   ownerMobile: text;
+ };
+type OwnerStats = 
+ record {
+   shopStats: vec ShopStats;
+   totalCustomers: nat;
+   totalProducts: nat;
+   totalProfit: int;
+   totalSales: nat;
+   totalTransactions: nat;
+ };
+type DeleteShopResult = record {success: bool;};
+type AddShopResult = 
+ record {
+   error: opt text;
+   shopId: text;
+   success: bool;
+ };
 service : {
+  addShop: (ownerMobile: text, shopName: text, address: text, city: text) ->
+   (AddShopResult);
+  deleteShop: (shopId: text) -> (DeleteShopResult);
   getAuditLogs: (shopId: text) -> (text) query;
   getBatches: (shopId: text) -> (text) query;
   getCallerUserProfile: () -> (opt UserProfile) query;
@@ -7,21 +51,27 @@ service : {
   getCustomerOrders: (shopId: text) -> (text) query;
   getCustomers: (shopId: text) -> (text) query;
   getDrafts: (shopId: text) -> (text) query;
+  getFeedback: (shopId: text) -> (text) query;
   getInvoices: (shopId: text) -> (text) query;
   getLowPriceAlertLogs: (shopId: text) -> (text) query;
+  getOwnerStats: (mobile: text) -> (OwnerStats) query;
   getPayments: (shopId: text) -> (text) query;
   getProducts: (shopId: text) -> (text) query;
   getPurchaseOrders: (shopId: text) -> (text) query;
+  getReferralCodes: (shopId: text) -> (text) query;
+  getReferralSignups: (shopId: text) -> (text) query;
   getReminderLogs: (shopId: text) -> (text) query;
   getReminderRequests: (shopId: text) -> (text) query;
   getReturns: (shopId: text) -> (text) query;
   getSettings: (shopId: text) -> (text) query;
+  getShop: (shopId: text) -> (opt ShopMeta) query;
   getShopUnits: (shopId: text) -> (text) query;
   getTransactions: (shopId: text) -> (text) query;
   getUserProfile: (user: principal) -> (opt UserProfile) query;
   getUsers: (shopId: text) -> (text) query;
   getVendorRateHistory: (shopId: text) -> (text) query;
   getVendors: (shopId: text) -> (text) query;
+  listShopsForOwner: (mobile: text) -> (vec ShopMeta) query;
   saveAuditLogs: (shopId: text, data: text) -> ();
   saveBatches: (shopId: text, data: text) -> ();
   saveCallerUserProfile: (profile: UserProfile) -> ();
@@ -29,11 +79,14 @@ service : {
   saveCustomerOrders: (shopId: text, data: text) -> ();
   saveCustomers: (shopId: text, data: text) -> ();
   saveDrafts: (shopId: text, data: text) -> ();
+  saveFeedback: (shopId: text, data: text) -> ();
   saveInvoices: (shopId: text, data: text) -> ();
   saveLowPriceAlertLogs: (shopId: text, data: text) -> ();
   savePayments: (shopId: text, data: text) -> ();
   saveProducts: (shopId: text, data: text) -> ();
   savePurchaseOrders: (shopId: text, data: text) -> ();
+  saveReferralCodes: (shopId: text, data: text) -> ();
+  saveReferralSignups: (shopId: text, data: text) -> ();
   saveReminderLogs: (shopId: text, data: text) -> ();
   saveReminderRequests: (shopId: text, data: text) -> ();
   saveReturns: (shopId: text, data: text) -> ();
@@ -43,4 +96,6 @@ service : {
   saveUsers: (shopId: text, data: text) -> ();
   saveVendorRateHistory: (shopId: text, data: text) -> ();
   saveVendors: (shopId: text, data: text) -> ();
+  updateShop: (shopId: text, name: text, address: text, city: text) ->
+   (UpdateShopResult);
 }

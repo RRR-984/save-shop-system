@@ -59,10 +59,10 @@ function formatDate(iso: string) {
 }
 
 const filterLabels: Record<DateFilter, string> = {
-  today: "Aaj",
-  week: "Iss Hafte",
-  month: "Iss Mahine",
-  all: "Sab",
+  today: "Today",
+  week: "This Week",
+  month: "This Month",
+  all: "All",
 };
 
 const filterColors: Record<DateFilter, string> = {
@@ -211,10 +211,8 @@ export function StaffPerformancePage() {
         {staffStats.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <BarChart2 className="mx-auto mb-3 opacity-30" size={40} />
-            <p className="font-medium">Is period mein koi invoice nahi</p>
-            <p className="text-sm mt-1">
-              Koi bhi sale karein — yahan dikhai degi
-            </p>
+            <p className="font-medium">No invoices in this period</p>
+            <p className="text-sm mt-1">Make a sale — it will appear here</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -320,12 +318,12 @@ export function StaffPerformancePage() {
                     >
                       {isExpanded ? (
                         <>
-                          <ChevronUp size={12} className="mr-1" /> Chhupao
+                          <ChevronUp size={12} className="mr-1" /> Hide
                         </>
                       ) : (
                         <>
-                          <ChevronDown size={12} className="mr-1" /> Sab
-                          Invoices Dekho ({staff.invoiceCount})
+                          <ChevronDown size={12} className="mr-1" /> Show All
+                          Invoices ({staff.invoiceCount})
                         </>
                       )}
                     </Button>

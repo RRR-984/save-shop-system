@@ -1,6 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,7 +30,8 @@ import {
   TrendingUp,
   Wifi,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useStore } from "../context/StoreContext";
 import type { NavPage } from "../types/store";
 
@@ -35,6 +42,19 @@ function fmt(n: number) {
     maximumFractionDigits: 0,
   }).format(Math.round(n));
 }
+
+function fmtShort(n: number) {
+  if (Math.abs(n) >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+  if (Math.abs(n) >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+  return `₹${Math.round(n)}`;
+}
+
+const PROFIT_CHART_CONFIG = {
+  profit: {
+    label: "Profit",
+    color: "#16A34A",
+  },
+} satisfies ChartConfig;
 
 function getToday() {
   return new Date().toISOString().slice(0, 10);
@@ -49,8 +69,8 @@ function getYesterday() {
 function formatDateLabel(dateStr: string) {
   const today = getToday();
   const yesterday = getYesterday();
-  if (dateStr === today) return "Aaj (Today)";
-  if (dateStr === yesterday) return "Kal (Yesterday)";
+  if (dateStr === today) return "Today";
+  if (dateStr === yesterday) return "Yesterday";
   return new Date(dateStr).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -58,7 +78,7 @@ function formatDateLabel(dateStr: string) {
   });
 }
 
-export function ReportsPage({
+function ReportsPageInner({
   onNavigate,
 }: { onNavigate?: (page: NavPage) => void }) {
   const {
@@ -69,6 +89,38 @@ export function ReportsPage({
     getProductBatches,
   } = useStore();
 
+  // ── 12-Month Profit Trend ──────────────────────────────────────────────────
+  const monthlyProfitData = useMemo(() => {
+    const now = new Date();
+    const profitByKey: Record<string, number> = {};
+    for (const inv of invoices) {
+      const invKey = inv.date.slice(0, 7);
+      const cost = inv.items.reduce(
+        (c, item) => c + item.purchaseCost * item.quantity,
+        0,
+      );
+      profitByKey[invKey] =
+        (profitByKey[invKey] ?? 0) + (inv.totalAmount - cost);
+    }
+    const months: { month: string; label: string; profit: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const month = d.toLocaleDateString("en-IN", { month: "short" });
+      const label = d.toLocaleDateString("en-IN", {
+        month: "short",
+        year: "numeric",
+      });
+      months.push({ month, label, profit: Math.round(profitByKey[key] ?? 0) });
+    }
+    return months;
+  }, [invoices]);
+
+  const total12MonthProfit = useMemo(
+    () => monthlyProfitData.reduce((s, d) => s + d.profit, 0),
+    [monthlyProfitData],
+  );
+
   const [dailyDate, setDailyDate] = useState(getToday());
   const [profitFrom, setProfitFrom] = useState(() => {
     const d = new Date();
@@ -77,76 +129,137 @@ export function ReportsPage({
   });
   const [profitTo, setProfitTo] = useState(getToday());
 
-  // ── Daily Sales ────────────────────────────────────────────────────────────
-  const dailyInvoices = invoices.filter(
-    (inv) => inv.date.slice(0, 10) === dailyDate,
+  // ── Daily Sales (memoized) ─────────────────────────────────────────────────
+  const dailyInvoices = useMemo(
+    () => invoices.filter((inv) => inv.date.slice(0, 10) === dailyDate),
+    [invoices, dailyDate],
   );
 
-  const totalSales = dailyInvoices.reduce((s, inv) => s + inv.totalAmount, 0);
-  const totalCashReceived = dailyInvoices
-    .filter((inv) => inv.paymentMode === "cash")
-    .reduce((s, inv) => s + inv.paidAmount, 0);
-  const totalUpiReceived = dailyInvoices
-    .filter((inv) => inv.paymentMode === "upi")
-    .reduce((s, inv) => s + inv.paidAmount, 0);
-  const totalOnlineReceived = dailyInvoices
-    .filter((inv) => inv.paymentMode === "online")
-    .reduce((s, inv) => s + inv.paidAmount, 0);
-  const totalCreditSales = dailyInvoices
-    .filter((inv) => inv.paymentMode === "credit")
-    .reduce((s, inv) => s + inv.totalAmount, 0);
-  const totalDueAmount = dailyInvoices.reduce(
-    (s, inv) => s + (inv.dueAmount ?? 0),
-    0,
-  );
-  const creditInvoices = dailyInvoices.filter(
-    (inv) => inv.paymentMode === "credit",
-  );
-  const totalCollection =
-    totalCashReceived + totalUpiReceived + totalOnlineReceived;
-
-  const dailyProfit = dailyInvoices.reduce((s, inv) => {
-    const cost = inv.items.reduce(
-      (c, item) => c + item.purchaseCost * item.quantity,
+  const dailySummary = useMemo(() => {
+    const totalSales = dailyInvoices.reduce((s, inv) => s + inv.totalAmount, 0);
+    const totalCashReceived = dailyInvoices
+      .filter((inv) => inv.paymentMode === "cash")
+      .reduce((s, inv) => s + inv.paidAmount, 0);
+    const totalUpiReceived = dailyInvoices
+      .filter((inv) => inv.paymentMode === "upi")
+      .reduce((s, inv) => s + inv.paidAmount, 0);
+    const totalOnlineReceived = dailyInvoices
+      .filter((inv) => inv.paymentMode === "online")
+      .reduce((s, inv) => s + inv.paidAmount, 0);
+    const totalCreditSales = dailyInvoices
+      .filter((inv) => inv.paymentMode === "credit")
+      .reduce((s, inv) => s + inv.totalAmount, 0);
+    const totalDueAmount = dailyInvoices.reduce(
+      (s, inv) => s + (inv.dueAmount ?? 0),
       0,
     );
-    return s + (inv.totalAmount - cost);
-  }, 0);
+    const creditInvoices = dailyInvoices.filter(
+      (inv) => inv.paymentMode === "credit",
+    );
+    const totalCollection =
+      totalCashReceived + totalUpiReceived + totalOnlineReceived;
+    const dailyProfit = dailyInvoices.reduce((s, inv) => {
+      const cost = inv.items.reduce(
+        (c, item) => c + item.purchaseCost * item.quantity,
+        0,
+      );
+      return s + (inv.totalAmount - cost);
+    }, 0);
+    return {
+      totalSales,
+      totalCashReceived,
+      totalUpiReceived,
+      totalOnlineReceived,
+      totalCreditSales,
+      totalDueAmount,
+      creditInvoices,
+      totalCollection,
+      dailyProfit,
+    };
+  }, [dailyInvoices]);
 
-  // ── Profit Report ──────────────────────────────────────────────────────────
-  const profitInvoices = invoices.filter((inv) => {
-    const d = inv.date.slice(0, 10);
-    return d >= profitFrom && d <= profitTo;
-  });
-
-  const productProfitMap: Record<
-    string,
-    { name: string; qty: number; revenue: number; cost: number }
-  > = {};
-  for (const inv of profitInvoices) {
-    for (const item of inv.items) {
-      if (!productProfitMap[item.productId]) {
-        productProfitMap[item.productId] = {
-          name: item.productName,
-          qty: 0,
-          revenue: 0,
-          cost: 0,
-        };
+  // Per-item daily breakdown
+  const dailyItemRows = useMemo(() => {
+    const itemMap: Record<
+      string,
+      { name: string; qty: number; revenue: number; cost: number }
+    > = {};
+    for (const inv of dailyInvoices) {
+      for (const item of inv.items) {
+        if (!itemMap[item.productId]) {
+          itemMap[item.productId] = {
+            name: item.productName,
+            qty: 0,
+            revenue: 0,
+            cost: 0,
+          };
+        }
+        itemMap[item.productId].qty += item.quantity;
+        itemMap[item.productId].revenue += item.quantity * item.sellingRate;
+        itemMap[item.productId].cost += item.purchaseCost * item.quantity;
       }
-      productProfitMap[item.productId].qty += item.quantity;
-      productProfitMap[item.productId].revenue +=
-        item.quantity * item.sellingRate;
-      productProfitMap[item.productId].cost +=
-        item.purchaseCost * item.quantity;
     }
-  }
-  const profitRows = Object.values(productProfitMap).sort(
-    (a, b) => b.revenue - b.cost - (a.revenue - a.cost),
-  );
-  const totalRevenue = profitRows.reduce((s, r) => s + r.revenue, 0);
-  const totalCost = profitRows.reduce((s, r) => s + r.cost, 0);
-  const totalProfitAll = totalRevenue - totalCost;
-  const avgMarginPct = totalCost > 0 ? (totalProfitAll / totalCost) * 100 : 0;
+    return Object.values(itemMap);
+  }, [dailyInvoices]);
+
+  // ── Profit Report (memoized) ───────────────────────────────────────────────
+  const profitData = useMemo(() => {
+    const profitInvoices = invoices.filter((inv) => {
+      const d = inv.date.slice(0, 10);
+      return d >= profitFrom && d <= profitTo;
+    });
+
+    const productProfitMap: Record<
+      string,
+      { name: string; qty: number; revenue: number; cost: number }
+    > = {};
+    for (const inv of profitInvoices) {
+      for (const item of inv.items) {
+        if (!productProfitMap[item.productId]) {
+          productProfitMap[item.productId] = {
+            name: item.productName,
+            qty: 0,
+            revenue: 0,
+            cost: 0,
+          };
+        }
+        productProfitMap[item.productId].qty += item.quantity;
+        productProfitMap[item.productId].revenue +=
+          item.quantity * item.sellingRate;
+        productProfitMap[item.productId].cost +=
+          item.purchaseCost * item.quantity;
+      }
+    }
+    const profitRows = Object.values(productProfitMap).sort(
+      (a, b) => b.revenue - b.cost - (a.revenue - a.cost),
+    );
+    const totalRevenue = profitRows.reduce((s, r) => s + r.revenue, 0);
+    const totalCost = profitRows.reduce((s, r) => s + r.cost, 0);
+    const totalProfitAll = totalRevenue - totalCost;
+    const avgMarginPct = totalCost > 0 ? (totalProfitAll / totalCost) * 100 : 0;
+    return {
+      profitRows,
+      totalRevenue,
+      totalCost,
+      totalProfitAll,
+      avgMarginPct,
+    };
+  }, [invoices, profitFrom, profitTo]);
+
+  const {
+    totalSales,
+    totalCashReceived,
+    totalUpiReceived,
+    totalOnlineReceived,
+    totalCreditSales,
+    totalDueAmount,
+    creditInvoices,
+    totalCollection,
+    dailyProfit,
+  } = dailySummary;
+
+  const { profitRows, totalRevenue, totalCost, totalProfitAll, avgMarginPct } =
+    profitData;
 
   return (
     <div className="flex flex-col gap-6">
@@ -165,10 +278,104 @@ export function ReportsPage({
               className="gap-2 shrink-0"
             >
               <Plus size={16} />
-              Bill Banao
+              Create Bill
             </Button>
           )}
         </div>
+
+        {/* ── 12-Month Profit Trend Chart ── */}
+        <Card
+          data-ocid="reports.monthly_profit_chart"
+          className="shadow-sm border-border"
+        >
+          <CardHeader className="pb-2 pt-4 px-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <TrendingUp size={15} className="text-emerald-600" />
+                  12-Month Profit Trend
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Last 12 months performance
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-muted-foreground">
+                  Total Profit
+                </div>
+                <div
+                  className={`text-base font-bold ${
+                    total12MonthProfit >= 0
+                      ? "text-emerald-600"
+                      : "text-red-600"
+                  }`}
+                >
+                  {fmt(total12MonthProfit)}
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="px-2 pb-3">
+            <ChartContainer
+              config={PROFIT_CHART_CONFIG}
+              className="h-[200px] md:h-[250px] w-full"
+            >
+              <AreaChart
+                data={monthlyProfitData}
+                margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient
+                    id="profitGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="5%" stopColor="#16A34A" stopOpacity={0.18} />
+                    <stop offset="95%" stopColor="#16A34A" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  className="stroke-border/50"
+                />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  tickFormatter={fmtShort}
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={52}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => [fmt(value as number), "Profit"]}
+                      labelFormatter={(_, payload) =>
+                        payload?.[0]?.payload?.label ?? ""
+                      }
+                    />
+                  }
+                />
+                <Area
+                  type="monotone"
+                  dataKey="profit"
+                  stroke="#16A34A"
+                  strokeWidth={2}
+                  fill="url(#profitGradient)"
+                  dot={{ r: 3, fill: "#16A34A", strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: "#16A34A" }}
+                />
+              </AreaChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
 
         <Tabs defaultValue="daily">
           <TabsList data-ocid="reports.tab" className="mb-4">
@@ -202,7 +409,7 @@ export function ReportsPage({
                         className="text-xs h-8"
                         onClick={() => setDailyDate(getToday())}
                       >
-                        Aaj
+                        Today
                       </Button>
                       <Button
                         size="sm"
@@ -212,7 +419,7 @@ export function ReportsPage({
                         className="text-xs h-8"
                         onClick={() => setDailyDate(getYesterday())}
                       >
-                        Kal
+                        Yesterday
                       </Button>
                     </div>
                     <div className="flex items-center gap-2">
@@ -431,7 +638,7 @@ export function ReportsPage({
                         onClick={() => onNavigate("billing")}
                       >
                         <Plus size={12} />
-                        Naya Bill
+                        New Bill
                       </Button>
                     )}
                   </CardTitle>
@@ -459,8 +666,8 @@ export function ReportsPage({
                               className="text-center py-8 text-muted-foreground text-sm"
                             >
                               {dailyDate === getToday()
-                                ? "Aaj koi sale nahi hui abhi tak"
-                                : "Is date par koi sale nahi"}
+                                ? "No sales today yet"
+                                : "No sales on this date"}
                             </TableCell>
                           </TableRow>
                         )}
@@ -543,100 +750,67 @@ export function ReportsPage({
               </Card>
 
               {/* Per-item profit breakdown */}
-              {dailyInvoices.length > 0 &&
-                (() => {
-                  const itemMap: Record<
-                    string,
-                    { name: string; qty: number; revenue: number; cost: number }
-                  > = {};
-                  for (const inv of dailyInvoices) {
-                    for (const item of inv.items) {
-                      if (!itemMap[item.productId]) {
-                        itemMap[item.productId] = {
-                          name: item.productName,
-                          qty: 0,
-                          revenue: 0,
-                          cost: 0,
-                        };
-                      }
-                      itemMap[item.productId].qty += item.quantity;
-                      itemMap[item.productId].revenue +=
-                        item.quantity * item.sellingRate;
-                      itemMap[item.productId].cost +=
-                        item.purchaseCost * item.quantity;
-                    }
-                  }
-                  const rows = Object.values(itemMap);
-                  return (
-                    <Card className="shadow-sm border-border">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <TrendingUp size={15} className="text-emerald-600" />
-                          Item-wise Profit (Today)
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="bg-secondary/50">
-                                <TableHead className="text-xs">Item</TableHead>
-                                <TableHead className="text-xs">
-                                  Qty Sold
-                                </TableHead>
-                                <TableHead className="text-xs">
-                                  Revenue
-                                </TableHead>
-                                <TableHead className="text-xs">Cost</TableHead>
-                                <TableHead className="text-xs">
-                                  Profit
-                                </TableHead>
-                                <TableHead className="text-xs">
-                                  Margin %
-                                </TableHead>
+              {dailyItemRows.length > 0 && (
+                <Card className="shadow-sm border-border">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <TrendingUp size={15} className="text-emerald-600" />
+                      Item-wise Profit (Today)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-secondary/50">
+                            <TableHead className="text-xs">Item</TableHead>
+                            <TableHead className="text-xs">Qty Sold</TableHead>
+                            <TableHead className="text-xs">Revenue</TableHead>
+                            <TableHead className="text-xs">Cost</TableHead>
+                            <TableHead className="text-xs">Profit</TableHead>
+                            <TableHead className="text-xs">Margin %</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {dailyItemRows.map((row) => {
+                            const profit = row.revenue - row.cost;
+                            const pct =
+                              row.cost > 0 ? (profit / row.cost) * 100 : 0;
+                            return (
+                              <TableRow key={row.name}>
+                                <TableCell className="text-sm font-medium">
+                                  {row.name}
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  {row.qty}
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  {fmt(row.revenue)}
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {fmt(row.cost)}
+                                </TableCell>
+                                <TableCell
+                                  className={`text-sm font-semibold ${profit >= 0 ? "text-emerald-700" : "text-red-600"}`}
+                                >
+                                  {fmt(profit)}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    className={`text-xs border-0 ${pct > 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}
+                                  >
+                                    {pct.toFixed(1)}%
+                                  </Badge>
+                                </TableCell>
                               </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {rows.map((row) => {
-                                const profit = row.revenue - row.cost;
-                                const pct =
-                                  row.cost > 0 ? (profit / row.cost) * 100 : 0;
-                                return (
-                                  <TableRow key={row.name}>
-                                    <TableCell className="text-sm font-medium">
-                                      {row.name}
-                                    </TableCell>
-                                    <TableCell className="text-sm">
-                                      {row.qty}
-                                    </TableCell>
-                                    <TableCell className="text-sm">
-                                      {fmt(row.revenue)}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                      {fmt(row.cost)}
-                                    </TableCell>
-                                    <TableCell
-                                      className={`text-sm font-semibold ${profit >= 0 ? "text-emerald-700" : "text-red-600"}`}
-                                    >
-                                      {fmt(profit)}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge
-                                        className={`text-xs border-0 ${pct > 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}
-                                      >
-                                        {pct.toFixed(1)}%
-                                      </Badge>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })()}
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </TabsContent>
 
@@ -897,3 +1071,6 @@ export function ReportsPage({
     </div>
   );
 }
+
+export const ReportsPage = React.memo(ReportsPageInner);
+export default ReportsPage;

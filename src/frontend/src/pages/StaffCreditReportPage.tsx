@@ -40,10 +40,10 @@ function filterByDate(invoices: Invoice[], filter: DateFilter): Invoice[] {
 }
 
 const filterLabels: Record<DateFilter, string> = {
-  today: "Aaj",
-  week: "Iss Hafte",
-  month: "Iss Mahine",
-  all: "Sab",
+  today: "Today",
+  week: "This Week",
+  month: "This Month",
+  all: "All",
 };
 
 const AVATAR_COLORS = [
@@ -244,8 +244,8 @@ export function StaffCreditReportPage() {
                 data-ocid="staff_credit.empty_state"
               >
                 <CreditCard className="mx-auto mb-3 opacity-20" size={40} />
-                <p className="font-medium">Koi data nahi mila</p>
-                <p className="text-sm mt-1">Is period mein koi sale nahi hui</p>
+                <p className="font-medium">No data found</p>
+                <p className="text-sm mt-1">No sales in this period</p>
               </div>
             ) : (
               <div className="divide-y divide-border">

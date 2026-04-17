@@ -31,6 +31,17 @@ self.addEventListener('fetch', (event) => {
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).then((response) => {
+        // SPA fallback: if navigation request gets a 404, serve /index.html
+        if (
+          event.request.mode === 'navigate' &&
+          (response.status === 404 || !response.ok)
+        ) {
+          return caches.match('/index.html').then((fallback) => {
+            if (fallback) return fallback;
+            return fetch('/index.html');
+          });
+        }
+
         // Cache successful responses for same-origin requests
         if (
           response.ok &&
@@ -40,7 +51,15 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
-      }).catch(() => cached ?? new Response('Offline', { status: 503 }));
+      }).catch(() => {
+        // Network failure — for navigation requests serve cached index.html
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html').then((fallback) => {
+            return fallback ?? new Response('Offline', { status: 503 });
+          });
+        }
+        return cached ?? new Response('Offline', { status: 503 });
+      });
     })
   );
 });

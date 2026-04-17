@@ -35,11 +35,11 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { TopBar } from "../components/TopBar";
 import { VoiceInputButton } from "../components/VoiceInputButton";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
-import type { Product, StockBatch } from "../types/store";
+import { useAsyncAction } from "../hooks/useAsyncAction";
+import type { NavPage, Product, StockBatch } from "../types/store";
 import { clearLeadingZeros } from "../utils/numberInput";
 import type { ParsedVoiceCommand } from "../utils/voiceParser";
 
@@ -58,7 +58,13 @@ function formatBatchQty(product: Product, batch: StockBatch): string {
   return `${batch.quantity} ${product.unit}`;
 }
 
-export function StockPage() {
+const STOCK_FORM_DRAFT_KEY = "saveshop_stock_form_draft";
+
+export function StockPage({
+  onNavigate,
+}: {
+  onNavigate?: (page: NavPage) => void;
+}) {
   const {
     products,
     transactions,
@@ -70,8 +76,12 @@ export function StockPage() {
     addCategory,
     categories,
     shopId,
+    appConfig,
   } = useStore();
   const { t, language } = useLanguage();
+
+  // ── Form draft protection ────────────────────────────────────────────────
+  const [showResumeBanner, setShowResumeBanner] = useState(false);
 
   // Debug: log products when Stock page loads
   useEffect(() => {
@@ -98,6 +108,53 @@ export function StockPage() {
   // Mixed Unit: dual qty
   const [inLengthQty, setInLengthQty] = useState("");
   const [inWeightQty, setInWeightQty] = useState("");
+
+  // ── Load form draft on mount ─────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const draftKey = `${STOCK_FORM_DRAFT_KEY}_${shopId}`;
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft?.productId || draft?.rate || draft?.qty) {
+          setShowResumeBanner(true);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [shopId]);
+
+  // ── Auto-save draft on field change ──────────────────────────────────────
+  useEffect(() => {
+    if (!inProduct && !inQty && !inRate) return;
+    try {
+      const draftKey = `${STOCK_FORM_DRAFT_KEY}_${shopId}`;
+      const draft = {
+        productId: inProduct,
+        qty: inQty,
+        rate: inRate,
+        transport: inTransport,
+        labour: inLabour,
+        otherCharges: inOtherCharges,
+        sellPrice: inSellPrice,
+        profitPercent: inProfitPercent,
+      };
+      localStorage.setItem(draftKey, JSON.stringify(draft));
+    } catch {
+      /* ignore */
+    }
+  }, [
+    inProduct,
+    inQty,
+    inRate,
+    inTransport,
+    inLabour,
+    inOtherCharges,
+    inSellPrice,
+    inProfitPercent,
+    shopId,
+  ]);
 
   // ── Quick Add Product dialog ──────────────────────────────────────────────
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -128,7 +185,7 @@ export function StockPage() {
       (p) => p.name.trim().toLowerCase() === qaName.trim().toLowerCase(),
     );
     if (duplicate) {
-      toast.warning(`"${qaName}" pehle se exist karta hai`);
+      toast.warning(`"${qaName}" already exists`);
       return;
     }
 
@@ -153,7 +210,7 @@ export function StockPage() {
 
     // Auto-select the new product in Stock In dropdown
     handleInProductChange(newId);
-    toast.success(`"${qaName.trim()}" product add ho gaya!`);
+    toast.success(`"${qaName.trim()}" added successfully!`);
     resetQuickAdd();
     setShowQuickAdd(false);
   };
@@ -201,66 +258,81 @@ export function StockPage() {
     }
   };
 
-  const handleStockIn = () => {
-    if (!inProduct || !inRate) {
-      toast.error("Please fill all required fields");
-      return;
-    }
-
-    let qty: number;
-    let lengthQtyVal: number | undefined;
-    let weightQtyVal: number | undefined;
-
-    if (isMixedIn) {
-      if (!inLengthQty) {
-        toast.error("Please enter Length Quantity");
-        return;
-      }
-      lengthQtyVal = Number(inLengthQty);
-      weightQtyVal = inWeightQty ? Number(inWeightQty) : undefined;
-      qty = lengthQtyVal; // primary quantity is length
-    } else {
-      if (!inQty) {
+  const { execute: submitStockIn, isLoading: isStockInSaving } = useAsyncAction(
+    async () => {
+      if (!inProduct || !inRate) {
         toast.error("Please fill all required fields");
         return;
       }
-      qty = Number(inQty);
-    }
 
-    const rate = Number(inRate);
-    if (qty <= 0 || rate <= 0) {
-      toast.error("Quantity and rate must be positive");
-      return;
-    }
-    addStockIn(
-      inProduct,
-      qty,
-      rate,
-      new Date(inDate).toISOString(),
-      inNote || "Stock purchase",
-      inInvoiceNo.trim() || undefined,
-      inBillNo.trim() || undefined,
-      inTransport ? Number(inTransport) : undefined,
-      inLabour ? Number(inLabour) : undefined,
-      inExpiryDate.trim() || undefined,
-      lengthQtyVal,
-      weightQtyVal,
-      inOtherCharges ? Number(inOtherCharges) : undefined,
-    );
-    toast.success("Stock added successfully!");
-    setInQty("");
-    setInRate("");
-    setInNote("");
-    setInInvoiceNo("");
-    setInBillNo("");
-    setInTransport("");
-    setInLabour("");
-    setInOtherCharges("");
-    setInExpiryDate("");
-    setInSellPrice("");
-    setInProfitPercent("");
-    setInLengthQty("");
-    setInWeightQty("");
+      let qty: number;
+      let lengthQtyVal: number | undefined;
+      let weightQtyVal: number | undefined;
+
+      if (isMixedIn) {
+        if (!inLengthQty) {
+          toast.error("Please enter Length Quantity");
+          return;
+        }
+        lengthQtyVal = Number(inLengthQty);
+        weightQtyVal = inWeightQty ? Number(inWeightQty) : undefined;
+        qty = lengthQtyVal;
+      } else {
+        if (!inQty) {
+          toast.error("Please fill all required fields");
+          return;
+        }
+        qty = Number(inQty);
+      }
+
+      const rate = Number(inRate);
+      if (qty <= 0 || rate <= 0) {
+        toast.error("Quantity and rate must be positive");
+        return;
+      }
+      addStockIn(
+        inProduct,
+        qty,
+        rate,
+        new Date(inDate).toISOString(),
+        inNote || "Stock purchase",
+        inInvoiceNo.trim() || undefined,
+        inBillNo.trim() || undefined,
+        inTransport ? Number(inTransport) : undefined,
+        inLabour ? Number(inLabour) : undefined,
+        inExpiryDate.trim() || undefined,
+        lengthQtyVal,
+        weightQtyVal,
+        inOtherCharges ? Number(inOtherCharges) : undefined,
+      );
+      // Clear draft on success
+      try {
+        localStorage.removeItem(`${STOCK_FORM_DRAFT_KEY}_${shopId}`);
+        setShowResumeBanner(false);
+      } catch {
+        /* ignore */
+      }
+      toast.success("Stock added successfully!");
+      setInQty("");
+      setInRate("");
+      setInNote("");
+      setInInvoiceNo("");
+      setInBillNo("");
+      setInTransport("");
+      setInLabour("");
+      setInOtherCharges("");
+      setInExpiryDate("");
+      setInSellPrice("");
+      setInProfitPercent("");
+      setInLengthQty("");
+      setInWeightQty("");
+      // Navigate to inventory so user sees updated stock
+      if (onNavigate) onNavigate("inventory");
+    },
+  );
+
+  const handleStockIn = () => {
+    void submitStockIn();
   };
 
   const handleStockOut = () => {
@@ -315,8 +387,6 @@ export function StockPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TopBar title="Stock In/Out" />
-
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
         <div>
           <h1 className="text-xl font-bold">Stock Management</h1>
@@ -354,12 +424,14 @@ export function StockPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Product *</Label>
-                    <VoiceInputButton
-                      compact
-                      onParsed={handleVoiceParsed}
-                      lang={language === "hi" ? "hi-IN" : "en-IN"}
-                      data-ocid="stock.in.voice_input.button"
-                    />
+                    {(appConfig.featureMode ?? 3) === 3 && (
+                      <VoiceInputButton
+                        compact
+                        onParsed={handleVoiceParsed}
+                        lang={language === "hi" ? "hi-IN" : "en-IN"}
+                        data-ocid="stock.in.voice_input.button"
+                      />
+                    )}
                   </div>
                   <Select
                     value={inProduct}
@@ -380,7 +452,7 @@ export function StockPage() {
                         }}
                       >
                         <Plus size={14} className="shrink-0" />
-                        <span>Naya Product Add Karein</span>
+                        <span>Add New Product</span>
                       </button>
                       <Separator className="my-1" />
                       {products.map((p) => (
@@ -713,9 +785,7 @@ export function StockPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-sm">
-                    Other Charges / Anya Kharcha (₹)
-                  </Label>
+                  <Label className="text-sm">Other Charges (₹)</Label>
                   <Input
                     data-ocid="stock.in.other_charges.input"
                     type="number"
@@ -850,8 +920,7 @@ export function StockPage() {
                     <div className="space-y-1 text-muted-foreground">
                       <div className="flex justify-between">
                         <span>
-                          Kharid (Purchase): ₹{inRate || 0} ×{" "}
-                          {effectiveQty || 0}
+                          Purchase: ₹{inRate || 0} × {effectiveQty || 0}
                         </span>
                         <span className="text-foreground font-medium">
                           ₹{purchaseSubtotal.toFixed(2)}
@@ -859,7 +928,7 @@ export function StockPage() {
                       </div>
                       {Number(inTransport) > 0 && (
                         <div className="flex justify-between">
-                          <span>+ Dhulai (Transport)</span>
+                          <span>+ Transport</span>
                           <span className="text-foreground">
                             ₹{Number(inTransport).toFixed(2)}
                           </span>
@@ -867,7 +936,7 @@ export function StockPage() {
                       )}
                       {Number(inLabour) > 0 && (
                         <div className="flex justify-between">
-                          <span>+ Majduri (Labour)</span>
+                          <span>+ Labour</span>
                           <span className="text-foreground">
                             ₹{Number(inLabour).toFixed(2)}
                           </span>
@@ -875,14 +944,14 @@ export function StockPage() {
                       )}
                       {Number(inOtherCharges) > 0 && (
                         <div className="flex justify-between">
-                          <span>+ Anya Kharcha (Other)</span>
+                          <span>+ Other Charges</span>
                           <span className="text-foreground">
                             ₹{Number(inOtherCharges).toFixed(2)}
                           </span>
                         </div>
                       )}
                       <div className="flex justify-between border-t border-border pt-1 mt-1 font-semibold text-foreground">
-                        <span>Final Cost / Lagat (Total)</span>
+                        <span>Final Cost (Total)</span>
                         <span>₹{totalFinalCost.toFixed(2)}</span>
                       </div>
                       {effectiveQty > 0 && inPerUnitCost > 0 && (
@@ -909,12 +978,83 @@ export function StockPage() {
                   </div>
                 )}
 
+                {/* Resume draft banner */}
+                {showResumeBanner && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm">
+                    <span className="text-amber-800">
+                      📋 You have unsaved data from last time.
+                    </span>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                        onClick={() => {
+                          try {
+                            const raw = localStorage.getItem(
+                              `${STOCK_FORM_DRAFT_KEY}_${shopId}`,
+                            );
+                            if (raw) {
+                              const draft = JSON.parse(raw);
+                              if (draft.productId)
+                                setInProduct(draft.productId);
+                              if (draft.qty) setInQty(draft.qty);
+                              if (draft.rate) setInRate(draft.rate);
+                              if (draft.transport)
+                                setInTransport(draft.transport);
+                              if (draft.labour) setInLabour(draft.labour);
+                              if (draft.otherCharges)
+                                setInOtherCharges(draft.otherCharges);
+                              if (draft.sellPrice)
+                                setInSellPrice(draft.sellPrice);
+                              if (draft.profitPercent)
+                                setInProfitPercent(draft.profitPercent);
+                            }
+                          } catch {
+                            /* ignore */
+                          }
+                          setShowResumeBanner(false);
+                        }}
+                      >
+                        Resume
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-amber-700"
+                        onClick={() => {
+                          try {
+                            localStorage.removeItem(
+                              `${STOCK_FORM_DRAFT_KEY}_${shopId}`,
+                            );
+                          } catch {
+                            /* ignore */
+                          }
+                          setShowResumeBanner(false);
+                        }}
+                      >
+                        Discard
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 <Button
                   data-ocid="stock.in.submit_button"
                   className="w-full"
+                  disabled={isStockInSaving}
                   onClick={handleStockIn}
                 >
-                  <ArrowDownToLine size={16} className="mr-2" /> Add Stock
+                  {isStockInSaving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownToLine size={16} className="mr-2" /> Add Stock
+                    </>
+                  )}
                 </Button>
               </CardContent>
             </Card>
@@ -1150,8 +1290,7 @@ export function StockPage() {
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
-              <Plus size={16} className="text-primary" /> Naya Product Add
-              Karein
+              <Plus size={16} className="text-primary" /> Add New Product
             </DialogTitle>
           </DialogHeader>
 
@@ -1225,8 +1364,8 @@ export function StockPage() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              * Required fields. Baaki details baad mein Admin Panel se edit kar
-              sakte hain.
+              * Required fields. Other details can be edited from Admin Panel
+              later.
             </p>
 
             <div className="flex gap-2 pt-1">
@@ -1416,7 +1555,7 @@ function BulkStockIn() {
       (p) => p.name.trim().toLowerCase() === qaName.trim().toLowerCase(),
     );
     if (dup) {
-      toast.warning(`"${qaName}" pehle se exist karta hai`);
+      toast.warning(`"${qaName}" already exists`);
       return;
     }
 
@@ -1438,7 +1577,7 @@ function BulkStockIn() {
     if (qaTargetRowId) {
       updateRow(qaTargetRowId, { productId: newId });
     }
-    toast.success(`"${qaName.trim()}" product add ho gaya!`);
+    toast.success(`"${qaName.trim()}" added successfully!`);
     resetQA();
     setShowQA(false);
   };
@@ -1449,7 +1588,9 @@ function BulkStockIn() {
       (r) => r.productId && Number(r.qty) > 0 && Number(r.rate) > 0,
     );
     if (validRows.length === 0) {
-      toast.error("Kam se kam ek row mein product, qty, aur rate fill karein");
+      toast.error(
+        "Please fill product, quantity, and rate in at least one row",
+      );
       return;
     }
     const dateIso = new Date(date).toISOString();
@@ -1470,7 +1611,7 @@ function BulkStockIn() {
         undefined,
       );
     }
-    toast.success(`${validRows.length} products ka stock add ho gaya! ✅`);
+    toast.success(`${validRows.length} products stock added successfully! ✅`);
     setRows([makeBulkRow(), makeBulkRow(), makeBulkRow()]);
     setBillNo("");
   };
@@ -1491,10 +1632,10 @@ function BulkStockIn() {
               <Label className="text-sm">Vendor (optional)</Label>
               <Select value={vendorId} onValueChange={handleVendorChange}>
                 <SelectTrigger data-ocid="bulk.vendor.select">
-                  <SelectValue placeholder="Vendor chunein" />
+                  <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">— Koi vendor nahi —</SelectItem>
+                  <SelectItem value="__none__">— No Vendor —</SelectItem>
                   {vendors.map((v) => (
                     <SelectItem key={v.id} value={v.id}>
                       {v.name}
@@ -1672,7 +1813,7 @@ function BulkStockIn() {
           onClick={() => setRows((prev) => [...prev, makeBulkRow()])}
           className="flex items-center gap-2"
         >
-          <Plus size={15} /> Ek Aur Product Add Karein
+          <Plus size={15} /> Add Another Product
         </Button>
 
         <div className="flex-1 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-end">
@@ -1681,7 +1822,7 @@ function BulkStockIn() {
               <span className="font-semibold text-foreground">
                 {validRowCount}
               </span>{" "}
-              item{validRowCount !== 1 ? "s" : ""} save ke liye taiyaar
+              item{validRowCount !== 1 ? "s" : ""} ready to save
             </span>
           )}
           <Button
@@ -1691,7 +1832,7 @@ function BulkStockIn() {
             onClick={handleSaveAll}
           >
             <ArrowDownToLine size={16} className="mr-2" />
-            Sab Save Karein ({validRowCount} item
+            Save All ({validRowCount} item
             {validRowCount !== 1 ? "s" : ""})
           </Button>
         </div>
@@ -1714,8 +1855,7 @@ function BulkStockIn() {
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
-              <Plus size={16} className="text-primary" /> Naya Product Add
-              Karein
+              <Plus size={16} className="text-primary" /> Add New Product
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-1">
@@ -1853,7 +1993,7 @@ function BulkRowDesktop({
       <td className="px-3 py-2">
         <Select value={row.productId || ""} onValueChange={onProductChange}>
           <SelectTrigger className="h-8 text-xs">
-            <SelectValue placeholder="Product chunein…" />
+            <SelectValue placeholder="Select product…" />
           </SelectTrigger>
           <SelectContent>
             <button
@@ -1864,7 +2004,7 @@ function BulkRowDesktop({
                 onProductChange("__new__");
               }}
             >
-              <Plus size={12} /> Naya Product
+              <Plus size={12} /> New Product
             </button>
             <Separator className="my-1" />
             {products.map((p) => (
@@ -2036,7 +2176,7 @@ function BulkRowMobile({
           <Label className="text-xs">Product *</Label>
           <Select value={row.productId || ""} onValueChange={onProductChange}>
             <SelectTrigger>
-              <SelectValue placeholder="Product chunein…" />
+              <SelectValue placeholder="Select product…" />
             </SelectTrigger>
             <SelectContent>
               <button
@@ -2047,7 +2187,7 @@ function BulkRowMobile({
                   onProductChange("__new__");
                 }}
               >
-                <Plus size={13} /> Naya Product
+                <Plus size={13} /> New Product
               </button>
               <Separator className="my-1" />
               {products.map((p) => (

@@ -33,8 +33,7 @@ function fmtCooldown(ms: number): string {
 }
 
 export function RewardAdButton({ onEarnDiamond }: Props) {
-  const { language } = useLanguage();
-  const isHi = language === "hi";
+  useLanguage(); // kept for future language support
 
   const [modal, setModal] = useState<ModalState>("idle");
   const [elapsed, setElapsed] = useState(0); // seconds watched
@@ -147,34 +146,22 @@ export function RewardAdButton({ onEarnDiamond }: Props) {
   const canSkip = elapsed >= SKIP_UNLOCK_AT;
 
   const t = {
-    watchAd: isHi ? "विज्ञापन देखें और 1 💎 कमाएं" : "Watch Ad & Earn 1 💎",
-    watchDesc: isHi
-      ? "केवल 30 सेकंड • मुफ्त डायमंड"
-      : "Only 30 seconds • Free diamonds",
-    comeBack: isHi
-      ? `${fmtCooldown(cooldownMs)} में वापस आएं`
-      : `Come back in ${fmtCooldown(cooldownMs)}`,
-    moreDiamonds: isHi ? "और 💎 डायमंड कमाने के लिए" : "to earn more 💎 diamonds",
-    watchingAd: isHi ? "विज्ञापन देख रहे हैं..." : "Watching Advertisement...",
-    pleaseWait: isHi
-      ? "डायमंड पाने के लिए प्रतीक्षा करें"
-      : "Please wait to earn your diamond",
-    secondsLeft: isHi
-      ? `${remaining} सेकंड शेष`
-      : `${remaining} seconds remaining`,
-    skipIn: isHi
-      ? `${SKIP_UNLOCK_AT - elapsed}s में स्किप`
-      : `Skip in ${SKIP_UNLOCK_AT - elapsed}s`,
-    skip: isHi ? "स्किप करें ›" : "Skip ›",
-    cancel: isHi ? "रद्द करें" : "Cancel",
-    earned: isHi ? "🎉 1 डायमंड मिला!" : "🎉 You earned 1 Diamond!",
-    earnedDesc: isHi
-      ? "और डायमंड के लिए विज्ञापन देखते रहें"
-      : "Keep watching ads to level up faster",
-    claim: isHi ? "डायमंड प्राप्त करें 💎" : "Claim Diamond 💎",
-    loadingVideo: isHi ? "वीडियो लोड हो रहा है..." : "Loading video...",
-    unmute: isHi ? "आवाज़ चालू करें 🔊" : "Unmute 🔊",
-    mute: isHi ? "आवाज़ बंद करें 🔇" : "Mute 🔇",
+    watchAd: "Watch Ad & Earn 1 💎",
+    watchDesc: "Only 30 seconds • Free diamonds",
+    comeBack: `Come back in ${fmtCooldown(cooldownMs)}`,
+    moreDiamonds: "to earn more 💎 diamonds",
+    watchingAd: "Watching Advertisement...",
+    pleaseWait: "Please wait to earn your diamond",
+    secondsLeft: `${remaining} seconds remaining`,
+    skipIn: `Skip in ${SKIP_UNLOCK_AT - elapsed}s`,
+    skip: "Skip ›",
+    cancel: "Cancel",
+    earned: "🎉 1 Diamond Earned!",
+    earnedDesc: "Keep watching ads for more diamonds",
+    claim: "Claim Diamond 💎",
+    loadingVideo: "Loading video...",
+    unmute: "Unmute 🔊",
+    mute: "Mute 🔇",
   };
 
   return (

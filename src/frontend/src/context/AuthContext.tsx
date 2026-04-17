@@ -7,7 +7,15 @@ import {
   useRef,
   useState,
 } from "react";
-import type { AppUser, MobileSession, Shop, UserRole } from "../types/store";
+import type { backendInterface } from "../backend";
+import { createActorWithConfig } from "../config";
+import type {
+  AppUser,
+  MobileSession,
+  Shop,
+  ShopMeta,
+  UserRole,
+} from "../types/store";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -73,6 +81,37 @@ interface AuthContextValue {
   currentShop: Shop | null;
   currentUser: CurrentUser | null;
 
+  // ── Multi-shop system ────────────────────────────────────────────────────
+  /** All shops owned by the logged-in mobile number */
+  allShops: ShopMeta[];
+  /** The currently selected shop (may differ from the primary shop after switchShop) */
+  selectedShop: ShopMeta | null;
+  /** Switch active shop without logout — updates session.selectedShopId */
+  switchShop: (shopId: string) => void;
+  /** Create a new shop under the same owner mobile — auto-switches to it */
+  createNewShop: (
+    name: string,
+    address: string,
+    city: string,
+  ) => Promise<{ success: boolean; error?: string; shopId?: string }>;
+  /** Re-fetch all shops for an owner mobile from backend */
+  loadOwnerShops: (mobile: string) => Promise<void>;
+  /** Update shop details in backend */
+  updateShopDetails: (
+    shopId: string,
+    name: string,
+    address: string,
+    city: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  /** Soft-delete a shop from the list */
+  deleteShopFromList: (
+    shopId: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  /** Get combined stats for all shops owned by mobile */
+  getOwnerStats: (
+    mobile: string,
+  ) => Promise<import("../backend").OwnerStats | null>;
+
   // Legacy compat (used by AdminPage for user management)
   shops: Shop[];
   selectShop: (shopId: string) => void;
@@ -94,14 +133,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
+  // ── Multi-shop state ──────────────────────────────────────────────────────
+  const [allShops, setAllShops] = useState<ShopMeta[]>([]);
+  const [selectedShop, setSelectedShop] = useState<ShopMeta | null>(null);
+
+  // Actor for backend calls (shared, created once)
+  const actorRef = useRef<backendInterface | null>(null);
+  useEffect(() => {
+    createActorWithConfig()
+      .then((a) => {
+        actorRef.current = a;
+      })
+      .catch((err) => {
+        console.error("[AuthContext] Actor creation failed:", err);
+      });
+  }, []);
+
   // Ref to latest users list — injected by StoreContext after it loads
-  // This is set via a special setter exposed by useAuth()
   const usersRef = useRef<AppUser[]>([]);
 
-  // Called by StoreContext once users are loaded from backend, so AuthContext
-  // can resolve the correct role for the current session.
-  // We also persist users to localStorage so loginWithPin can read them
-  // at login time, before StoreContext mounts.
+  // Called by StoreContext once users are loaded from backend
   const syncUsers = useCallback((users: AppUser[]) => {
     usersRef.current = users;
     try {
@@ -112,10 +163,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Build CurrentUser from a MobileSession + users list
   const buildCurrentUser = useCallback(
     (sess: MobileSession, users: AppUser[]): CurrentUser => {
-      const shopId = sess.shopId;
+      const shopId = sess.selectedShopId ?? sess.shopId;
       const mobile = sess.mobile;
 
-      // If userId is stored in session, look up by id first
       if (sess.userId) {
         const found = users.find(
           (u) => u.id === sess.userId && u.shopId === shopId,
@@ -131,7 +181,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Fallback: look up by mobile
       const byMobile = users.find(
         (u) =>
           u.mobile?.replace(/\D/g, "") === mobile &&
@@ -148,7 +197,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      // No AppUser record yet (first-time owner login) — treat as owner
       const userId = sess.userId ?? `user_${mobile}`;
       return {
         id: userId,
@@ -161,12 +209,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // ── Load shops for owner from backend ────────────────────────────────────
+  const loadOwnerShops = useCallback(async (mobile: string): Promise<void> => {
+    const actor = actorRef.current;
+    if (!actor) return;
+    try {
+      const shops = await actor.listShopsForOwner(mobile);
+      const active = shops.filter((s) => !s.isDeleted);
+      setAllShops(active);
+
+      // If no shops returned from backend, fall back to local store_shops for backward compat
+      if (active.length === 0) {
+        const localShops = lsGet<Shop[]>("store_shops") ?? [];
+        const primaryShopId = `shop_${mobile}`;
+        const primaryLocal = localShops.find((s) => s.id === primaryShopId);
+        if (primaryLocal) {
+          const converted: ShopMeta = {
+            id: primaryLocal.id,
+            name: primaryLocal.name,
+            address: "",
+            city: "",
+            createdAt: primaryLocal.createdAt,
+            ownerMobile: mobile,
+            isDeleted: false,
+          };
+          setAllShops([converted]);
+        }
+      }
+    } catch (err) {
+      console.error("[AuthContext] loadOwnerShops failed:", err);
+      // Fallback: use local shops
+      const localShops = lsGet<Shop[]>("store_shops") ?? [];
+      const primaryShopId = `shop_${mobile}`;
+      const primaryLocal = localShops.find((s) => s.id === primaryShopId);
+      if (primaryLocal) {
+        const converted: ShopMeta = {
+          id: primaryLocal.id,
+          name: primaryLocal.name,
+          address: "",
+          city: "",
+          createdAt: primaryLocal.createdAt,
+          ownerMobile: mobile,
+          isDeleted: false,
+        };
+        setAllShops([converted]);
+      }
+    }
+  }, []);
+
+  // ── Restore session on mount ──────────────────────────────────────────────
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadOwnerShops is stable — defined outside effect, including it would cause infinite loop
   useEffect(() => {
-    // Restore saved session
     const saved = lsGet<MobileSession>("mobile_auth_session");
     if (saved?.mobile && saved?.shopId) {
       setSession(saved);
-      // Build user from what's in session (full resolution happens after StoreContext loads users)
       const userId = saved.userId ?? `user_${saved.mobile}`;
       setCurrentUser({
         id: userId,
@@ -175,9 +271,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mobile: saved.mobile,
         isOwner: (saved.userRole ?? "owner") === "owner",
       });
+      // Populate allShops once actor is ready — defer slightly
+      setTimeout(() => {
+        loadOwnerShops(saved.mobile);
+      }, 500);
     }
     setIsInitializing(false);
   }, []);
+
+  // Sync selectedShop whenever allShops or session changes
+  useEffect(() => {
+    if (!session) {
+      setSelectedShop(null);
+      return;
+    }
+    const activeShopId = session.selectedShopId ?? session.shopId;
+    const match = allShops.find((s) => s.id === activeShopId);
+    if (match) {
+      setSelectedShop(match);
+    } else if (allShops.length > 0) {
+      setSelectedShop(allShops[0]);
+    } else {
+      // Fallback: build a minimal ShopMeta from session
+      setSelectedShop({
+        id: activeShopId,
+        name: session.shopName,
+        address: "",
+        city: "",
+        createdAt: session.loginAt,
+        ownerMobile: session.mobile,
+        isDeleted: false,
+      });
+    }
+  }, [allShops, session]);
 
   // Re-resolve currentUser whenever users list is synced (called from StoreContext)
   const resolveUserFromStore = useCallback(
@@ -190,24 +316,164 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [session, buildCurrentUser, syncUsers],
   );
 
-  // Send OTP — generates and stores OTP for 10 minutes (Owner login)
+  // ── switchShop ────────────────────────────────────────────────────────────
+  const switchShop = useCallback(
+    (shopId: string) => {
+      if (!session) return;
+      const target = allShops.find((s) => s.id === shopId);
+      const targetName = target?.name ?? session.shopName;
+
+      const updatedSession: MobileSession = {
+        ...session,
+        selectedShopId: shopId,
+        shopName: targetName,
+      };
+      lsSet("mobile_auth_session", updatedSession);
+      setSession(updatedSession);
+      if (target) setSelectedShop(target);
+    },
+    [session, allShops],
+  );
+
+  // ── createNewShop ─────────────────────────────────────────────────────────
+  const createNewShop = useCallback(
+    async (
+      name: string,
+      address: string,
+      city: string,
+    ): Promise<{ success: boolean; error?: string; shopId?: string }> => {
+      if (!session) return { success: false, error: "Please login first" };
+      const actor = actorRef.current;
+      if (!actor) return { success: false, error: "Not connected to backend" };
+      try {
+        const result = await actor.addShop(
+          session.mobile,
+          name.trim(),
+          address.trim(),
+          city.trim(),
+        );
+        if (!result.success) {
+          return {
+            success: false,
+            error: result.error ?? "Failed to create shop",
+          };
+        }
+        // Reload all shops then auto-switch
+        await loadOwnerShops(session.mobile);
+        switchShop(result.shopId);
+        return { success: true, shopId: result.shopId };
+      } catch (err) {
+        console.error("[AuthContext] createNewShop failed:", err);
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : "Failed to create shop",
+        };
+      }
+    },
+    [session, loadOwnerShops, switchShop],
+  );
+
+  // ── updateShopDetails ────────────────────────────────────────────────────
+  const updateShopDetails = useCallback(
+    async (
+      shopId: string,
+      name: string,
+      address: string,
+      city: string,
+    ): Promise<{ success: boolean; error?: string }> => {
+      const actor = actorRef.current;
+      if (!actor) return { success: false, error: "Not connected to backend" };
+      try {
+        const result = await actor.updateShop(shopId, name, address, city);
+        if (!result.success) {
+          return {
+            success: false,
+            error: result.error ?? "Failed to update shop",
+          };
+        }
+        // Optimistically update local list
+        setAllShops((prev) =>
+          prev.map((s) =>
+            s.id === shopId ? { ...s, name, address, city } : s,
+          ),
+        );
+        // If this was the currently selected shop, update session shopName
+        if (session?.selectedShopId === shopId || session?.shopId === shopId) {
+          const updatedSession: MobileSession = { ...session!, shopName: name };
+          lsSet("mobile_auth_session", updatedSession);
+          setSession(updatedSession);
+        }
+        return { success: true };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : "Failed to update shop",
+        };
+      }
+    },
+    [session],
+  );
+
+  // ── deleteShopFromList ────────────────────────────────────────────────────
+  const deleteShopFromList = useCallback(
+    async (shopId: string): Promise<{ success: boolean; error?: string }> => {
+      const actor = actorRef.current;
+      if (!actor) return { success: false, error: "Not connected to backend" };
+      try {
+        const result = await actor.deleteShop(shopId);
+        if (!result.success) {
+          return { success: false, error: "Failed to delete shop" };
+        }
+        setAllShops((prev) => prev.filter((s) => s.id !== shopId));
+        // If the deleted shop was selected, switch to another
+        if (
+          session &&
+          (session.selectedShopId === shopId || session.shopId === shopId)
+        ) {
+          const remaining = allShops.filter((s) => s.id !== shopId);
+          if (remaining.length > 0) {
+            switchShop(remaining[0].id);
+          }
+        }
+        return { success: true };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : "Failed to delete shop",
+        };
+      }
+    },
+    [session, allShops, switchShop],
+  );
+
+  // ── getOwnerStats ─────────────────────────────────────────────────────────
+  const getOwnerStats = useCallback(async (mobile: string) => {
+    const actor = actorRef.current;
+    if (!actor) return null;
+    try {
+      return await actor.getOwnerStats(mobile);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // ── Send OTP ──────────────────────────────────────────────────────────────
   const sendOtp = useCallback(
     (mobile: string): { success: boolean; error?: string; otp?: string } => {
       const cleaned = mobile.replace(/\D/g, "");
       if (cleaned.length !== 10) {
         return {
           success: false,
-          error: "Valid 10-digit mobile number daalein",
+          error: "Enter a valid 10-digit mobile number",
         };
       }
       const otp = generateOtp();
       const pending: PendingOtp = {
         mobile: cleaned,
         otp,
-        expiresAt: Date.now() + 10 * 60 * 1000, // 10 min
+        expiresAt: Date.now() + 10 * 60 * 1000,
       };
       setPendingOtp(pending);
-      // Store in localStorage so page refresh doesn't break OTP (dev convenience)
       lsSet("pending_otp", pending);
       console.log(`[Auth] OTP for ${cleaned}: ${otp}`);
       return { success: true, otp };
@@ -215,7 +481,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Verify OTP and create/restore session (Owner login flow)
+  // ── Verify OTP ────────────────────────────────────────────────────────────
   const verifyOtp = useCallback(
     (
       mobile: string,
@@ -224,28 +490,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ): { success: boolean; error?: string } => {
       const cleaned = mobile.replace(/\D/g, "");
 
-      // Get pending OTP (from state or localStorage fallback)
       let pending = pendingOtp;
       if (!pending) {
         pending = lsGet<PendingOtp>("pending_otp");
       }
 
       if (!pending || pending.mobile !== cleaned) {
-        return { success: false, error: "Pehle OTP bhejein" };
+        return { success: false, error: "Send OTP first" };
       }
       if (Date.now() > pending.expiresAt) {
         setPendingOtp(null);
         localStorage.removeItem("pending_otp");
-        return { success: false, error: "OTP expire ho gaya, dobara bhejein" };
+        return { success: false, error: "OTP has expired. Send OTP again" };
       }
       if (pending.otp !== enteredOtp.trim()) {
-        return { success: false, error: "OTP galat hai" };
+        return { success: false, error: "OTP is incorrect" };
       }
 
-      // OTP verified — create session
       const shopId = `shop_${cleaned}`;
 
-      // Auto-create shop record if first time
+      // Auto-create shop record if first time (localStorage compat)
       const existingShops = lsGet<Shop[]>("store_shops") ?? [];
       const shopExists = existingShops.find((s) => s.id === shopId);
       if (!shopExists) {
@@ -264,7 +528,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const resolvedShopName =
         shopRecord?.name ?? (shopName.trim() || `Shop ${cleaned}`);
 
-      // Determine role from existing users list
       const existingUsers = usersRef.current.filter(
         (u) => u.shopId === shopId && !u.deleted,
       );
@@ -272,7 +535,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (u) => u.mobile?.replace(/\D/g, "") === cleaned,
       );
 
-      // If no users exist yet → this is the first owner login
       const userId = matchedUser?.id ?? `user_${cleaned}`;
       const userRole: UserRole = matchedUser?.role ?? "owner";
 
@@ -283,6 +545,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginAt: new Date().toISOString(),
         userId,
         userRole,
+        selectedShopId: shopId,
       };
 
       lsSet("mobile_auth_session", newSession);
@@ -307,25 +570,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
       setCurrentUser(user);
 
+      // Load all shops for this owner in the background
+      setTimeout(() => loadOwnerShops(cleaned), 300);
+
       return { success: true };
     },
-    [pendingOtp],
+    [pendingOtp, loadOwnerShops],
   );
 
-  // PIN login — Manager / Staff login via mobile + PIN
+  // ── PIN login ─────────────────────────────────────────────────────────────
   const loginWithPin = useCallback(
     (mobile: string, pin: string): { success: boolean; error?: string } => {
       const cleaned = mobile.replace(/\D/g, "");
       if (!cleaned || cleaned.length < 10) {
-        return { success: false, error: "Valid mobile number daalein" };
+        return { success: false, error: "Please enter a valid mobile number" };
       }
       if (!pin || pin.trim().length === 0) {
-        return { success: false, error: "PIN daalein" };
+        return { success: false, error: "Please enter your PIN" };
       }
 
-      // Look for shop based on mobile prefix pattern.
-      // StoreContext mounts only after login, so usersRef.current is empty at
-      // login time — fall back to the localStorage cache written by syncUsers.
       let allUsers = usersRef.current;
       if (allUsers.length === 0) {
         try {
@@ -342,16 +605,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
 
       if (!matched) {
-        return { success: false, error: "Mobile ya PIN galat hai" };
+        return { success: false, error: "Mobile number or PIN is incorrect" };
       }
 
-      // Owner PIN login: only owner can use PIN login for overrides
-      // (Owners also use OTP, but PIN login is valid for manager/staff)
       const shopId = matched.shopId;
-
-      // Get shop name
-      const allShops = lsGet<Shop[]>("store_shops") ?? [];
-      const shop = allShops.find((s) => s.id === shopId);
+      const allShopsLocal = lsGet<Shop[]>("store_shops") ?? [];
+      const shop = allShopsLocal.find((s) => s.id === shopId);
       const resolvedShopName = shop?.name ?? `Shop ${cleaned}`;
 
       const newSession: MobileSession = {
@@ -361,6 +620,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginAt: new Date().toISOString(),
         userId: matched.id,
         userRole: matched.role,
+        selectedShopId: shopId,
       };
 
       lsSet("mobile_auth_session", newSession);
@@ -383,22 +643,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setSession(null);
     setCurrentUser(null);
+    setAllShops([]);
+    setSelectedShop(null);
     setPendingOtp(null);
     localStorage.removeItem("mobile_auth_session");
     localStorage.removeItem("pending_otp");
   }, []);
 
-  // Derived values for compatibility
+  // currentShop uses selectedShopId for dynamic shop switching
   const currentShop: Shop | null = session
     ? {
-        id: session.shopId,
-        name: session.shopName,
-        createdAt: session.loginAt,
+        id: session.selectedShopId ?? session.shopId,
+        name: selectedShop?.name ?? session.shopName,
+        createdAt: selectedShop?.createdAt ?? session.loginAt,
         mobile: session.mobile,
       }
     : null;
 
-  // Legacy compat stubs (used by AdminPage, keep them functional)
+  // Legacy compat stubs
   const shops: Shop[] = currentShop ? [currentShop] : [];
   const selectShop = useCallback((_shopId: string) => {}, []);
 
@@ -416,9 +678,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       _adminUsername: string,
       _adminPassword: string,
     ): { success: boolean; error?: string } => {
-      if (!session) return { success: false, error: "Login karein pehle" };
-      const allShops = lsGet<Shop[]>("store_shops") ?? [];
-      const updated = allShops.map((s) =>
+      if (!session) return { success: false, error: "Please login first" };
+      const allShopsLocal = lsGet<Shop[]>("store_shops") ?? [];
+      const updated = allShopsLocal.map((s) =>
         s.id === session.shopId ? { ...s, name: shopName.trim() } : s,
       );
       lsSet("store_shops", updated);
@@ -438,6 +700,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         currentShop,
         currentUser,
+        allShops,
+        selectedShop,
+        switchShop,
+        createNewShop,
+        loadOwnerShops,
+        updateShopDetails,
+        deleteShopFromList,
+        getOwnerStats,
         shops,
         selectShop,
         login,

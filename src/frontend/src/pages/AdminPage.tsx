@@ -28,24 +28,31 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertCircle,
+  Bug,
   Calculator,
+  CheckCircle,
   Clock,
+  Lightbulb,
   Lock,
+  MessageSquare,
   Pencil,
   Plus,
   Ruler,
   Settings,
   ShieldOff,
   ShoppingCart,
+  Sparkles,
   Tag,
   Trash2,
   TrendingUp,
+  XCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
-import type { AppUser, Product } from "../types/store";
+import type { AppUser, FeedbackType, Product } from "../types/store";
 import { ROLE_PERMISSIONS } from "../types/store";
 import { clearLeadingZeros } from "../utils/numberInput";
 
@@ -67,9 +74,9 @@ export function AdminPage() {
               </div>
               <CardTitle className="text-destructive">Access Denied</CardTitle>
               <p className="text-muted-foreground text-sm mt-1">
-                Aapke paas Admin Panel access nahi hai.
+                You do not have Admin Panel access.
                 <br />
-                Sirf Owner aur Manager yahan aa sakte hain.
+                Only Owner and Manager can access this page.
               </p>
             </CardHeader>
           </Card>
@@ -116,6 +123,11 @@ function AdminPanelContent({ role }: { role: string }) {
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="units">Units</TabsTrigger>
             {canManageStaff && <TabsTrigger value="users">Users</TabsTrigger>}
+            {isOwner && (
+              <TabsTrigger value="feedback" data-ocid="admin.tab.feedback">
+                <MessageSquare size={12} className="mr-1" /> Feedback
+              </TabsTrigger>
+            )}
             {canChangeSettings && (
               <TabsTrigger value="settings">
                 <Settings size={12} className="mr-1" /> Settings
@@ -135,6 +147,11 @@ function AdminPanelContent({ role }: { role: string }) {
           {canManageStaff && (
             <TabsContent value="users">
               <UsersManager />
+            </TabsContent>
+          )}
+          {isOwner && (
+            <TabsContent value="feedback">
+              <FeedbackManager />
             </TabsContent>
           )}
           {canChangeSettings && (
@@ -172,8 +189,7 @@ function SettingsManager() {
                 Allow Mixed Units (Length + Weight)
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
-                Ek product mein Length (meter) aur Weight (kg) dono store karne
-                ke liye enable karein.
+                Enable to store both Length and Weight for a single product.
               </p>
               {shopSettings.allowMixedUnits && (
                 <div className="mt-2 text-xs text-primary font-medium">
@@ -194,13 +210,11 @@ function SettingsManager() {
           {shopSettings.allowMixedUnits && (
             <div className="p-3 rounded-lg border border-border bg-secondary/30 text-xs text-muted-foreground space-y-1">
               <p className="font-semibold text-foreground">
-                Mixed Unit Mode kya karta hai?
+                What does Mixed Unit Mode do?
               </p>
-              <p>
-                • Product add karte waqt Length + Weight dono set kar sakte hain
-              </p>
+              <p>• When adding a product you can set both Length + Weight</p>
               <p>• Example: 1 Pipe = 6 meter = 15 kg</p>
-              <p>• Smart Ratio set karo — auto calculate hoga</p>
+              <p>• Set Smart Ratio — it will auto-calculate</p>
             </div>
           )}
         </CardContent>
@@ -213,8 +227,7 @@ function SettingsManager() {
             Vendor Rate Settings
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Vendor ka rate change hone par product cost price ka behavior
-            control karein
+            Vendor rate change behavior control
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -227,11 +240,11 @@ function SettingsManager() {
                 Auto Update Product Cost on Rate Change
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
-                ON: Vendor rate badalne par product ki cost price automatically
-                update ho jaayegi.
+                ON: Product cost price will be automatically updated when vendor
+                rate changes.
               </p>
               <p className="text-xs text-muted-foreground">
-                OFF: Confirmation dialog aayega — aap decide karenge.
+                OFF: A confirmation dialog will appear — you can decide.
               </p>
             </div>
             <Switch
@@ -247,11 +260,11 @@ function SettingsManager() {
           <div className="p-3 rounded-lg border border-border bg-secondary/30 text-xs space-y-1">
             <p className="font-semibold text-foreground">Vendor Rate History</p>
             <p className="text-muted-foreground">
-              • Har rate change automatically record hoga
+              • Every rate change will be automatically recorded
             </p>
             <p className="text-muted-foreground">
-              • Vendors page mein Rate History button se pura history dekh sakte
-              hain
+              • View full rate history from the Vendors page via the "Rate
+              History" button
             </p>
           </div>
         </CardContent>
@@ -264,7 +277,8 @@ function SettingsManager() {
             Dead Stock Settings
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Kitne din tak sale na ho toh product ko "Dead Stock" maana jaaye
+            How many days without a sale before a product is considered "Dead
+            Stock"
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -341,7 +355,7 @@ function SettingsManager() {
                 }}
                 placeholder="e.g. 45"
               />
-              <span className="text-xs text-muted-foreground">din</span>
+              <span className="text-xs text-muted-foreground">days</span>
             </div>
           )}
 
@@ -351,12 +365,12 @@ function SettingsManager() {
             </p>
             <p className="text-muted-foreground">
               • Slow:{" "}
-              {Math.round((shopSettings.deadStockThresholdDays ?? 90) / 2)} din
-              se zyada sale nahi hua
+              {Math.round((shopSettings.deadStockThresholdDays ?? 90) / 2)} days
+              since last sale
             </p>
             <p className="text-muted-foreground">
-              • Dead: {shopSettings.deadStockThresholdDays ?? 90} din se zyada
-              sale nahi hua
+              • Dead: {shopSettings.deadStockThresholdDays ?? 90} days since
+              last sale
             </p>
           </div>
         </CardContent>
@@ -632,7 +646,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
       );
       if (existingProduct) {
         toast.warning(
-          `"${data.name}" already exists — stock add kar dein ya naam badlein`,
+          `"${data.name}" already exists — add stock to it or rename`,
         );
         setShowForm(false);
         return;
@@ -742,9 +756,9 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                 data-ocid="admin.products.empty_state"
                 className="text-center py-10 text-muted-foreground text-sm"
               >
-                <p>Koi product nahi hai.</p>
+                <p>No products yet.</p>
                 <p className="text-xs mt-1">
-                  "Add Product" button se pehla product add karein.
+                  Click "Add Product" to add your first product.
                 </p>
               </div>
             ) : (
@@ -1122,7 +1136,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                     className="h-9"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Shuru mein kitna stock hai? Ek stock batch ban jayega.
+                    Opening stock quantity? A stock batch will be created.
                   </p>
                 </div>
               )}
@@ -1474,7 +1488,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                     className="h-9"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Staff is se kam par sell nahi kar sakta
+                    Staff cannot sell below this minimum profit threshold
                   </p>
                 </div>
               </div>
@@ -1584,7 +1598,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                     className="h-9"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Is level se neeche jaane par alert aayega
+                    An alert will trigger when stock falls below this level
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -1693,7 +1707,7 @@ function CategoriesManager() {
             data-ocid="admin.categories.empty_state"
             className="text-sm text-muted-foreground py-4 text-center"
           >
-            Koi category nahi hai. Upar se add karein.
+            No categories yet. Add one above.
           </p>
         )}
         {categories.map((c, idx) => (
@@ -1851,9 +1865,9 @@ function UnitsManager() {
             className="text-center py-8 text-muted-foreground"
           >
             <Ruler size={32} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">Koi unit nahi hai.</p>
+            <p className="text-sm">No units added yet.</p>
             <p className="text-xs mt-1">
-              Upar se unit add karein ya common units use karein.
+              Add a unit above or use common units.
             </p>
           </div>
         ) : (
@@ -1889,6 +1903,292 @@ function UnitsManager() {
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Feedback Manager (Owner only) ────────────────────────────────────────────
+const FEEDBACK_TYPE_META: Record<
+  FeedbackType,
+  { label: string; icon: React.ReactNode; color: string }
+> = {
+  bug: {
+    label: "Bug",
+    icon: <Bug size={11} />,
+    color:
+      "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400",
+  },
+  feature: {
+    label: "Feature",
+    icon: <Sparkles size={11} />,
+    color:
+      "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400",
+  },
+  improvement: {
+    label: "Improvement",
+    icon: <Lightbulb size={11} />,
+    color:
+      "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400",
+  },
+};
+
+const FEEDBACK_STATUS_META = {
+  pending: {
+    label: "Pending",
+    icon: <AlertCircle size={11} />,
+    cls: "bg-amber-50 text-amber-700 border-amber-200",
+  },
+  approved: {
+    label: "Approved",
+    icon: <CheckCircle size={11} />,
+    cls: "bg-green-50 text-green-700 border-green-200",
+  },
+  rejected: {
+    label: "Rejected",
+    icon: <XCircle size={11} />,
+    cls: "bg-red-50 text-red-700 border-red-200",
+  },
+};
+
+type FbFilter = "all" | "pending" | "approved" | "rejected";
+
+function FeedbackManager() {
+  const { feedbackList, approveFeedback, rejectFeedback } = useStore();
+  const { currentUser } = useAuth();
+
+  const [filter, setFilter] = useState<FbFilter>("all");
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const filtered =
+    filter === "all"
+      ? feedbackList
+      : feedbackList.filter((f) => f.status === filter);
+
+  const counts = {
+    all: feedbackList.length,
+    pending: feedbackList.filter((f) => f.status === "pending").length,
+    approved: feedbackList.filter((f) => f.status === "approved").length,
+    rejected: feedbackList.filter((f) => f.status === "rejected").length,
+  };
+
+  const filterChips: { key: FbFilter; label: string; cls: string }[] = [
+    {
+      key: "all",
+      label: `All (${counts.all})`,
+      cls: "bg-secondary text-foreground border-border",
+    },
+    {
+      key: "pending",
+      label: `Pending (${counts.pending})`,
+      cls: "bg-amber-50 text-amber-700 border-amber-200",
+    },
+    {
+      key: "approved",
+      label: `Approved (${counts.approved})`,
+      cls: "bg-green-50 text-green-700 border-green-200",
+    },
+    {
+      key: "rejected",
+      label: `Rejected (${counts.rejected})`,
+      cls: "bg-red-50 text-red-700 border-red-200",
+    },
+  ];
+
+  function handleApprove(feedbackId: string) {
+    approveFeedback(feedbackId, currentUser?.name ?? "Admin");
+    toast.success("✅ Approved — 10 💎 awarded");
+  }
+
+  function handleConfirmReject(feedbackId: string) {
+    rejectFeedback(feedbackId, rejectReason.trim() || "No reason provided");
+    toast.error("❌ Feedback rejected");
+    setRejectingId(null);
+    setRejectReason("");
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Filter chips */}
+      <div
+        className="flex gap-2 flex-wrap"
+        data-ocid="admin.feedback.filter.bar"
+      >
+        {filterChips.map((chip) => (
+          <button
+            key={chip.key}
+            type="button"
+            data-ocid={`admin.feedback.filter.${chip.key}`}
+            onClick={() => setFilter(chip.key)}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
+              filter === chip.key
+                ? `${chip.cls} ring-2 ring-primary/30`
+                : "bg-card text-muted-foreground border-border hover:border-primary/40"
+            }`}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Feedback list */}
+      {filtered.length === 0 ? (
+        <div
+          data-ocid="admin.feedback.empty_state"
+          className="flex flex-col items-center gap-3 py-10 text-center"
+        >
+          <MessageSquare size={28} className="text-muted-foreground/30" />
+          <p className="text-sm text-muted-foreground">No feedback found</p>
+          <p className="text-xs text-muted-foreground">
+            {filter === "all"
+              ? "No users have submitted feedback yet."
+              : `No ${filter} feedback at this time.`}
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {filtered.map((entry) => {
+            const typeInfo = FEEDBACK_TYPE_META[entry.type];
+            const statusInfo = FEEDBACK_STATUS_META[entry.status];
+            const isRejecting = rejectingId === entry.id;
+
+            return (
+              <Card
+                key={entry.id}
+                data-ocid={`admin.feedback.item.${entry.id}`}
+                className="shadow-card border-border"
+              >
+                <CardContent className="p-3.5">
+                  {/* Header row */}
+                  <div className="flex items-start gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${typeInfo.color}`}
+                        >
+                          {typeInfo.icon} {typeInfo.label}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusInfo.cls}`}
+                        >
+                          {statusInfo.icon} {statusInfo.label}
+                        </span>
+                        {entry.rewardGiven && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                            💎 +10 Rewarded
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {entry.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                        {entry.description}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground">
+                          By{" "}
+                          <span className="font-semibold text-foreground/80">
+                            {entry.userName}
+                          </span>
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/50">
+                          •
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(entry.submittedAt).toLocaleDateString(
+                            "en-IN",
+                            {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            },
+                          )}
+                        </span>
+                      </div>
+                      {entry.rejectionReason && (
+                        <p className="text-xs text-destructive mt-1">
+                          Reason: {entry.rejectionReason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Approve / Reject actions for pending items */}
+                  {entry.status === "pending" && (
+                    <div className="pt-2 border-t border-border/60">
+                      {isRejecting ? (
+                        <div className="flex flex-col gap-2">
+                          <label
+                            htmlFor={`reject-reason-${entry.id}`}
+                            className="text-xs font-semibold text-muted-foreground"
+                          >
+                            Rejection reason (optional)
+                          </label>
+                          <Input
+                            id={`reject-reason-${entry.id}`}
+                            placeholder="Enter reason for rejection..."
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            data-ocid={`admin.feedback.reject_reason.${entry.id}`}
+                            className="h-8 text-sm"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleConfirmReject(entry.id)}
+                              data-ocid={`admin.feedback.confirm_reject.${entry.id}`}
+                            >
+                              <XCircle size={12} className="mr-1" /> Confirm
+                              Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setRejectingId(null);
+                                setRejectReason("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleApprove(entry.id)}
+                            data-ocid={`admin.feedback.approve.${entry.id}`}
+                            className="flex-1"
+                          >
+                            <CheckCircle size={12} className="mr-1" /> Approve
+                            (+10 💎)
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setRejectingId(entry.id);
+                              setRejectReason("");
+                            }}
+                            data-ocid={`admin.feedback.reject.${entry.id}`}
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive border-border"
+                          >
+                            <XCircle size={12} className="mr-1" /> Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1948,7 +2248,7 @@ function UsersManager() {
 
   const handleDelete = (u: AppUser) => {
     if (u.id === currentUser?.id) {
-      toast.error("Aap khud ko delete nahi kar sakte");
+      toast.error("You cannot delete your own account");
       return;
     }
     deleteUser(u.id);
@@ -1974,7 +2274,7 @@ function UsersManager() {
                 data-ocid="admin.users.empty_state"
                 className="text-center py-10 text-muted-foreground text-sm"
               >
-                Koi user nahi hai.
+                No users found.
               </div>
             ) : (
               <Table>

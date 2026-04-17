@@ -1,3 +1,14 @@
+// ===========================================================
+// LIVE UI ELEMENTS - DO NOT REMOVE
+// The following dynamic components MUST remain in all future updates:
+// 1. MarqueeAlertBar - scrolling notification ticker
+// 2. AdBannerCarousel - auto-sliding banner
+// 3. Card tap animations (active:scale-[0.96])
+// 4. Page transition animations (.page-transition)
+// 5. Float animation on key icons
+// These are core to the app's premium live feel.
+// ===========================================================
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,13 +19,17 @@ import {
   ArrowUpFromLine,
   Banknote,
   BarChart2,
+  Building2,
+  CalendarCheck,
   CheckCircle,
   Clock,
   CreditCard,
   Eye,
   EyeOff,
   Filter,
+  LayoutGrid,
   MessageCircle,
+  Navigation,
   Package,
   PackageX,
   Plus,
@@ -28,20 +43,25 @@ import {
   ThumbsUp,
   TrendingDown,
   TrendingUp,
+  UserCog,
   Users,
   Wallet,
+  X,
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AdBannerCarousel } from "../components/AdBannerCarousel";
 import { AdCardSponsor } from "../components/AdCardSponsor";
 import { AdminSummaryCard } from "../components/AdminSummaryCard";
 import { DiamondRewardCard } from "../components/DiamondRewardCard";
+import { MarqueeAlertBar } from "../components/MarqueeAlertBar";
 import { RewardAdButton } from "../components/RewardAdButton";
+import { TutorialGuideSection } from "../components/TutorialGuideSection";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
-import type { AppUser, NavPage, UserRole } from "../types/store";
+import type { AppConfig, AppUser, NavPage, UserRole } from "../types/store";
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 function fmt(n: number) {
@@ -56,7 +76,7 @@ function relativeTime(dateStr: string): string {
   const now = Date.now();
   const d = new Date(dateStr).getTime();
   const diff = Math.floor((now - d) / 1000);
-  if (diff < 60) return "Abhi";
+  if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   const days = Math.floor(diff / 86400);
@@ -167,7 +187,7 @@ function SmartSummaryCard({
       type="button"
       data-ocid={ocid}
       onClick={onClick}
-      className={`flex-1 min-w-0 flex flex-col gap-2.5 rounded-2xl p-3.5 bg-card border border-border shadow-card active:scale-[0.96] transition-all duration-150 ease-out text-left ${schemes.accent} overflow-hidden`}
+      className={`flex-1 min-w-0 flex flex-col gap-2.5 rounded-2xl p-3.5 bg-card border border-border shadow-card card-interactive active:scale-[0.96] transition-all duration-150 ease-out text-left ${schemes.accent} overflow-hidden`}
     >
       <div
         className={`w-9 h-9 rounded-xl flex items-center justify-center ${schemes.iconBg} flex-shrink-0`}
@@ -251,7 +271,7 @@ function QuickActionBtn({
         data-ocid={ocid}
         onClick={onClick}
         aria-label={label}
-        className={`relative w-[72px] h-[72px] rounded-[18px] flex items-center justify-center shadow-card border ${cfg.bg} ${cfg.border} active:scale-[0.93] transition-all duration-150 ease-out`}
+        className={`relative w-[72px] h-[72px] rounded-[18px] flex items-center justify-center shadow-card border ${cfg.bg} ${cfg.border} quick-action-chip`}
       >
         <span className={cfg.iconColor}>{icon}</span>
         {badge !== undefined && badge > 0 && (
@@ -301,7 +321,7 @@ function ProductCard({
       type="button"
       data-ocid={ocid}
       onClick={onClick}
-      className={`flex flex-col gap-2 rounded-2xl p-3 border ${cardBg} active:scale-[0.96] transition-all duration-150 ease-out text-left w-full`}
+      className={`flex flex-col gap-2 rounded-2xl p-3 border ${cardBg} card-interactive active:scale-[0.96] transition-all duration-150 ease-out text-left w-full`}
     >
       <div className="flex items-start justify-between gap-1">
         <p className="text-sm font-bold text-foreground leading-tight line-clamp-2 flex-1 min-w-0">
@@ -379,7 +399,8 @@ type FilterKey =
   | "deadStock"
   | "paymentPending"
   | "outOfStock"
-  | "expiryAlert";
+  | "expiryAlert"
+  | "slowMoving";
 
 interface FilterChip {
   key: FilterKey;
@@ -417,11 +438,13 @@ function SmartFilterBar({
         </span>
       </div>
       <div
-        className="flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5"
+        className="smart-filter-bar-scroll flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5"
         style={
           {
             scrollbarWidth: "none",
             msOverflowStyle: "none",
+            WebkitOverflowScrolling: "touch",
+            touchAction: "pan-x",
           } as React.CSSProperties
         }
       >
@@ -460,6 +483,402 @@ function SmartFilterBar({
   );
 }
 
+// ─── Global Search Bar Component ─────────────────────────────────────────────
+interface GlobalSearchBarProps {
+  searchQuery: string;
+  setSearchQuery: (v: string) => void;
+  searchOpen: boolean;
+  setSearchOpen: (v: boolean) => void;
+  searchContainerRef: React.RefObject<HTMLDivElement | null>;
+  globalSearchResults: {
+    products: {
+      id: string;
+      name: string;
+      categoryId?: string;
+      unit: string;
+      sellingPrice: number;
+      currentStock: number;
+    }[];
+    customers: { id: string; name: string; mobile?: string }[];
+    vendors: { id: string; name: string; mobile?: string; email?: string }[];
+    staff: { id: string; name: string; mobile?: string; role: string }[];
+    nav: { page: NavPage; labelEn: string; labelHi: string; icon: string }[];
+    filters: {
+      key: FilterKey;
+      labelEn: string;
+      labelHi: string;
+      emoji: string;
+    }[];
+    actions: {
+      labelEn: string;
+      labelHi: string;
+      emoji: string;
+      page: NavPage;
+    }[];
+    hasResults: boolean;
+  } | null;
+  language: "en" | "hi";
+  onNavigate: (page: NavPage, params?: Record<string, unknown>) => void;
+  handleFilterSelect: (key: FilterKey) => void;
+  isStaff: boolean;
+  getProductStock: (id: string) => number;
+  t: (key: string) => string;
+}
+
+function GlobalSearchBar({
+  searchQuery,
+  setSearchQuery,
+  searchOpen,
+  setSearchOpen,
+  searchContainerRef,
+  globalSearchResults,
+  language,
+  onNavigate,
+  handleFilterSelect,
+  isStaff,
+  t,
+}: GlobalSearchBarProps) {
+  const showDropdown = searchQuery.trim().length > 0 && searchOpen;
+
+  return (
+    <div ref={searchContainerRef} className="relative z-30">
+      {/* Search input */}
+      <div className="relative">
+        <Search
+          size={16}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+        />
+        <input
+          type="search"
+          placeholder={
+            language === "hi"
+              ? "उत्पाद, ग्राहक, वेंडर, पेज खोजें..."
+              : t("Search products, customers, vendors, pages...")
+          }
+          data-ocid="dashboard.search.input"
+          value={searchQuery}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setSearchOpen(true);
+          }}
+          onFocus={() => setSearchOpen(true)}
+          className="w-full rounded-full bg-muted/60 dark:bg-card border border-border pl-9 pr-10 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery("");
+              setSearchOpen(false);
+            }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Clear search"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Global results dropdown */}
+      {showDropdown && (
+        <div
+          className="absolute top-full mt-2 left-0 right-0 bg-card border border-border rounded-2xl shadow-xl overflow-hidden"
+          style={{ maxHeight: "75vh", overflowY: "auto" }}
+          data-ocid="dashboard.global_search.dropdown"
+        >
+          {!globalSearchResults || !globalSearchResults.hasResults ? (
+            <div
+              data-ocid="dashboard.search_results.empty_state"
+              className="flex flex-col items-center gap-2 py-8 text-muted-foreground text-sm"
+            >
+              <Search size={22} className="text-muted-foreground/30" />
+              <p>
+                {language === "hi" ? "कोई परिणाम नहीं मिला" : "No results found"}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/40">
+              {/* Products section */}
+              {globalSearchResults.products.length > 0 && (
+                <div className="p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                    📦 {language === "hi" ? "उत्पाद" : "Products"}
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {globalSearchResults.products.map((p, idx) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        data-ocid={`dashboard.global_search.product.${idx + 1}`}
+                        onClick={() => {
+                          onNavigate("inventory", { selectedProductId: p.id });
+                          setSearchQuery("");
+                          setSearchOpen(false);
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/40 active:scale-[0.98] transition-all text-left group"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center flex-shrink-0">
+                          <Package size={13} className="text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {p.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {p.categoryId ?? ""}
+                            {p.categoryId ? " · " : ""}
+                            {p.currentStock} {p.unit}
+                          </p>
+                        </div>
+                        <span className="text-xs font-bold text-foreground flex-shrink-0">
+                          {fmt(p.sellingPrice)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Customers section */}
+              {!isStaff && globalSearchResults.customers.length > 0 && (
+                <div className="p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                    👥 {language === "hi" ? "ग्राहक" : "Customers"}
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {globalSearchResults.customers.map((c, idx) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        data-ocid={`dashboard.global_search.customer.${idx + 1}`}
+                        onClick={() => {
+                          onNavigate("customers");
+                          setSearchQuery("");
+                          setSearchOpen(false);
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/40 active:scale-[0.98] transition-all text-left"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-bold text-primary">
+                            {c.name.slice(0, 1).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {c.name}
+                          </p>
+                          {c.mobile && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {c.mobile}
+                            </p>
+                          )}
+                        </div>
+                        <Users
+                          size={13}
+                          className="text-muted-foreground flex-shrink-0"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Vendors section */}
+              {!isStaff && globalSearchResults.vendors.length > 0 && (
+                <div className="p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                    🏢 {language === "hi" ? "वेंडर" : "Vendors"}
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {globalSearchResults.vendors.map((v, idx) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        data-ocid={`dashboard.global_search.vendor.${idx + 1}`}
+                        onClick={() => {
+                          onNavigate("vendors");
+                          setSearchQuery("");
+                          setSearchOpen(false);
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/40 active:scale-[0.98] transition-all text-left"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center flex-shrink-0">
+                          <Building2
+                            size={13}
+                            className="text-amber-600 dark:text-amber-400"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {v.name}
+                          </p>
+                          {v.mobile && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {v.mobile}
+                            </p>
+                          )}
+                        </div>
+                        <Building2
+                          size={13}
+                          className="text-muted-foreground flex-shrink-0"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Staff section */}
+              {!isStaff && globalSearchResults.staff.length > 0 && (
+                <div className="p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                    👤 {language === "hi" ? "स्टाफ" : "Staff"}
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {globalSearchResults.staff.map((u, idx) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        data-ocid={`dashboard.global_search.staff.${idx + 1}`}
+                        onClick={() => {
+                          onNavigate("staff-management");
+                          setSearchQuery("");
+                          setSearchOpen(false);
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/40 active:scale-[0.98] transition-all text-left"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-purple-50 dark:bg-purple-950/30 flex items-center justify-center flex-shrink-0">
+                          <UserCog
+                            size={13}
+                            className="text-purple-600 dark:text-purple-400"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {u.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground capitalize">
+                            {u.role}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation / Pages section */}
+              {globalSearchResults.nav.length > 0 && (
+                <div className="p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                    🧭 {language === "hi" ? "पेज पर जाएं" : "Go to Page"}
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {globalSearchResults.nav.map((item, idx) => (
+                      <button
+                        key={item.page}
+                        type="button"
+                        data-ocid={`dashboard.global_search.nav.${idx + 1}`}
+                        onClick={() => {
+                          onNavigate(item.page);
+                          setSearchQuery("");
+                          setSearchOpen(false);
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-primary/5 active:scale-[0.98] transition-all text-left"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center flex-shrink-0 text-base">
+                          {item.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {language === "hi" ? item.labelHi : item.labelEn}
+                          </p>
+                        </div>
+                        <Navigation
+                          size={12}
+                          className="text-primary flex-shrink-0"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Actions section */}
+              {globalSearchResults.actions.length > 0 && (
+                <div className="p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                    ⚡ {language === "hi" ? "त्वरित क्रिया" : "Quick Actions"}
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {globalSearchResults.actions.map((a, idx) => (
+                      <button
+                        key={a.labelEn}
+                        type="button"
+                        data-ocid={`dashboard.global_search.action.${idx + 1}`}
+                        onClick={() => {
+                          onNavigate(a.page);
+                          setSearchQuery("");
+                          setSearchOpen(false);
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-green-50 dark:hover:bg-green-950/20 active:scale-[0.98] transition-all text-left"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-green-50 dark:bg-green-950/30 flex items-center justify-center flex-shrink-0 text-base">
+                          {a.emoji}
+                        </div>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-0 truncate">
+                          {language === "hi" ? a.labelHi : a.labelEn}
+                        </p>
+                        <span className="text-[10px] text-green-700 dark:text-green-400 font-semibold flex-shrink-0 bg-green-100 dark:bg-green-950/30 px-1.5 py-0.5 rounded-full">
+                          Action
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Filter chips section */}
+              {globalSearchResults.filters.length > 0 && (
+                <div className="p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                    🔽 {language === "hi" ? "फ़िल्टर लगाएं" : "Apply Filter"}
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {globalSearchResults.filters.map((chip, idx) => (
+                      <button
+                        key={chip.key}
+                        type="button"
+                        data-ocid={`dashboard.global_search.filter.${idx + 1}`}
+                        onClick={() => {
+                          handleFilterSelect(chip.key);
+                          setSearchQuery("");
+                          setSearchOpen(false);
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/20 active:scale-[0.98] transition-all text-left"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center flex-shrink-0 text-base">
+                          {chip.emoji}
+                        </div>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-0 truncate">
+                          {language === "hi" ? chip.labelHi : chip.labelEn}
+                        </p>
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold flex-shrink-0 bg-amber-100 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                          <Filter size={9} /> Filter
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const {
@@ -486,8 +905,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     purchaseOrders,
     customerOrders,
     vendors,
+    customers,
+    users,
     diamondRewards,
     awardDiamond,
+    refreshCounter,
   } = useStore();
 
   const { currentShop, session, currentUser } = useAuth();
@@ -498,12 +920,83 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const isOwner = role === "owner";
   const isStaff = role === "staff";
 
+  // ── Dashboard section visibility (Owner-controlled, default visible) ─────
+  const isDashSectionVisible = (
+    key: keyof NonNullable<AppConfig["dashboardSections"]>,
+  ) => {
+    return appConfig?.dashboardSections?.[key] !== false;
+  };
+
+  // ── Feature mode — controls which sections are rendered ───────────────────
+  const featureMode = (appConfig.featureMode ?? 3) as 1 | 2 | 3;
+
+  /**
+   * Returns true if a dashboard section should be shown in the current mode.
+   * Mode 1 = Simple: only todaySummary + FAB.
+   * Mode 2 = Advanced: summary, alerts, quickActions, filterBar.
+   * Mode 3 = All System: everything (fall back to isDashSectionVisible).
+   */
+  const isModeVisible = (
+    section:
+      | "marquee"
+      | "banner"
+      | "quickActions"
+      | "filterBar"
+      | "todaySummary"
+      | "smartAlerts"
+      | "topPerformance"
+      | "diamonds"
+      | "tutorial"
+      | "ads"
+      | "liveBoard"
+      | "referralFeedbackActions"
+      | "rankings"
+      | "otherSections",
+  ): boolean => {
+    if (featureMode === 3) return true;
+    if (featureMode === 1) {
+      return section === "todaySummary";
+    }
+    // mode 2
+    const mode2Visible = new Set([
+      "todaySummary",
+      "smartAlerts",
+      "quickActions",
+      "filterBar",
+      "otherSections",
+    ]);
+    return mode2Visible.has(section);
+  };
+
   const [productTab, setProductTab] = useState<
     "all" | "highProfit" | "lowStock" | "fastSelling"
   >("all");
 
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Close search dropdown on click outside or Escape
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target as Node)
+      ) {
+        setSearchOpen(false);
+      }
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setSearchOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
 
   // Section refs for scroll-to navigation
   const refLowStock = useRef<HTMLDivElement>(null);
@@ -511,6 +1004,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const refPaymentPending = useRef<HTMLDivElement>(null);
   const refOutOfStock = useRef<HTMLDivElement>(null);
   const refExpiryAlert = useRef<HTMLDivElement>(null);
+  const refSlowMoving = useRef<HTMLDivElement>(null);
 
   const [markPaidOpen, setMarkPaidOpen] = useState<
     Record<string, MarkPaidState>
@@ -535,14 +1029,26 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   }, []);
 
   // ── Core stats ─────────────────────────────────────────────────────────────
+  // These automatically recompute when the underlying data changes.
+  // refreshCounter is read to signal intent but deps are managed by the hook itself.
+  void refreshCounter; // consumed to satisfy lint — triggers re-render on mutation
   const totalValue = getTotalStockValue();
-  const todaySales = getTodaySales();
+  const todaySales = useMemo(() => getTodaySales(), [getTodaySales]);
   const todayProfit = getTodayProfit();
-  const lowStockItems = getLowStockProducts();
-  const allLedgers = getAllCustomerLedgers();
+  const lowStockItems = useMemo(
+    () => getLowStockProducts(),
+    [getLowStockProducts],
+  );
+  const allLedgers = useMemo(
+    () => getAllCustomerLedgers(),
+    [getAllCustomerLedgers],
+  );
   getTotalCreditDue();
 
-  const todayInvoices = getDailySales(todayStr);
+  const todayInvoices = useMemo(
+    () => getDailySales(todayStr),
+    [getDailySales, todayStr],
+  );
 
   // ── Staff-filtered invoices ────────────────────────────────────────────────
   const myInvoices = useMemo(() => {
@@ -887,58 +1393,247 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   // ── Search filtering ────────────────────────────────────────────────────────
   const searchLower = searchQuery.trim().toLowerCase();
 
-  // Detect if the search query is a filter keyword and which filter it maps to
-  const searchKeywordFilter = useMemo((): FilterKey | null => {
-    if (!searchLower) return null;
-    if (
-      searchLower === "low" ||
-      searchLower === "low stock" ||
-      searchLower === "lowstock"
-    )
-      return "lowStock";
-    if (
-      searchLower === "dead" ||
-      searchLower === "dead stock" ||
-      searchLower === "deadstock"
-    )
-      return "deadStock";
-    if (
-      searchLower === "pending" ||
-      searchLower === "payment pending" ||
-      searchLower === "udhaar" ||
-      searchLower === "payment"
-    )
-      return "paymentPending";
-    if (
-      searchLower === "out" ||
-      searchLower === "out of stock" ||
-      searchLower === "outofstock"
-    )
-      return "outOfStock";
-    if (searchLower === "expiry" || searchLower === "expiry alert")
-      return "expiryAlert";
-    return null;
-  }, [searchLower]);
+  // ── Navigation items for global search ──────────────────────────────────────
+  const NAV_SEARCH_ITEMS: {
+    page: NavPage;
+    labelEn: string;
+    labelHi: string;
+    icon: string;
+  }[] = [
+    { page: "dashboard", labelEn: "Dashboard", labelHi: "डैशबोर्ड", icon: "🏠" },
+    { page: "inventory", labelEn: "Inventory", labelHi: "इन्वेंटरी", icon: "📦" },
+    { page: "stock", labelEn: "Stock In/Out", labelHi: "स्टॉक", icon: "↔️" },
+    { page: "billing", labelEn: "Billing", labelHi: "बिलिंग", icon: "🧾" },
+    { page: "customers", labelEn: "Customers", labelHi: "ग्राहक", icon: "👥" },
+    { page: "vendors", labelEn: "Vendors", labelHi: "वेंडर", icon: "🏢" },
+    {
+      page: "purchase-orders",
+      labelEn: "Purchase Orders",
+      labelHi: "खरीद ऑर्डर",
+      icon: "🛒",
+    },
+    {
+      page: "customer-orders",
+      labelEn: "Customer Orders",
+      labelHi: "ग्राहक ऑर्डर",
+      icon: "📋",
+    },
+    { page: "reports", labelEn: "Reports", labelHi: "रिपोर्ट", icon: "📊" },
+    {
+      page: "staff-performance",
+      labelEn: "Staff Performance",
+      labelHi: "स्टाफ परफॉर्मेंस",
+      icon: "📈",
+    },
+    {
+      page: "staff-credit",
+      labelEn: "Staff Credit Report",
+      labelHi: "स्टाफ क्रेडिट",
+      icon: "💳",
+    },
+    { page: "returns", labelEn: "Returns", labelHi: "वापसी", icon: "↩️" },
+    {
+      page: "staff-management",
+      labelEn: "Staff Management",
+      labelHi: "स्टाफ प्रबंधन",
+      icon: "👤",
+    },
+    { page: "admin", labelEn: "Admin Panel", labelHi: "एडमिन पैनल", icon: "⚙️" },
+    { page: "settings", labelEn: "App Settings", labelHi: "सेटिंग", icon: "🔧" },
+    {
+      page: "low-price-log",
+      labelEn: "Low Price Log",
+      labelHi: "कम दाम लॉग",
+      icon: "🔻",
+    },
+    {
+      page: "audit-log",
+      labelEn: "Audit Log",
+      labelHi: "ऑडिट लॉग",
+      icon: "📝",
+    },
+    {
+      page: "reminder-log",
+      labelEn: "Reminder Log",
+      labelHi: "रिमाइंडर लॉग",
+      icon: "🔔",
+    },
+    {
+      page: "diamond-rewards",
+      labelEn: "Diamond Rewards",
+      labelHi: "डायमंड रिवॉर्ड",
+      icon: "💎",
+    },
+    { page: "rankings", labelEn: "Rankings", labelHi: "रैंकिंग", icon: "🏆" },
+    {
+      page: "history",
+      labelEn: "Draft History",
+      labelHi: "ड्राफ्ट हिस्ट्री",
+      icon: "🕐",
+    },
+  ];
 
-  const searchFilteredProducts = useMemo(() => {
-    if (!searchLower) return null; // null = no search active
-    if (searchKeywordFilter) return null; // keyword maps to a filter chip — handled separately
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(searchLower) ||
-        (p.categoryId ?? "").toLowerCase().includes(searchLower),
-    );
-  }, [products, searchLower, searchKeywordFilter]);
+  // Filter chip definitions for global search
+  const FILTER_CHIP_SEARCH_ITEMS: {
+    key: FilterKey;
+    labelEn: string;
+    labelHi: string;
+    emoji: string;
+  }[] = [
+    { key: "all", labelEn: "All Products", labelHi: "सभी उत्पाद", emoji: "🏠" },
+    { key: "lowStock", labelEn: "Low Stock", labelHi: "कम स्टॉक", emoji: "⚠️" },
+    {
+      key: "deadStock",
+      labelEn: "Dead Stock",
+      labelHi: "डेड स्टॉक",
+      emoji: "💀",
+    },
+    {
+      key: "paymentPending",
+      labelEn: "Payment Pending",
+      labelHi: "भुगतान बाकी",
+      emoji: "💳",
+    },
+    {
+      key: "outOfStock",
+      labelEn: "Out of Stock",
+      labelHi: "स्टॉक खत्म",
+      emoji: "📦",
+    },
+    {
+      key: "expiryAlert",
+      labelEn: "Expiry Alert",
+      labelHi: "एक्सपायरी अलर्ट",
+      emoji: "⏰",
+    },
+    {
+      key: "slowMoving",
+      labelEn: "Slow Moving",
+      labelHi: "धीमी बिक्री",
+      emoji: "🐢",
+    },
+  ];
 
-  const searchFilteredCustomers = useMemo(() => {
-    if (!searchLower) return null;
-    if (searchKeywordFilter) return null; // keyword maps to a filter chip
-    return allLedgers.filter(
-      (l) =>
-        l.customerName.toLowerCase().includes(searchLower) ||
-        (l.customerMobile ?? "").includes(searchLower),
-    );
-  }, [allLedgers, searchLower, searchKeywordFilter]);
+  // Quick actions for global search
+  interface QuickActionSearchItem {
+    labelEn: string;
+    labelHi: string;
+    emoji: string;
+    page: NavPage;
+  }
+  const QUICK_ACTION_SEARCH_ITEMS: QuickActionSearchItem[] = [
+    { labelEn: "Add Stock", labelHi: "स्टॉक जोड़ें", emoji: "📦", page: "stock" },
+    {
+      labelEn: "Sell / Billing",
+      labelHi: "बिक्री करें",
+      emoji: "🛒",
+      page: "billing",
+    },
+    {
+      labelEn: "Collect Payment",
+      labelHi: "भुगतान प्राप्त करें",
+      emoji: "💰",
+      page: "cash-counter",
+    },
+    {
+      labelEn: "Add Staff",
+      labelHi: "स्टाफ जोड़ें",
+      emoji: "👤",
+      page: "staff-management",
+    },
+    {
+      labelEn: "View Reports",
+      labelHi: "रिपोर्ट देखें",
+      emoji: "📊",
+      page: "reports",
+    },
+  ];
+
+  // ── Global search results ────────────────────────────────────────────────────
+  const globalSearchResults = useMemo(() => {
+    if (!searchLower || searchLower.length < 1) return null;
+
+    // Products (up to 5)
+    const matchedProducts = products
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(searchLower) ||
+          (p.categoryId ?? "").toLowerCase().includes(searchLower),
+      )
+      .slice(0, 5)
+      .map((p) => ({ ...p, currentStock: getProductStock(p.id) }));
+
+    // Customers (up to 5) — from raw customers array
+    const matchedCustomers = customers
+      .filter(
+        (c) =>
+          c.name.toLowerCase().includes(searchLower) ||
+          (c.mobile ?? "").includes(searchLower),
+      )
+      .slice(0, 5);
+
+    // Vendors (up to 5)
+    const matchedVendors = vendors
+      .filter(
+        (v) =>
+          v.name.toLowerCase().includes(searchLower) ||
+          (v.mobile ?? "").toLowerCase().includes(searchLower) ||
+          (v.email ?? "").toLowerCase().includes(searchLower),
+      )
+      .slice(0, 5);
+
+    // Staff/Users (up to 5)
+    const matchedStaff = users
+      .filter(
+        (u) =>
+          u.name.toLowerCase().includes(searchLower) ||
+          (u.mobile ?? "").includes(searchLower) ||
+          u.role.toLowerCase().includes(searchLower),
+      )
+      .slice(0, 5);
+
+    // Navigation pages (up to 5)
+    const matchedNav = NAV_SEARCH_ITEMS.filter(
+      (item) =>
+        item.labelEn.toLowerCase().includes(searchLower) ||
+        item.labelHi.toLowerCase().includes(searchLower),
+    ).slice(0, 5);
+
+    // Filter chips (up to 4)
+    const matchedFilters = FILTER_CHIP_SEARCH_ITEMS.filter(
+      (chip) =>
+        chip.labelEn.toLowerCase().includes(searchLower) ||
+        chip.labelHi.toLowerCase().includes(searchLower),
+    ).slice(0, 4);
+
+    // Quick actions (up to 4)
+    const matchedActions = QUICK_ACTION_SEARCH_ITEMS.filter(
+      (a) =>
+        a.labelEn.toLowerCase().includes(searchLower) ||
+        a.labelHi.toLowerCase().includes(searchLower),
+    ).slice(0, 4);
+
+    const hasResults =
+      matchedProducts.length > 0 ||
+      matchedCustomers.length > 0 ||
+      matchedVendors.length > 0 ||
+      matchedStaff.length > 0 ||
+      matchedNav.length > 0 ||
+      matchedFilters.length > 0 ||
+      matchedActions.length > 0;
+
+    return {
+      products: matchedProducts,
+      customers: matchedCustomers,
+      vendors: matchedVendors,
+      staff: matchedStaff,
+      nav: matchedNav,
+      filters: matchedFilters,
+      actions: matchedActions,
+      hasResults,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchLower, products, customers, vendors, users, getProductStock]);
 
   // ── Active filter product list (for filter chips) ────────────────────────────
   const filterChipProducts = useMemo(() => {
@@ -970,10 +1665,21 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             return prod?.id === p.id;
           }),
         );
+      case "slowMoving":
+        return withStock.filter((p) =>
+          slowMovingItems.some((s) => s.id === p.id),
+        );
       default:
         return null;
     }
-  }, [activeFilter, products, getProductStock, deadStockItems, expiryAlerts]);
+  }, [
+    activeFilter,
+    products,
+    getProductStock,
+    deadStockItems,
+    expiryAlerts,
+    slowMovingItems,
+  ]);
   const _overSellCount = useMemo(() => {
     const seen = new Set<string>();
     for (const inv of invoices) {
@@ -1017,7 +1723,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     if (!state) return;
     const amount = Number.parseFloat(state.amount);
     if (!state.amount || Number.isNaN(amount) || amount <= 0) {
-      toast.error("Valid amount daalen");
+      toast.error("Please enter a valid amount");
       return;
     }
     updateMarkPaid(key, { saving: true });
@@ -1031,11 +1737,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         state.mode,
       );
       updateMarkPaid(key, { saving: false, success: true });
-      toast.success(`${fmt(amount)} payment save ho gaya!`);
+      toast.success(`${fmt(amount)} payment recorded successfully!`);
       setTimeout(() => closeMarkPaid(key), 1500);
     } catch (_) {
       updateMarkPaid(key, { saving: false });
-      toast.error("Payment save nahi hua, dobara try karein");
+      toast.error("Payment could not be saved, please try again");
     }
   }
 
@@ -1059,6 +1765,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       paymentPending: refPaymentPending,
       outOfStock: refOutOfStock,
       expiryAlert: refExpiryAlert,
+      slowMoving: refSlowMoving,
     };
     const ref = refMap[key];
     if (ref?.current) {
@@ -1081,7 +1788,13 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   // ═══════════════════════════════════════════════════════════════════════════
   if (isStaff) {
     return (
-      <div className="flex flex-col min-h-screen bg-background pb-28">
+      <div
+        className="flex flex-col min-h-screen bg-background pb-28 w-full"
+        style={{ overflowX: "clip" }}
+      >
+        {/* LIVE UI ELEMENT — DO NOT REMOVE: MarqueeAlertBar */}
+        <MarqueeAlertBar />
+
         {/* Staff greeting strip */}
         <div className="bg-primary/5 border-b border-border px-4 py-2.5">
           <p className="text-xs text-muted-foreground">
@@ -1092,145 +1805,21 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </div>
 
         <div className="flex flex-col gap-5 px-3 pt-4">
-          {/* ── Search Bar ── */}
-          <div className="relative">
-            <Search
-              size={16}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-            />
-            <input
-              type="search"
-              placeholder={t("Search products, customers...")}
-              data-ocid="dashboard.search.input"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-full bg-muted/60 dark:bg-card border border-border pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-            />
-          </div>
-
-          {/* ── Search Results (staff) ── */}
-          {searchLower && (
-            <div
-              className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
-              data-ocid="dashboard.search_results.section"
-            >
-              <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
-                <span className="text-sm font-bold text-foreground">
-                  🔍 {language === "hi" ? "खोज परिणाम" : "Search Results"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="text-[11px] text-primary font-semibold hover:underline"
-                >
-                  {language === "hi" ? "साफ करें" : "Clear"}
-                </button>
-              </div>
-              <div className="px-4 py-3">
-                {/* Keyword filter redirect */}
-                {searchKeywordFilter ? (
-                  <button
-                    type="button"
-                    data-ocid="dashboard.search_results.filter_redirect"
-                    onClick={() => {
-                      handleFilterSelect(searchKeywordFilter);
-                      setSearchQuery("");
-                    }}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 active:scale-[0.98] transition-all text-left"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-                      <Filter size={18} className="text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-primary">
-                        {searchKeywordFilter === "lowStock" &&
-                          (language === "hi"
-                            ? "कम स्टॉक दिखाएं"
-                            : "Show Low Stock items")}
-                        {searchKeywordFilter === "deadStock" &&
-                          (language === "hi"
-                            ? "डेड स्टॉक दिखाएं"
-                            : "Show Dead Stock items")}
-                        {searchKeywordFilter === "paymentPending" &&
-                          (language === "hi"
-                            ? "बाकी भुगतान दिखाएं"
-                            : "Show Payment Pending customers")}
-                        {searchKeywordFilter === "outOfStock" &&
-                          (language === "hi"
-                            ? "स्टॉक खत्म दिखाएं"
-                            : "Show Out of Stock items")}
-                        {searchKeywordFilter === "expiryAlert" &&
-                          (language === "hi"
-                            ? "एक्सपायरी अलर्ट दिखाएं"
-                            : "Show Expiry Alert items")}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {language === "hi"
-                          ? "फ़िल्टर लगाने के लिए टैप करें"
-                          : "Tap to apply filter"}
-                      </p>
-                    </div>
-                    <span className="text-xs text-primary font-semibold flex-shrink-0">
-                      Apply →
-                    </span>
-                  </button>
-                ) : (searchFilteredProducts?.length ?? 0) === 0 ? (
-                  <div
-                    data-ocid="dashboard.search_results.empty_state"
-                    className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-sm"
-                  >
-                    <Search size={22} className="text-muted-foreground/30" />
-                    <p>
-                      {language === "hi"
-                        ? "कोई परिणाम नहीं मिला"
-                        : "No results found"}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {searchFilteredProducts?.map((p, idx) => {
-                      const stock = getProductStock(p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          data-ocid={`dashboard.search_results.item.${idx + 1}`}
-                          onClick={() =>
-                            onNavigate("inventory", { selectedProductId: p.id })
-                          }
-                          className="flex items-center gap-3 p-2.5 rounded-xl border border-border bg-card hover:bg-secondary/30 active:scale-[0.98] transition-all text-left"
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center flex-shrink-0">
-                            <Package size={13} className="text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-foreground truncate">
-                              {p.name}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {p.categoryId ?? ""} ·{" "}
-                              <span
-                                className={
-                                  stock <= 0
-                                    ? "text-red-600 font-semibold"
-                                    : "text-foreground"
-                                }
-                              >
-                                {stock} {p.unit}
-                              </span>
-                            </p>
-                          </div>
-                          <span className="text-xs font-bold text-foreground flex-shrink-0">
-                            {fmt(p.sellingPrice)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* ── Global Search Bar ── */}
+          <GlobalSearchBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            searchOpen={searchOpen}
+            setSearchOpen={setSearchOpen}
+            searchContainerRef={searchContainerRef}
+            globalSearchResults={globalSearchResults}
+            language={language}
+            onNavigate={onNavigate}
+            handleFilterSelect={handleFilterSelect}
+            isStaff={isStaff}
+            getProductStock={getProductStock}
+            t={t}
+          />
 
           {/* Staff Summary Cards */}
           <div>
@@ -1238,9 +1827,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             <div className="grid grid-cols-2 gap-2.5">
               <SmartSummaryCard
                 icon={<ShoppingCart size={18} />}
-                label="Meri Sales"
+                label="My Sales"
                 value={fmt(myTodaySales)}
-                sub="Aaj ki"
+                sub="Today"
                 colorScheme="blue"
                 onClick={() => onNavigate("billing")}
                 ocid="dashboard.staff.my_today_sales"
@@ -1249,7 +1838,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 icon={<Receipt size={18} />}
                 label="Invoices"
                 value={String(myTodayInvoices.length)}
-                sub="Aaj ke"
+                sub="Today"
                 colorScheme="purple"
                 ocid="dashboard.staff.my_today_invoices"
               />
@@ -1294,13 +1883,13 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   className="flex flex-col items-center gap-3 py-8 text-muted-foreground text-sm"
                 >
                   <Zap size={26} className="text-muted-foreground/30" />
-                  <p>Abhi koi sales nahi</p>
+                  <p>No sales yet</p>
                   <Button
                     size="sm"
                     onClick={() => onNavigate("billing")}
                     className="bg-primary text-primary-foreground"
                   >
-                    <Receipt size={13} className="mr-1" /> Pehli Sale Karein
+                    <Receipt size={13} className="mr-1" /> Make First Sale
                   </Button>
                 </div>
               ) : (
@@ -1353,7 +1942,18 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-background pb-28">
+    <div
+      className="flex flex-col min-h-screen bg-background pb-28 w-full"
+      style={{ overflowX: "clip" }}
+    >
+      {/* ===========================================================
+          LIVE UI ELEMENT — DO NOT REMOVE: MarqueeAlertBar
+          Scrolling alert ticker — persistent in all future updates
+          =========================================================== */}
+      {isDashSectionVisible("marqueeAlertBar") && isModeVisible("marquee") && (
+        <MarqueeAlertBar />
+      )}
+
       {/* Greeting strip */}
       <div className="bg-primary/5 border-b border-border px-4 py-2">
         <p className="text-xs text-muted-foreground">
@@ -1364,254 +1964,138 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       </div>
 
       <div className="flex flex-col gap-5 px-3 pt-4">
-        {/* ── Search Bar ── */}
-        <div className="relative">
-          <Search
-            size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-          />
-          <input
-            type="search"
-            placeholder={t("Search products, customers...")}
-            data-ocid="dashboard.search.input"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-full bg-muted/60 dark:bg-card border border-border pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-          />
-        </div>
-
-        {/* ── Search Results (owner/manager) ── */}
-        {searchLower && (
-          <div
-            className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
-            data-ocid="dashboard.search_results.section"
-          >
-            <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
-              <span className="text-sm font-bold text-foreground">
-                🔍 {language === "hi" ? "खोज परिणाम" : "Search Results"}
-              </span>
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="text-[11px] text-primary font-semibold hover:underline"
-              >
-                {language === "hi" ? "साफ करें" : "Clear"}
-              </button>
-            </div>
-            <div className="px-4 py-3 flex flex-col gap-3">
-              {/* Keyword filter redirect */}
-              {searchKeywordFilter ? (
-                <button
-                  type="button"
-                  data-ocid="dashboard.search_results.filter_redirect"
-                  onClick={() => {
-                    handleFilterSelect(searchKeywordFilter);
-                    setSearchQuery("");
-                  }}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 active:scale-[0.98] transition-all text-left"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center flex-shrink-0">
-                    <Filter size={18} className="text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-primary">
-                      {searchKeywordFilter === "lowStock" &&
-                        (language === "hi"
-                          ? "कम स्टॉक दिखाएं"
-                          : "Show Low Stock items")}
-                      {searchKeywordFilter === "deadStock" &&
-                        (language === "hi"
-                          ? "डेड स्टॉक दिखाएं"
-                          : "Show Dead Stock items")}
-                      {searchKeywordFilter === "paymentPending" &&
-                        (language === "hi"
-                          ? "बाकी भुगतान दिखाएं"
-                          : "Show Payment Pending customers")}
-                      {searchKeywordFilter === "outOfStock" &&
-                        (language === "hi"
-                          ? "स्टॉक खत्म दिखाएं"
-                          : "Show Out of Stock items")}
-                      {searchKeywordFilter === "expiryAlert" &&
-                        (language === "hi"
-                          ? "एक्सपायरी अलर्ट दिखाएं"
-                          : "Show Expiry Alert items")}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {language === "hi"
-                        ? "फ़िल्टर लगाने के लिए टैप करें"
-                        : "Tap to apply filter"}
-                    </p>
-                  </div>
-                  <span className="text-xs text-primary font-semibold flex-shrink-0">
-                    Apply →
-                  </span>
-                </button>
-              ) : (
-                <>
-                  {/* Products */}
-                  {(searchFilteredProducts?.length ?? 0) > 0 && (
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                        {language === "hi" ? "उत्पाद" : "Products"} (
-                        {searchFilteredProducts?.length})
-                      </p>
-                      <div className="flex flex-col gap-1.5">
-                        {searchFilteredProducts?.map((p, idx) => {
-                          const stock = getProductStock(p.id);
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              data-ocid={`dashboard.search_results.product.${idx + 1}`}
-                              onClick={() =>
-                                onNavigate("inventory", {
-                                  selectedProductId: p.id,
-                                })
-                              }
-                              className="flex items-center gap-3 p-2.5 rounded-xl border border-border bg-card hover:bg-secondary/30 active:scale-[0.98] transition-all text-left"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center flex-shrink-0">
-                                <Package size={13} className="text-primary" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-foreground truncate">
-                                  {p.name}
-                                </p>
-                                <p className="text-[11px] text-muted-foreground">
-                                  {p.categoryId ?? ""} ·{" "}
-                                  <span
-                                    className={
-                                      stock <= 0
-                                        ? "text-red-600 font-semibold"
-                                        : "text-foreground"
-                                    }
-                                  >
-                                    {stock} {p.unit}
-                                  </span>
-                                </p>
-                              </div>
-                              <span className="text-xs font-bold text-foreground flex-shrink-0">
-                                {fmt(p.sellingPrice)}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  {/* Customers */}
-                  {!isStaff && (searchFilteredCustomers?.length ?? 0) > 0 && (
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                        {language === "hi" ? "ग्राहक" : "Customers"} (
-                        {searchFilteredCustomers?.length})
-                      </p>
-                      <div className="flex flex-col gap-1.5">
-                        {searchFilteredCustomers?.map((l, idx) => (
-                          <button
-                            key={l.customerMobile || l.customerName}
-                            type="button"
-                            data-ocid={`dashboard.search_results.customer.${idx + 1}`}
-                            onClick={() => onNavigate("customers")}
-                            className="flex items-center gap-3 p-2.5 rounded-xl border border-border bg-card hover:bg-secondary/30 active:scale-[0.98] transition-all text-left"
-                          >
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              <span className="text-xs font-bold text-primary">
-                                {l.customerName.slice(0, 1).toUpperCase()}
-                              </span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-foreground truncate">
-                                {l.customerName}
-                              </p>
-                              {l.customerMobile && (
-                                <p className="text-[11px] text-muted-foreground">
-                                  {l.customerMobile}
-                                </p>
-                              )}
-                            </div>
-                            {l.totalDue > 0 && (
-                              <span className="text-xs font-bold text-red-600 flex-shrink-0">
-                                {fmt(l.totalDue)}
-                              </span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {/* No results */}
-                  {(searchFilteredProducts?.length ?? 0) === 0 &&
-                    (isStaff ||
-                      (searchFilteredCustomers?.length ?? 0) === 0) && (
-                      <div
-                        data-ocid="dashboard.search_results.empty_state"
-                        className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-sm"
-                      >
-                        <Search
-                          size={22}
-                          className="text-muted-foreground/30"
-                        />
-                        <p>
-                          {language === "hi"
-                            ? "कोई परिणाम नहीं मिला"
-                            : "No results found"}
-                        </p>
-                      </div>
-                    )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
+        {/* ── Global Search Bar ── */}
+        <GlobalSearchBar
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          searchOpen={searchOpen}
+          setSearchOpen={setSearchOpen}
+          searchContainerRef={searchContainerRef}
+          globalSearchResults={globalSearchResults}
+          language={language}
+          onNavigate={onNavigate}
+          handleFilterSelect={handleFilterSelect}
+          isStaff={isStaff}
+          getProductStock={getProductStock}
+          t={t}
+        />
         <div data-ocid="dashboard.quick_actions.section">
-          <SectionHeader>Quick Actions</SectionHeader>
-          <div className="flex gap-3.5 overflow-x-auto scrollbar-hide pb-1 -mx-0.5 px-0.5">
-            <QuickActionBtn
-              icon={<Package size={24} />}
-              label={t("Add Stock")}
-              onClick={() => onNavigate("stock")}
-              pastelColor="purple"
-              ocid="dashboard.add_stock.button"
-            />
-            <QuickActionBtn
-              icon={<ShoppingCart size={24} />}
-              label={t("Sell")}
-              onClick={() => onNavigate("billing")}
-              pastelColor="orange"
-              ocid="dashboard.new_sale.button"
-            />
-            <QuickActionBtn
-              icon={<Banknote size={24} />}
-              label={t("Collect Payment")}
-              onClick={() => onNavigate("cash-counter")}
-              pastelColor="yellow"
-              ocid="dashboard.collect_payment.button"
-            />
-            {isOwner && (
-              <QuickActionBtn
-                icon={<BarChart2 size={24} />}
-                label={t("Reports")}
-                onClick={() => onNavigate("reports")}
-                pastelColor="blue"
-                ocid="dashboard.view_reports.button"
-              />
+          {/* ===========================================================
+              LIVE UI ELEMENT — DO NOT REMOVE: AdBannerCarousel
+              Auto-sliding banner — persistent in all future updates.
+              Placed prominently before Quick Actions for visibility.
+              =========================================================== */}
+          {/* ===========================================================
+            LIVE UI ELEMENT — DO NOT REMOVE: AdBannerCarousel
+            Auto-sliding banner — persistent in all future updates.
+            Placed prominently before Quick Actions for visibility.
+            =========================================================== */}
+          {isDashSectionVisible("adBannerCarousel") &&
+            isModeVisible("banner") && (
+              <div
+                className="banner-container mb-4 w-full"
+                data-ocid="ad-banner-carousel-wrapper"
+                style={{ display: "block", overflow: "visible" }}
+              >
+                <AdBannerCarousel />
+              </div>
             )}
-            <QuickActionBtn
-              icon={<Users size={24} />}
-              label={t("Customers")}
-              onClick={() => onNavigate("customers")}
-              pastelColor="green"
-              ocid="dashboard.customers.button"
-            />
-            <QuickActionBtn
-              icon={<Receipt size={24} />}
-              label={t("Add Staff")}
-              onClick={() => onNavigate("staff-management")}
-              pastelColor="blue"
-              ocid="dashboard.add_staff.button"
-            />
-          </div>
+          {isDashSectionVisible("quickActions") &&
+            isModeVisible("quickActions") && (
+              <>
+                <SectionHeader>Quick Actions</SectionHeader>
+                <div
+                  className="flex gap-3.5 overflow-x-auto scrollbar-hide pb-1 -mx-3 px-3"
+                  style={
+                    {
+                      scrollbarWidth: "none",
+                      msOverflowStyle: "none",
+                    } as React.CSSProperties
+                  }
+                >
+                  <QuickActionBtn
+                    icon={<Package size={24} />}
+                    label={t("Add Stock")}
+                    onClick={() => onNavigate("stock")}
+                    pastelColor="purple"
+                    ocid="dashboard.add_stock.button"
+                  />
+                  <QuickActionBtn
+                    icon={<ShoppingCart size={24} />}
+                    label={t("Sell")}
+                    onClick={() => onNavigate("billing")}
+                    pastelColor="orange"
+                    ocid="dashboard.new_sale.button"
+                  />
+                  <QuickActionBtn
+                    icon={<Banknote size={24} />}
+                    label={t("Collect Payment")}
+                    onClick={() => onNavigate("cash-counter")}
+                    pastelColor="yellow"
+                    ocid="dashboard.collect_payment.button"
+                  />
+                  {isOwner && (
+                    <QuickActionBtn
+                      icon={<BarChart2 size={24} />}
+                      label={t("Reports")}
+                      onClick={() => onNavigate("reports")}
+                      pastelColor="blue"
+                      ocid="dashboard.view_reports.button"
+                    />
+                  )}
+                  <QuickActionBtn
+                    icon={<Users size={24} />}
+                    label={t("Customers")}
+                    onClick={() => onNavigate("customers")}
+                    pastelColor="green"
+                    ocid="dashboard.customers.button"
+                  />
+                  <QuickActionBtn
+                    icon={<Receipt size={24} />}
+                    label={t("Add Staff")}
+                    onClick={() => onNavigate("staff-management")}
+                    pastelColor="blue"
+                    ocid="dashboard.add_staff.button"
+                  />
+                  {!isStaff && isModeVisible("liveBoard") && (
+                    <QuickActionBtn
+                      icon={<LayoutGrid size={24} />}
+                      label="Live Board"
+                      onClick={() => onNavigate("shop-board")}
+                      pastelColor="green"
+                      ocid="dashboard.live_board.button"
+                    />
+                  )}
+                  {isModeVisible("referralFeedbackActions") && (
+                    <QuickActionBtn
+                      icon={<MessageCircle size={24} />}
+                      label="Feedback 💬"
+                      onClick={() => onNavigate("feedback-page")}
+                      pastelColor="purple"
+                      ocid="dashboard.feedback.button"
+                    />
+                  )}
+                  {isModeVisible("referralFeedbackActions") && (
+                    <QuickActionBtn
+                      icon={<Star size={24} />}
+                      label="Refer & Earn 🔗"
+                      onClick={() => onNavigate("referral-page")}
+                      pastelColor="orange"
+                      ocid="dashboard.referral.button"
+                    />
+                  )}
+                  {!isStaff && (
+                    <QuickActionBtn
+                      icon={<CalendarCheck size={24} />}
+                      label="Attendance"
+                      onClick={() => onNavigate("attendance")}
+                      pastelColor="green"
+                      ocid="dashboard.attendance.button"
+                    />
+                  )}
+                </div>
+              </>
+            )}
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -1714,587 +2198,645 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               },
               show: appConfig.featureFlags.expiry,
             },
+            {
+              key: "slowMoving",
+              emoji: "🐢",
+              labelEn: "Slow Moving",
+              labelHi: "धीमी बिक्री",
+              count: slowMovingItems.length,
+              color: {
+                active: "text-white",
+                activeBg: "bg-yellow-600",
+                inactiveBg: "bg-yellow-50 dark:bg-yellow-950/30",
+                inactiveBorder: "border-yellow-200 dark:border-yellow-800/40",
+                badge:
+                  "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-400",
+              },
+              show: true,
+            },
           ];
-          return (
+          return isDashSectionVisible("smartFilterBar") &&
+            isModeVisible("filterBar") ? (
             <SmartFilterBar
               chips={filterChips}
               active={activeFilter}
               onSelect={handleFilterSelect}
               language={language}
             />
-          );
+          ) : null;
         })()}
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 2 — TODAY'S SUMMARY (4 premium cards)
         ══════════════════════════════════════════════════════════════════ */}
-        <div data-ocid="dashboard.summary.section">
-          <SectionHeader
-            right={
-              <button
-                type="button"
-                data-ocid="dashboard.summary.toggle_visibility"
-                aria-label={amountsVisible ? "Hide amounts" : "Show amounts"}
-                onClick={() => setAmountsVisible((v) => !v)}
-                className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-              >
-                {amountsVisible ? (
-                  <Eye className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <EyeOff className="w-4 h-4 text-muted-foreground" />
-                )}
-              </button>
-            }
-          >
-            {t("Today's Summary")}
-          </SectionHeader>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-            {/* Card 1: Total Sale */}
-            <SmartSummaryCard
-              icon={<ShoppingCart size={18} />}
-              label={t("Total Sales")}
-              value={showAmt(fmt(todaySales))}
-              sub="Aaj ka"
-              colorScheme="blue"
-              onClick={() => onNavigate("reports")}
-              ocid="dashboard.summary.today_sales"
-            />
-
-            {/* Card 2: Profit */}
-            <SmartSummaryCard
-              icon={<TrendingUp size={18} />}
-              label={t("Profit")}
-              value={showAmt(fmt(todayProfit))}
-              sub="Aaj ka"
-              colorScheme={todayProfit >= 0 ? "emerald" : "red"}
-              onClick={() => onNavigate("reports")}
-              ocid="dashboard.summary.today_profit"
-            />
-
-            {/* Card 3: Cash / UPI split — premium inline breakdown */}
-            <button
-              type="button"
-              data-ocid="dashboard.summary.cash_upi"
-              onClick={() => onNavigate("reports")}
-              className="flex flex-col gap-2.5 rounded-2xl p-3.5 border-t-2 border-t-amber-400 border border-border bg-card shadow-card active:scale-[0.96] transition-all duration-150 ease-out text-left overflow-hidden"
+        {isDashSectionVisible("todaySummary") &&
+          isModeVisible("todaySummary") && (
+            <div
+              data-ocid="dashboard.summary.section"
+              className="animate-bounce-in"
             >
-              <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center flex-shrink-0">
-                <Banknote size={18} className="text-amber-500" />
-              </div>
-              <div className="min-w-0 w-full">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-none mb-2">
-                  {t("Cash & Online")}
-                </div>
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    💵 Cash
-                  </span>
-                  <span className="text-[13px] font-bold text-foreground">
-                    {showAmt(fmt(cashToday))}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-1 mb-1.5">
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    📱 UPI
-                  </span>
-                  <span className="text-[13px] font-bold text-foreground">
-                    {showAmt(fmt(upiToday))}
-                  </span>
-                </div>
-                <div className="border-t border-border/60 pt-1.5 flex items-center justify-between gap-1">
-                  <span className="text-[11px] font-semibold text-foreground">
-                    Total
-                  </span>
-                  <span className="text-[13px] font-extrabold text-amber-600">
-                    {showAmt(fmt(cashToday + upiToday))}
-                  </span>
-                </div>
-              </div>
-            </button>
+              <SectionHeader
+                right={
+                  <button
+                    type="button"
+                    data-ocid="dashboard.summary.toggle_visibility"
+                    aria-label={
+                      amountsVisible ? "Hide amounts" : "Show amounts"
+                    }
+                    onClick={() => setAmountsVisible((v) => !v)}
+                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                  >
+                    {amountsVisible ? (
+                      <Eye className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <EyeOff className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
+                }
+              >
+                {t("Today's Summary")}
+              </SectionHeader>
 
-            {/* Card 4: Alerts count */}
-            <SmartSummaryCard
-              icon={<AlertCircle size={18} />}
-              label={t("Alerts")}
-              value={String(totalAlertsCount)}
-              sub={totalAlertsCount === 0 ? "All clear ✅" : "Active"}
-              colorScheme={
-                totalAlertsCount === 0
-                  ? "green"
-                  : totalAlertsCount > 5
-                    ? "red"
-                    : "amber"
-              }
-              onClick={() => onNavigate("inventory")}
-              ocid="dashboard.summary.alerts"
-            />
-          </div>
-        </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                {/* Card 1: Total Sale */}
+                <SmartSummaryCard
+                  icon={<ShoppingCart size={18} />}
+                  label={t("Total Sales")}
+                  value={showAmt(fmt(todaySales))}
+                  sub="Today"
+                  colorScheme="blue"
+                  onClick={() => onNavigate("billing")}
+                  ocid="dashboard.owner.today_sales"
+                />
+                <SmartSummaryCard
+                  icon={<TrendingUp size={18} />}
+                  label={t("Profit")}
+                  value={showAmt(fmt(todayProfit))}
+                  sub="Today"
+                  colorScheme={todayProfit >= 0 ? "emerald" : "red"}
+                  onClick={() => onNavigate("reports")}
+                  ocid="dashboard.summary.today_profit"
+                />
+
+                {/* Card 3: Cash / UPI split — premium inline breakdown */}
+                <button
+                  type="button"
+                  data-ocid="dashboard.summary.cash_upi"
+                  onClick={() => onNavigate("reports")}
+                  className="flex flex-col gap-2.5 rounded-2xl p-3.5 border-t-2 border-t-amber-400 border border-border bg-card shadow-card card-interactive active:scale-[0.96] transition-all duration-150 ease-out text-left overflow-hidden"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center flex-shrink-0">
+                    <Banknote size={18} className="text-amber-500" />
+                  </div>
+                  <div className="min-w-0 w-full">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground leading-none mb-2">
+                      {t("Cash & Online")}
+                    </div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        💵 Cash
+                      </span>
+                      <span className="text-[13px] font-bold text-foreground">
+                        {showAmt(fmt(cashToday))}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        📱 UPI
+                      </span>
+                      <span className="text-[13px] font-bold text-foreground">
+                        {showAmt(fmt(upiToday))}
+                      </span>
+                    </div>
+                    <div className="border-t border-border/60 pt-1.5 flex items-center justify-between gap-1">
+                      <span className="text-[11px] font-semibold text-foreground">
+                        Total
+                      </span>
+                      <span className="text-[13px] font-extrabold text-amber-600">
+                        {showAmt(fmt(cashToday + upiToday))}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Card 4: Alerts count */}
+                <SmartSummaryCard
+                  icon={<AlertCircle size={18} />}
+                  label={t("Alerts")}
+                  value={String(totalAlertsCount)}
+                  sub={totalAlertsCount === 0 ? "All clear ✅" : "Active"}
+                  colorScheme={
+                    totalAlertsCount === 0
+                      ? "green"
+                      : totalAlertsCount > 5
+                        ? "red"
+                        : "amber"
+                  }
+                  onClick={() => onNavigate("inventory")}
+                  ocid="dashboard.summary.alerts"
+                />
+              </div>
+            </div>
+          )}
 
         {/* ══════════════════════════════════════════════════════════════════
             TOP PERFORMANCE MASTER CARD — Premium
         ══════════════════════════════════════════════════════════════════ */}
-        {!isStaff && (
-          <div
-            className="rounded-2xl overflow-hidden relative"
-            data-ocid="dashboard.top_performance.section"
-            style={{
-              background: "var(--top-perf-bg, white)",
-              boxShadow:
-                "0 0 0 2px #F59E0B, 0 0 20px rgba(245,158,11,0.22), 0 4px 16px rgba(0,0,0,0.08)",
-            }}
-          >
-            {/* Inner card with gradient background */}
-            <div className="bg-gradient-to-br from-card to-amber-50/40 dark:from-card dark:to-amber-950/10 rounded-2xl overflow-hidden">
-              {/* Header */}
-              <div className="px-4 pt-3 pb-2.5 border-b border-amber-200/60 dark:border-amber-800/30 flex items-center gap-2">
-                <span className="text-base">⭐</span>
-                <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tracking-wide">
-                  {language === "hi" ? "टॉप परफॉर्मेंस" : "Top Performance"}
-                </span>
-                {/* PREMIUM badge — top-right */}
-                <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-sm tracking-wide">
-                  ✦ PREMIUM
-                </span>
-              </div>
-
-              {/* 2×2 Grid */}
-              <div className="grid grid-cols-2 divide-x divide-y divide-amber-200/40 dark:divide-amber-800/20">
-                {/* #1 Product */}
-                <div className="flex items-start gap-2 px-3 py-2.5">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-400/25 text-yellow-800 dark:text-yellow-400 border border-yellow-400/40">
-                      🥇 Product
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {topPerformanceData.topProduct ? (
-                      <>
-                        <p className="text-xs font-bold text-foreground truncate leading-tight">
-                          {topPerformanceData.topProduct.name}
-                        </p>
-                        <p className="text-[10px] text-green-600 dark:text-green-400 font-semibold mt-0.5">
-                          {fmt(topPerformanceData.topProduct.revenue)}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground">—</p>
-                    )}
-                  </div>
+        {!isStaff &&
+          isDashSectionVisible("topPerformance") &&
+          isModeVisible("topPerformance") && (
+            <div
+              className="rounded-2xl overflow-hidden relative animate-bounce-in"
+              data-ocid="dashboard.top_performance.section"
+              style={{
+                background: "var(--top-perf-bg, white)",
+                boxShadow:
+                  "0 0 0 2px #F59E0B, 0 0 20px rgba(245,158,11,0.22), 0 4px 16px rgba(0,0,0,0.08)",
+              }}
+            >
+              {/* Inner card with gradient background */}
+              <div className="bg-gradient-to-br from-card to-amber-50/40 dark:from-card dark:to-amber-950/10 rounded-2xl overflow-hidden">
+                {/* Header */}
+                <div className="px-4 pt-3 pb-2.5 border-b border-amber-200/60 dark:border-amber-800/30 flex items-center gap-2">
+                  <span className="text-base">⭐</span>
+                  <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tracking-wide">
+                    {language === "hi" ? "टॉप परफॉर्मेंस" : "Top Performance"}
+                  </span>
+                  {/* PREMIUM badge — top-right */}
+                  <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-sm tracking-wide">
+                    ✦ PREMIUM
+                  </span>
                 </div>
 
-                {/* #1 Customer */}
-                <div className="flex items-start gap-2 px-3 py-2.5">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-400/20 text-blue-800 dark:text-blue-400 border border-blue-400/30">
-                      🥇 Customer
-                    </span>
+                {/* 2×2 Grid */}
+                <div className="grid grid-cols-2 divide-x divide-y divide-amber-200/40 dark:divide-amber-800/20">
+                  {/* #1 Product */}
+                  <div className="flex items-start gap-2 px-3 py-2.5">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-400/25 text-yellow-800 dark:text-yellow-400 border border-yellow-400/40">
+                        🥇 Product
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {topPerformanceData.topProduct ? (
+                        <>
+                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                            {topPerformanceData.topProduct.name}
+                          </p>
+                          <p className="text-[10px] text-green-600 dark:text-green-400 font-semibold mt-0.5">
+                            {fmt(topPerformanceData.topProduct.revenue)}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">—</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    {topPerformanceData.topCustomer ? (
-                      <>
-                        <p className="text-xs font-bold text-foreground truncate leading-tight">
-                          {topPerformanceData.topCustomer.name}
-                        </p>
-                        <p className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
-                          {fmt(topPerformanceData.topCustomer.total)}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground">—</p>
-                    )}
-                  </div>
-                </div>
 
-                {/* #1 Vendor */}
-                <div className="flex items-start gap-2 px-3 py-2.5">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-400/20 text-orange-800 dark:text-orange-400 border border-orange-400/30">
-                      🥇 Vendor
-                    </span>
+                  {/* #1 Customer */}
+                  <div className="flex items-start gap-2 px-3 py-2.5">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-400/20 text-blue-800 dark:text-blue-400 border border-blue-400/30">
+                        🥇 Customer
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {topPerformanceData.topCustomer ? (
+                        <>
+                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                            {topPerformanceData.topCustomer.name}
+                          </p>
+                          <p className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
+                            {fmt(topPerformanceData.topCustomer.total)}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">—</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    {topPerformanceData.topVendor ? (
-                      <>
-                        <p className="text-xs font-bold text-foreground truncate leading-tight">
-                          {topPerformanceData.topVendor.name}
-                        </p>
-                        <p className="text-[10px] text-orange-600 dark:text-orange-400 font-semibold mt-0.5">
-                          {topPerformanceData.topVendor.count} order
-                          {topPerformanceData.topVendor.count !== 1 ? "s" : ""}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground">—</p>
-                    )}
-                  </div>
-                </div>
 
-                {/* #1 Diamond Earner */}
-                <div className="flex items-start gap-2 px-3 py-2.5">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-400/20 text-purple-800 dark:text-purple-400 border border-purple-400/30">
-                      💎 Performer
-                    </span>
+                  {/* #1 Vendor */}
+                  <div className="flex items-start gap-2 px-3 py-2.5">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-400/20 text-orange-800 dark:text-orange-400 border border-orange-400/30">
+                        🥇 Vendor
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {topPerformanceData.topVendor ? (
+                        <>
+                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                            {topPerformanceData.topVendor.name}
+                          </p>
+                          <p className="text-[10px] text-orange-600 dark:text-orange-400 font-semibold mt-0.5">
+                            {topPerformanceData.topVendor.count} order
+                            {topPerformanceData.topVendor.count !== 1
+                              ? "s"
+                              : ""}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">—</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    {topPerformanceData.topDiamondEarner ? (
-                      <>
-                        <p className="text-xs font-bold text-foreground truncate leading-tight">
-                          {topPerformanceData.topDiamondEarner.name}
-                        </p>
-                        <p className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
-                          {topPerformanceData.topDiamondEarner.count} 💎
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground">—</p>
-                    )}
+
+                  {/* #1 Diamond Earner */}
+                  <div className="flex items-start gap-2 px-3 py-2.5">
+                    <div className="flex-shrink-0 mt-0.5">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-400/20 text-purple-800 dark:text-purple-400 border border-purple-400/30">
+                        💎 Performer
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {topPerformanceData.topDiamondEarner ? (
+                        <>
+                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                            {topPerformanceData.topDiamondEarner.name}
+                          </p>
+                          <p className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
+                            {topPerformanceData.topDiamondEarner.count} 💎
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">—</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* ══════════════════════════════════════════════════════════════════
             DIAMOND REWARD CARD — after Today's Summary
         ══════════════════════════════════════════════════════════════════ */}
-        <DiamondRewardCard
-          amountsVisible={amountsVisible}
-          onViewAll={() => onNavigate("diamond-rewards")}
-        />
+        {isDashSectionVisible("diamondRewards") &&
+          isModeVisible("diamonds") && (
+            <DiamondRewardCard
+              amountsVisible={amountsVisible}
+              onViewAll={() => onNavigate("diamond-rewards")}
+            />
+          )}
 
         {/* ── Watch Ad → Earn Diamonds ── */}
-        <RewardAdButton
-          onEarnDiamond={() => awardDiamond("ad-reward", "Watch Ad Reward")}
-        />
+        {isModeVisible("ads") && (
+          <RewardAdButton
+            onEarnDiamond={() => awardDiamond("ad-reward", "Watch Ad Reward")}
+          />
+        )}
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 3 — SMART ALERTS
         ══════════════════════════════════════════════════════════════════ */}
-        <div
-          ref={refLowStock}
-          className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
-          data-ocid="dashboard.smart_alerts.section"
-        >
-          <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
-              <AlertCircle size={14} className="text-amber-500" />
-            </div>
-            <span className="text-sm font-bold text-foreground">
-              {t("Smart Alerts")}
-            </span>
-            {totalAlertsCount === 0 ? (
-              <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-full bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/40">
-                ✅ All Clear
-              </span>
-            ) : (
-              <span className="ml-auto text-[10px] font-bold px-2 py-1 rounded-full bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/40">
-                {totalAlertsCount} Active
-              </span>
-            )}
-          </div>
+        {isDashSectionVisible("smartAlerts") &&
+          isModeVisible("smartAlerts") && (
+            <div
+              ref={refLowStock}
+              className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
+              data-ocid="dashboard.smart_alerts.section"
+            >
+              <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
+                  <AlertCircle size={14} className="text-amber-500" />
+                </div>
+                <span className="text-sm font-bold text-foreground">
+                  {t("Smart Alerts")}
+                </span>
+                {totalAlertsCount === 0 ? (
+                  <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-full bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/40">
+                    ✅ All Clear
+                  </span>
+                ) : (
+                  <span className="ml-auto text-[10px] font-bold px-2 py-1 rounded-full bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/40">
+                    {totalAlertsCount} Active
+                  </span>
+                )}
+              </div>
 
-          {totalAlertsCount === 0 && !profitMarginLow ? (
-            <div className="px-4 py-4 flex items-center gap-3">
-              <CheckCircle size={18} className="text-green-500 flex-shrink-0" />
-              <span className="text-sm text-green-700 dark:text-green-400 font-medium">
-                Sab kuch sahi hai — koi alert nahi ✅
-              </span>
-            </div>
-          ) : (
-            <div className="divide-y divide-border/50">
-              {/* Low Stock */}
-              {lowStockItems.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onNavigate("inventory")}
-                  data-ocid="dashboard.alerts.low_stock"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-amber-50/40 dark:hover:bg-amber-950/10 active:bg-amber-50/60 transition-colors text-left border-l-4 border-l-amber-400"
-                >
-                  <AlertTriangle
-                    size={15}
-                    className="text-amber-500 flex-shrink-0"
+              {totalAlertsCount === 0 && !profitMarginLow ? (
+                <div className="px-4 py-4 flex items-center gap-3">
+                  <CheckCircle
+                    size={18}
+                    className="text-green-500 flex-shrink-0"
                   />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                      Low Stock Alert
-                    </div>
-                    <div className="text-[11px] text-amber-600 dark:text-amber-500">
-                      {lowStockItems.length} item
-                      {lowStockItems.length !== 1 ? "s" : ""} neeche minimum
-                      level
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 flex-shrink-0">
-                    {lowStockItems.length}
+                  <span className="text-sm text-green-700 dark:text-green-400 font-medium">
+                    All clear — no alerts ✅
                   </span>
-                </button>
-              )}
+                </div>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {/* Low Stock */}
+                  {lowStockItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("inventory")}
+                      data-ocid="dashboard.alerts.low_stock"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-amber-50/40 dark:hover:bg-amber-950/10 active:bg-amber-50/60 transition-colors text-left border-l-4 border-l-amber-400"
+                    >
+                      <AlertTriangle
+                        size={15}
+                        className="text-amber-500 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                          Low Stock Alert
+                        </div>
+                        <div className="text-[11px] text-amber-600 dark:text-amber-500">
+                          {lowStockItems.length} item
+                          {lowStockItems.length !== 1 ? "s" : ""} below minimum
+                          level
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 flex-shrink-0">
+                        {lowStockItems.length}
+                      </span>
+                    </button>
+                  )}
 
-              {/* Low Profit */}
-              {!isStaff && profitMarginLow && todaySales > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onNavigate("reports")}
-                  data-ocid="dashboard.alerts.low_profit"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-500"
-                >
-                  <TrendingDown
-                    size={15}
-                    className="text-red-500 flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-red-700 dark:text-red-400">
-                      Low Profit Alert
-                    </div>
-                    <div className="text-[11px] text-red-600 dark:text-red-500">
-                      Aaj ka profit margin 10% se kum hai
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
-                    ⚠️
-                  </span>
-                </button>
-              )}
+                  {/* Low Profit */}
+                  {!isStaff && profitMarginLow && todaySales > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("reports")}
+                      data-ocid="dashboard.alerts.low_profit"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-500"
+                    >
+                      <TrendingDown
+                        size={15}
+                        className="text-red-500 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-red-700 dark:text-red-400">
+                          Low Profit Alert
+                        </div>
+                        <div className="text-[11px] text-red-600 dark:text-red-500">
+                          Today's profit margin is below 10%
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
+                        ⚠️
+                      </span>
+                    </button>
+                  )}
 
-              {/* Payment Due */}
-              {!isStaff && dueCustomers.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onNavigate("customers")}
-                  data-ocid="dashboard.alerts.payment_due"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-500"
-                >
-                  <CreditCard
-                    size={15}
-                    className="text-red-500 flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-red-700 dark:text-red-400">
-                      Payment Due Alert
-                    </div>
-                    <div className="text-[11px] text-red-600 dark:text-red-500">
-                      {fmt(totalDue)} pending — {dueCustomers.length} customer
-                      {dueCustomers.length !== 1 ? "s" : ""}
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
-                    {dueCustomers.length}
-                  </span>
-                </button>
-              )}
+                  {/* Payment Due */}
+                  {!isStaff && dueCustomers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("customers")}
+                      data-ocid="dashboard.alerts.payment_due"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-500"
+                    >
+                      <CreditCard
+                        size={15}
+                        className="text-red-500 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-red-700 dark:text-red-400">
+                          Payment Due Alert
+                        </div>
+                        <div className="text-[11px] text-red-600 dark:text-red-500">
+                          {fmt(totalDue)} pending — {dueCustomers.length}{" "}
+                          customer
+                          {dueCustomers.length !== 1 ? "s" : ""}
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
+                        {dueCustomers.length}
+                      </span>
+                    </button>
+                  )}
 
-              {/* Out of Stock */}
-              {outOfStockItems.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onNavigate("inventory")}
-                  data-ocid="dashboard.alerts.out_of_stock"
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-600"
-                >
-                  <PackageX size={15} className="text-red-600 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-red-700 dark:text-red-400">
-                      Out of Stock
-                    </div>
-                    <div className="text-[11px] text-red-600 dark:text-red-500">
-                      {outOfStockItems.length} product
-                      {outOfStockItems.length !== 1 ? "s" : ""} ka stock khatam
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
-                    {outOfStockItems.length}
-                  </span>
-                </button>
+                  {/* Out of Stock */}
+                  {outOfStockItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("inventory")}
+                      data-ocid="dashboard.alerts.out_of_stock"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50/40 dark:hover:bg-red-950/10 active:bg-red-50/60 transition-colors text-left border-l-4 border-l-red-600"
+                    >
+                      <PackageX
+                        size={15}
+                        className="text-red-600 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-red-700 dark:text-red-400">
+                          Out of Stock
+                        </div>
+                        <div className="text-[11px] text-red-600 dark:text-red-500">
+                          {outOfStockItems.length} product
+                          {outOfStockItems.length !== 1 ? "s" : ""} out of stock
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex-shrink-0">
+                        {outOfStockItems.length}
+                      </span>
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
-        </div>
 
         {/* ══════════════════════════════════════════════════════════════════
             SMART INSIGHTS CARDS (compact horizontal scrolls)
         ══════════════════════════════════════════════════════════════════ */}
-        {!isStaff && (
-          <div
-            className="bg-card rounded-2xl border border-border p-3.5 shadow-card"
-            data-ocid="dashboard.smart_insights_cards.section"
-          >
-            <div className="flex items-center justify-between px-0.5 mb-2.5">
-              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                💡 {language === "hi" ? "स्मार्ट इनसाइट्स" : "Smart Insights"}
-              </span>
-            </div>
-
-            {/* Row 1: Most Selling + High Profit */}
+        {!isStaff &&
+          isDashSectionVisible("smartInsightsCards") &&
+          isModeVisible("otherSections") && (
             <div
-              className="flex gap-2 overflow-x-auto pb-1"
-              style={{ scrollbarWidth: "none" } as React.CSSProperties}
+              className="bg-card rounded-2xl border border-border p-3.5 shadow-card"
+              data-ocid="dashboard.smart_insights_cards.section"
             >
-              {/* Most Selling */}
-              <div className="flex-shrink-0 w-44 rounded-xl border border-border bg-secondary/30 p-2.5 border-l-4 border-l-green-400">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <span className="text-sm">🔥</span>
-                  <span className="text-[11px] font-bold text-foreground">
-                    {language === "hi" ? "सबसे ज्यादा बिका" : "Most Selling"}
-                  </span>
-                </div>
-                {mostSellingProducts.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground">
-                    {language === "hi" ? "डेटा नहीं" : "No data yet"}
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    {mostSellingProducts.map((item, i) => (
-                      <div key={item.name} className="flex items-center gap-1">
-                        <span className="text-[9px] font-bold text-muted-foreground w-3">
-                          #{i + 1}
-                        </span>
-                        <span className="text-[10px] font-medium text-foreground flex-1 truncate">
-                          {item.name}
-                        </span>
-                        <span className="text-[9px] font-semibold text-green-700 dark:text-green-400">
-                          {item.qty}u
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="flex items-center justify-between px-0.5 mb-2.5">
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  💡 {language === "hi" ? "स्मार्ट इनसाइट्स" : "Smart Insights"}
+                </span>
               </div>
 
-              {/* High Profit */}
-              <div className="flex-shrink-0 w-44 rounded-xl border border-border bg-secondary/30 p-2.5 border-l-4 border-l-primary">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <span className="text-sm">💰</span>
-                  <span className="text-[11px] font-bold text-foreground">
-                    {language === "hi" ? "ज्यादा मुनाफा" : "High Profit"}
-                  </span>
-                </div>
-                {highProfitItems.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground">
-                    {language === "hi" ? "डेटा नहीं" : "No data yet"}
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    {highProfitItems.map((item, i) => (
-                      <div key={item.name} className="flex items-center gap-1">
-                        <span className="text-[9px] font-bold text-muted-foreground w-3">
-                          #{i + 1}
-                        </span>
-                        <span className="text-[10px] font-medium text-foreground flex-1 truncate">
-                          {item.name}
-                        </span>
-                        <span className="text-[9px] font-semibold text-primary">
-                          {fmt(item.profit)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Row 2: Low Stock + Out of Stock + Low Price */}
-            <div
-              className="flex gap-2 overflow-x-auto pb-1 mt-2"
-              style={{ scrollbarWidth: "none" } as React.CSSProperties}
-            >
-              {/* Low Stock */}
+              {/* Row 1: Most Selling + High Profit */}
               <div
-                className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${lowStockItems.length > 0 ? "border-l-4 border-l-amber-400" : ""}`}
+                className="flex gap-2 overflow-x-auto pb-1"
+                style={{ scrollbarWidth: "none" } as React.CSSProperties}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-bold text-foreground">
-                    ⚠️ {language === "hi" ? "कम स्टॉक" : "Low Stock"}
-                  </span>
-                  <span
-                    className={`text-sm font-extrabold ${lowStockItems.length > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600"}`}
-                  >
-                    {lowStockItems.length}
-                  </span>
+                {/* Most Selling */}
+                <div className="flex-shrink-0 w-44 rounded-xl border border-border bg-secondary/30 p-2.5 border-l-4 border-l-green-400">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-sm">🔥</span>
+                    <span className="text-[11px] font-bold text-foreground">
+                      {language === "hi" ? "सबसे ज्यादा बिका" : "Most Selling"}
+                    </span>
+                  </div>
+                  {mostSellingProducts.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground">
+                      {language === "hi" ? "डेटा नहीं" : "No data yet"}
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      {mostSellingProducts.map((item, i) => (
+                        <div
+                          key={item.name}
+                          className="flex items-center gap-1"
+                        >
+                          <span className="text-[9px] font-bold text-muted-foreground w-3">
+                            #{i + 1}
+                          </span>
+                          <span className="text-[10px] font-medium text-foreground flex-1 truncate">
+                            {item.name}
+                          </span>
+                          <span className="text-[9px] font-semibold text-green-700 dark:text-green-400">
+                            {item.qty}u
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  {lowStockItems.slice(0, 2).map((p) => (
-                    <p
-                      key={p.id}
-                      className="text-[10px] text-muted-foreground truncate"
-                    >
-                      {p.name}
+
+                {/* High Profit */}
+                <div className="flex-shrink-0 w-44 rounded-xl border border-border bg-secondary/30 p-2.5 border-l-4 border-l-primary">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-sm">💰</span>
+                    <span className="text-[11px] font-bold text-foreground">
+                      {language === "hi" ? "ज्यादा मुनाफा" : "High Profit"}
+                    </span>
+                  </div>
+                  {highProfitItems.length === 0 ? (
+                    <p className="text-[10px] text-muted-foreground">
+                      {language === "hi" ? "डेटा नहीं" : "No data yet"}
                     </p>
-                  ))}
-                  {lowStockItems.length === 0 && (
-                    <p className="text-[10px] text-green-600">
-                      ✅ {language === "hi" ? "सब सही है" : "All good"}
-                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      {highProfitItems.map((item, i) => (
+                        <div
+                          key={item.name}
+                          className="flex items-center gap-1"
+                        >
+                          <span className="text-[9px] font-bold text-muted-foreground w-3">
+                            #{i + 1}
+                          </span>
+                          <span className="text-[10px] font-medium text-foreground flex-1 truncate">
+                            {item.name}
+                          </span>
+                          <span className="text-[9px] font-semibold text-primary">
+                            {fmt(item.profit)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Out of Stock */}
+              {/* Row 2: Low Stock + Out of Stock + Low Price */}
               <div
-                className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${outOfStockItems.length > 0 ? "border-l-4 border-l-red-500" : ""}`}
+                className="flex gap-2 overflow-x-auto pb-1 mt-2"
+                style={{ scrollbarWidth: "none" } as React.CSSProperties}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] font-bold text-foreground">
-                    🚫 {language === "hi" ? "स्टॉक खत्म" : "Out of Stock"}
-                  </span>
-                  <span
-                    className={`text-sm font-extrabold ${outOfStockItems.length > 0 ? "text-red-600 dark:text-red-400" : "text-green-600"}`}
-                  >
-                    {outOfStockItems.length}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  {outOfStockItems.slice(0, 2).map((p) => (
-                    <p
-                      key={p.id}
-                      className="text-[10px] text-muted-foreground truncate"
-                    >
-                      {p.name}
-                    </p>
-                  ))}
-                  {outOfStockItems.length === 0 && (
-                    <p className="text-[10px] text-green-600">
-                      ✅ {language === "hi" ? "सब उपलब्ध" : "All in stock"}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Low Price Alerts (Owner only) */}
-              {isOwner && (
+                {/* Low Stock */}
                 <div
-                  className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${lowPriceAttemptsToday > 0 ? "border-l-4 border-l-red-400" : ""}`}
+                  className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${lowStockItems.length > 0 ? "border-l-4 border-l-amber-400" : ""}`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[11px] font-bold text-foreground">
-                      🔻 {language === "hi" ? "कम दाम अलर्ट" : "Low Price"}
+                      ⚠️ {language === "hi" ? "कम स्टॉक" : "Low Stock"}
                     </span>
                     <span
-                      className={`text-sm font-extrabold ${lowPriceAttemptsToday > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                      className={`text-sm font-extrabold ${lowStockItems.length > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600"}`}
                     >
-                      {lowPriceAttemptsToday}
+                      {lowStockItems.length}
                     </span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    {language === "hi" ? "आज के प्रयास" : "Attempts today"}
-                  </p>
+                  <div className="flex flex-col gap-0.5">
+                    {lowStockItems.slice(0, 2).map((p) => (
+                      <p
+                        key={p.id}
+                        className="text-[10px] text-muted-foreground truncate"
+                      >
+                        {p.name}
+                      </p>
+                    ))}
+                    {lowStockItems.length === 0 && (
+                      <p className="text-[10px] text-green-600">
+                        ✅ {language === "hi" ? "सब सही है" : "All good"}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              )}
+
+                {/* Out of Stock */}
+                <div
+                  className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${outOfStockItems.length > 0 ? "border-l-4 border-l-red-500" : ""}`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-foreground">
+                      🚫 {language === "hi" ? "स्टॉक खत्म" : "Out of Stock"}
+                    </span>
+                    <span
+                      className={`text-sm font-extrabold ${outOfStockItems.length > 0 ? "text-red-600 dark:text-red-400" : "text-green-600"}`}
+                    >
+                      {outOfStockItems.length}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {outOfStockItems.slice(0, 2).map((p) => (
+                      <p
+                        key={p.id}
+                        className="text-[10px] text-muted-foreground truncate"
+                      >
+                        {p.name}
+                      </p>
+                    ))}
+                    {outOfStockItems.length === 0 && (
+                      <p className="text-[10px] text-green-600">
+                        ✅ {language === "hi" ? "सब उपलब्ध" : "All in stock"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Low Price Alerts (Owner only) */}
+                {isOwner && (
+                  <div
+                    className={`flex-shrink-0 w-36 rounded-xl border border-border bg-secondary/30 p-2.5 ${lowPriceAttemptsToday > 0 ? "border-l-4 border-l-red-400" : ""}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-bold text-foreground">
+                        🔻 {language === "hi" ? "कम दाम अलर्ट" : "Low Price"}
+                      </span>
+                      <span
+                        className={`text-sm font-extrabold ${lowPriceAttemptsToday > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                      >
+                        {lowPriceAttemptsToday}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {language === "hi" ? "आज के प्रयास" : "Attempts today"}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* ── Sponsored Ad Card ── */}
-        <AdCardSponsor />
+        {isDashSectionVisible("sponsoredAd") && isModeVisible("ads") && (
+          <AdCardSponsor />
+        )}
+
+        {/* ── Tutorial Guide Section (Free Ad Slot) ── */}
+        {isDashSectionVisible("tutorialGuide") && isModeVisible("tutorial") && (
+          <TutorialGuideSection />
+        )}
 
         {/* ══════════════════════════════════════════════════════════════════
             FILTER CHIP RESULTS — shown when a filter chip is active
         ══════════════════════════════════════════════════════════════════ */}
         {filterChipProducts !== null && (
           <div
+            ref={refSlowMoving}
             className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
             data-ocid="dashboard.filter_results.section"
           >
@@ -2328,6 +2870,17 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <span className="flex items-center gap-1.5">
                     ⏰{" "}
                     {language === "hi" ? "एक्सपायरी अलर्ट" : "Expiry Alert Items"}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                      ({filterChipProducts.length})
+                    </span>
+                  </span>
+                )}
+                {activeFilter === "slowMoving" && (
+                  <span className="flex items-center gap-1.5">
+                    🐢{" "}
+                    {language === "hi"
+                      ? "धीमी बिक्री आइटम"
+                      : "Slow Moving Items"}
                     <span className="text-xs font-normal text-muted-foreground ml-1">
                       ({filterChipProducts.length})
                     </span>
@@ -2457,181 +3010,186 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 4 — CUSTOMER DUE (CRED-style)
         ══════════════════════════════════════════════════════════════════ */}
-        {!isStaff && (
-          <div
-            ref={refPaymentPending}
-            className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
-            data-ocid="dashboard.customer_due.section"
-          >
-            <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-primary/8 flex items-center justify-center">
-                  <CreditCard size={14} className="text-primary" />
+        {!isStaff &&
+          isDashSectionVisible("customerDue") &&
+          isModeVisible("otherSections") && (
+            <div
+              ref={refPaymentPending}
+              className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
+              data-ocid="dashboard.customer_due.section"
+            >
+              <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-primary/8 flex items-center justify-center">
+                    <CreditCard size={14} className="text-primary" />
+                  </div>
+                  <span className="text-sm font-bold text-foreground">
+                    {t("Customer Due")}
+                  </span>
                 </div>
-                <span className="text-sm font-bold text-foreground">
-                  {t("Customer Due")}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => onNavigate("customers")}
+                  className="text-[11px] text-primary font-semibold hover:underline"
+                >
+                  View All →
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => onNavigate("customers")}
-                className="text-[11px] text-primary font-semibold hover:underline"
-              >
-                View All →
-              </button>
-            </div>
 
-            {totalDue > 0 && (
-              <div className="px-4 py-2.5 border-b border-border bg-red-50/30 dark:bg-red-950/10 flex items-center justify-between gap-2">
-                <span className="text-xs text-muted-foreground font-medium">
-                  Total Pending
-                </span>
-                <span className="text-lg font-extrabold text-red-600 dark:text-red-400">
-                  {fmt(totalDue)}
-                </span>
-              </div>
-            )}
+              {totalDue > 0 && (
+                <div className="px-4 py-2.5 border-b border-border bg-red-50/30 dark:bg-red-950/10 flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">
+                    Total Pending
+                  </span>
+                  <span className="text-lg font-extrabold text-red-600 dark:text-red-400">
+                    {fmt(totalDue)}
+                  </span>
+                </div>
+              )}
 
-            {top3DueCustomers.length === 0 ? (
-              <div
-                data-ocid="dashboard.customer_due.empty_state"
-                className="flex items-center gap-2 justify-center py-5 text-green-600 dark:text-green-400 text-sm font-medium"
-              >
-                <CheckCircle size={17} />
-                Koi udhaar nahi ✅
-              </div>
-            ) : (
-              <div className="divide-y divide-border/60">
-                {top3DueCustomers.map((l, idx) => {
-                  const key = l.customerMobile || l.customerName;
-                  const panelState = markPaidOpen[key];
-                  return (
-                    <div
-                      key={`${l.customerName}__${l.customerMobile}`}
-                      data-ocid={`dashboard.customer_due.item.${idx + 1}`}
-                    >
-                      {/* Customer row */}
-                      <div className="flex items-center gap-3 px-4 py-3">
-                        {/* Avatar */}
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-bold text-primary">
-                            {l.customerName.slice(0, 1).toUpperCase()}
-                          </span>
-                        </div>
-
-                        {/* Name + mobile */}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-bold text-foreground truncate">
-                            {l.customerName}
+              {top3DueCustomers.length === 0 ? (
+                <div
+                  data-ocid="dashboard.customer_due.empty_state"
+                  className="flex items-center gap-2 justify-center py-5 text-green-600 dark:text-green-400 text-sm font-medium"
+                >
+                  <CheckCircle size={17} />
+                  No Payment Due ✅
+                </div>
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {top3DueCustomers.map((l, idx) => {
+                    const key = l.customerMobile || l.customerName;
+                    const panelState = markPaidOpen[key];
+                    return (
+                      <div
+                        key={`${l.customerName}__${l.customerMobile}`}
+                        data-ocid={`dashboard.customer_due.item.${idx + 1}`}
+                      >
+                        {/* Customer row */}
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          {/* Avatar */}
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-primary">
+                              {l.customerName.slice(0, 1).toUpperCase()}
+                            </span>
                           </div>
-                          {l.customerMobile && (
-                            <div className="text-[11px] text-muted-foreground">
-                              {l.customerMobile.replace(
-                                /(\d{5})(\d{5})/,
-                                "$1*****",
-                              )}
+
+                          {/* Name + mobile */}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-bold text-foreground truncate">
+                              {l.customerName}
                             </div>
-                          )}
-                        </div>
-
-                        {/* Due amount */}
-                        <div className="flex flex-col items-end flex-shrink-0">
-                          <span
-                            className={`text-base font-extrabold ${
-                              l.totalDue > 5000
-                                ? "text-red-600 dark:text-red-400"
-                                : l.totalDue > 500
-                                  ? "text-amber-600 dark:text-amber-400"
-                                  : "text-foreground"
-                            }`}
-                          >
-                            {fmt(l.totalDue)}
-                          </span>
-                          <span
-                            className={`text-[9px] font-medium px-1.5 py-0 rounded-full border ${
-                              l.totalDue > 5000
-                                ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800/40"
-                                : l.totalDue > 500
-                                  ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/40"
-                                  : "bg-green-100 text-green-700 border-green-300 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800/40"
-                            }`}
-                          >
-                            {l.totalDue > 5000
-                              ? "🔴 High"
-                              : l.totalDue > 500
-                                ? "🟡 Medium"
-                                : "🟢 Low"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Action row: Remind + Mark Paid */}
-                      <div className="flex items-center gap-2 px-4 pb-3">
-                        {l.customerMobile && (
-                          <a
-                            href={`https://wa.me/91${l.customerMobile}?text=${encodeURIComponent(
-                              `Namaste ${l.customerName},\nAapka ₹${Math.round(l.totalDue).toLocaleString("en-IN")} baki hai.\n\nKripya jaldi payment kare.\n\nDhanyavaad 🙏\n${currentShop?.name ?? "Save Shop"}`,
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            data-ocid={`dashboard.customer_due.remind.${idx + 1}`}
-                            className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400 font-semibold bg-green-100 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-3 py-1.5 hover:bg-green-200 transition-colors"
-                          >
-                            <MessageCircle size={12} />
-                            Send Reminder 🔔
-                          </a>
-                        )}
-                        <Button
-                          data-ocid={`dashboard.customer_due.mark_paid.${idx + 1}`}
-                          size="sm"
-                          variant={panelState ? "secondary" : "outline"}
-                          className="text-xs h-7 ml-auto border-amber-300 text-amber-700 hover:bg-amber-50"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            panelState ? closeMarkPaid(key) : openMarkPaid(key);
-                          }}
-                        >
-                          {panelState ? "Cancel" : "Mark as Paid"}
-                        </Button>
-                      </div>
-
-                      {/* Mark Paid Panel */}
-                      {panelState && (
-                        <div
-                          data-ocid={`dashboard.customer_due.mark_paid_panel.${idx + 1}`}
-                          className="border-t border-border bg-secondary/20 px-4 py-3 flex flex-col gap-2.5"
-                        >
-                          {panelState.success ? (
-                            <div className="flex items-center gap-2 text-green-600 text-sm font-medium justify-center py-2">
-                              <CheckCircle size={16} /> Payment save ho gaya!
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground w-16 flex-shrink-0">
-                                  Amount (₹)
-                                </span>
-                                <Input
-                                  data-ocid={`dashboard.customer_due.amount.input.${idx + 1}`}
-                                  type="number"
-                                  min="1"
-                                  placeholder="Amount..."
-                                  value={panelState.amount}
-                                  onChange={(e) =>
-                                    updateMarkPaid(key, {
-                                      amount: e.target.value,
-                                    })
-                                  }
-                                  className="h-8 text-sm"
-                                />
+                            {l.customerMobile && (
+                              <div className="text-[11px] text-muted-foreground">
+                                {l.customerMobile.replace(
+                                  /(\d{5})(\d{5})/,
+                                  "$1*****",
+                                )}
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground w-16 flex-shrink-0">
-                                  Mode
-                                </span>
-                                <div className="flex gap-1">
-                                  {(["cash", "upi", "online"] as PayMode[]).map(
-                                    (m) => (
+                            )}
+                          </div>
+
+                          {/* Due amount */}
+                          <div className="flex flex-col items-end flex-shrink-0">
+                            <span
+                              className={`text-base font-extrabold ${
+                                l.totalDue > 5000
+                                  ? "text-red-600 dark:text-red-400"
+                                  : l.totalDue > 500
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-foreground"
+                              }`}
+                            >
+                              {fmt(l.totalDue)}
+                            </span>
+                            <span
+                              className={`text-[9px] font-medium px-1.5 py-0 rounded-full border ${
+                                l.totalDue > 5000
+                                  ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800/40"
+                                  : l.totalDue > 500
+                                    ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/40"
+                                    : "bg-green-100 text-green-700 border-green-300 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800/40"
+                              }`}
+                            >
+                              {l.totalDue > 5000
+                                ? "🔴 High"
+                                : l.totalDue > 500
+                                  ? "🟡 Medium"
+                                  : "🟢 Low"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Action row: Remind + Mark Paid */}
+                        <div className="flex items-center gap-2 px-4 pb-3">
+                          {l.customerMobile && (
+                            <a
+                              href={`https://wa.me/91${l.customerMobile}?text=${encodeURIComponent(
+                                `Hello ${l.customerName},\nYou have an outstanding balance of ₹${Math.round(l.totalDue).toLocaleString("en-IN")}.\n\nKindly make the payment at your earliest convenience.\n\nThank you 🙏\n${currentShop?.name ?? "Save Shop"}`,
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-ocid={`dashboard.customer_due.remind.${idx + 1}`}
+                              className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400 font-semibold bg-green-100 dark:bg-green-950/30 border border-green-200 dark:border-green-800/40 rounded-lg px-3 py-1.5 hover:bg-green-200 transition-colors"
+                            >
+                              <MessageCircle size={12} />
+                              Send Reminder 🔔
+                            </a>
+                          )}
+                          <Button
+                            data-ocid={`dashboard.customer_due.mark_paid.${idx + 1}`}
+                            size="sm"
+                            variant={panelState ? "secondary" : "outline"}
+                            className="text-xs h-7 ml-auto border-amber-300 text-amber-700 hover:bg-amber-50"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              panelState
+                                ? closeMarkPaid(key)
+                                : openMarkPaid(key);
+                            }}
+                          >
+                            {panelState ? "Cancel" : "Mark as Paid"}
+                          </Button>
+                        </div>
+
+                        {/* Mark Paid Panel */}
+                        {panelState && (
+                          <div
+                            data-ocid={`dashboard.customer_due.mark_paid_panel.${idx + 1}`}
+                            className="border-t border-border bg-secondary/20 px-4 py-3 flex flex-col gap-2.5"
+                          >
+                            {panelState.success ? (
+                              <div className="flex items-center gap-2 text-green-600 text-sm font-medium justify-center py-2">
+                                <CheckCircle size={16} /> Payment save ho gaya!
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground w-16 flex-shrink-0">
+                                    Amount (₹)
+                                  </span>
+                                  <Input
+                                    data-ocid={`dashboard.customer_due.amount.input.${idx + 1}`}
+                                    type="number"
+                                    min="1"
+                                    placeholder="Amount..."
+                                    value={panelState.amount}
+                                    onChange={(e) =>
+                                      updateMarkPaid(key, {
+                                        amount: e.target.value,
+                                      })
+                                    }
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground w-16 flex-shrink-0">
+                                    Mode
+                                  </span>
+                                  <div className="flex gap-1">
+                                    {(
+                                      ["cash", "upi", "online"] as PayMode[]
+                                    ).map((m) => (
                                       <button
                                         key={m}
                                         type="button"
@@ -2651,42 +3209,41 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                                             ? "UPI"
                                             : "Online"}
                                       </button>
-                                    ),
-                                  )}
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex justify-end">
-                                <Button
-                                  data-ocid={`dashboard.customer_due.save_payment.${idx + 1}`}
-                                  size="sm"
-                                  className="h-8 text-xs bg-primary"
-                                  disabled={
-                                    panelState.saving || !panelState.amount
-                                  }
-                                  onClick={() =>
-                                    handleSavePayment(
-                                      key,
-                                      l.customerName,
-                                      l.customerMobile,
-                                    )
-                                  }
-                                >
-                                  {panelState.saving
-                                    ? "Saving..."
-                                    : "Save Payment"}
-                                </Button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                                <div className="flex justify-end">
+                                  <Button
+                                    data-ocid={`dashboard.customer_due.save_payment.${idx + 1}`}
+                                    size="sm"
+                                    className="h-8 text-xs bg-primary"
+                                    disabled={
+                                      panelState.saving || !panelState.amount
+                                    }
+                                    onClick={() =>
+                                      handleSavePayment(
+                                        key,
+                                        l.customerName,
+                                        l.customerMobile,
+                                      )
+                                    }
+                                  >
+                                    {panelState.saving
+                                      ? "Saving..."
+                                      : "Save Payment"}
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 5 — PENDING REMINDER REQUESTS (Owner/Manager only)
@@ -2784,589 +3341,621 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         {/* ══════════════════════════════════════════════════════════════════
             ADMIN SUMMARY CARD (Owner only — existing component)
         ══════════════════════════════════════════════════════════════════ */}
-        {isOwner && <AdminSummaryCard />}
+        {isOwner && isModeVisible("otherSections") && <AdminSummaryCard />}
 
         {/* ══════════════════════════════════════════════════════════════════
             PENDING ORDERS WIDGET
         ══════════════════════════════════════════════════════════════════ */}
-        {(pendingVendorOrders > 0 || pendingCustomerOrders > 0) && (
-          <div
-            className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
-            data-ocid="dashboard.pending_orders.section"
-          >
-            <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center gap-2">
-              <span className="text-sm font-bold text-foreground">
-                🛒 Pending Orders
-              </span>
-              <Badge className="ml-auto bg-secondary text-foreground border-border border text-[10px]">
-                {pendingVendorOrders + pendingCustomerOrders} Pending
-              </Badge>
-            </div>
-            <div className="flex gap-2.5 p-3">
-              <button
-                type="button"
-                data-ocid="dashboard.pending_orders.vendor_orders"
-                onClick={() => onNavigate("purchase-orders")}
-                className="flex-1 flex flex-col gap-1.5 rounded-2xl p-3 bg-card border border-border border-l-4 border-l-amber-400 shadow-card active:scale-[0.96] transition-all duration-150 text-left"
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-[11px] font-semibold text-foreground">
-                    Vendor Orders
+        {(pendingVendorOrders > 0 || pendingCustomerOrders > 0) &&
+          isDashSectionVisible("pendingOrders") && (
+            <div
+              className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
+              data-ocid="dashboard.pending_orders.section"
+            >
+              <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center gap-2">
+                <span className="text-sm font-bold text-foreground">
+                  🛒 Pending Orders
+                </span>
+                <Badge className="ml-auto bg-secondary text-foreground border-border border text-[10px]">
+                  {pendingVendorOrders + pendingCustomerOrders} Pending
+                </Badge>
+              </div>
+              <div className="flex gap-2.5 p-3">
+                <button
+                  type="button"
+                  data-ocid="dashboard.pending_orders.vendor_orders"
+                  onClick={() => onNavigate("purchase-orders")}
+                  className="flex-1 flex flex-col gap-1.5 rounded-2xl p-3 bg-card border border-border border-l-4 border-l-amber-400 shadow-card card-interactive active:scale-[0.96] transition-all duration-150 text-left"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11px] font-semibold text-foreground">
+                      Vendor Orders
+                    </span>
+                    <ShoppingCart size={13} className="text-muted-foreground" />
+                  </div>
+                  <span className="text-2xl font-extrabold text-foreground leading-none">
+                    {pendingVendorOrders}
                   </span>
-                  <ShoppingCart size={13} className="text-muted-foreground" />
-                </div>
-                <span className="text-2xl font-extrabold text-foreground leading-none">
-                  {pendingVendorOrders}
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  Tap to view →
-                </span>
-              </button>
-              <button
-                type="button"
-                data-ocid="dashboard.pending_orders.customer_orders"
-                onClick={() => onNavigate("customer-orders")}
-                className="flex-1 flex flex-col gap-1.5 rounded-2xl p-3 bg-card border border-border border-l-4 border-l-primary shadow-card active:scale-[0.96] transition-all duration-150 text-left"
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-[11px] font-semibold text-foreground">
-                    Customer Orders
+                  <span className="text-[10px] text-muted-foreground">
+                    Tap to view →
                   </span>
-                  <Receipt size={13} className="text-muted-foreground" />
-                </div>
-                <span className="text-2xl font-extrabold text-foreground leading-none">
-                  {pendingCustomerOrders}
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  Tap to view →
-                </span>
-              </button>
+                </button>
+                <button
+                  type="button"
+                  data-ocid="dashboard.pending_orders.customer_orders"
+                  onClick={() => onNavigate("customer-orders")}
+                  className="flex-1 flex flex-col gap-1.5 rounded-2xl p-3 bg-card border border-border border-l-4 border-l-primary shadow-card card-interactive active:scale-[0.96] transition-all duration-150 text-left"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11px] font-semibold text-foreground">
+                      Customer Orders
+                    </span>
+                    <Receipt size={13} className="text-muted-foreground" />
+                  </div>
+                  <span className="text-2xl font-extrabold text-foreground leading-none">
+                    {pendingCustomerOrders}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Tap to view →
+                  </span>
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 6 — PRODUCT TABS + PRODUCT CARDS
         ══════════════════════════════════════════════════════════════════ */}
-        <div
-          className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
-          data-ocid="dashboard.products.section"
-        >
-          {/* Tab bar */}
-          <div className="flex gap-0 border-b border-border overflow-x-auto scrollbar-hide">
-            {tabLabels.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                data-ocid={`dashboard.product_tab.${tab.key}`}
-                onClick={() => setProductTab(tab.key)}
-                className={`flex-shrink-0 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
-                  productTab === tab.key
-                    ? "border-b-primary text-primary bg-primary/5"
-                    : "border-b-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Products grid */}
-          <div className="p-3">
-            {filteredProducts.length === 0 ? (
-              <div
-                data-ocid="dashboard.products.empty_state"
-                className="flex flex-col items-center gap-2 py-8 text-muted-foreground text-sm"
-              >
-                <Package size={28} className="text-muted-foreground/30" />
-                <p>Is tab mein koi product nahi</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {filteredProducts.slice(0, 12).map((p, idx) => (
-                  <ProductCard
-                    key={p.id}
-                    name={p.name}
-                    stock={p.currentStock}
-                    unit={p.unit}
-                    sellingPrice={p.sellingPrice}
-                    profitPct={p.profitPct ?? null}
-                    showProfit={!isStaff}
-                    onClick={() => onNavigate("inventory")}
-                    ocid={`dashboard.product_card.${idx + 1}`}
-                  />
+        {isDashSectionVisible("productsList") &&
+          isModeVisible("otherSections") && (
+            <div
+              className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
+              data-ocid="dashboard.products.section"
+            >
+              {/* Tab bar */}
+              <div className="flex gap-0 border-b border-border overflow-x-auto scrollbar-hide">
+                {tabLabels.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    data-ocid={`dashboard.product_tab.${tab.key}`}
+                    onClick={() => setProductTab(tab.key)}
+                    className={`flex-shrink-0 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                      productTab === tab.key
+                        ? "border-b-primary text-primary bg-primary/5"
+                        : "border-b-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
                 ))}
               </div>
-            )}
-            {filteredProducts.length > 12 && (
-              <div className="mt-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => onNavigate("inventory")}
-                  className="text-xs text-primary font-semibold hover:underline"
-                >
-                  +{filteredProducts.length - 12} more products — View All →
-                </button>
+
+              {/* Products grid */}
+              <div className="p-3">
+                {filteredProducts.length === 0 ? (
+                  <div
+                    data-ocid="dashboard.products.empty_state"
+                    className="flex flex-col items-center gap-2 py-8 text-muted-foreground text-sm"
+                  >
+                    <Package size={28} className="text-muted-foreground/30" />
+                    <p>No products in this tab</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {filteredProducts.slice(0, 12).map((p, idx) => (
+                      <ProductCard
+                        key={p.id}
+                        name={p.name}
+                        stock={p.currentStock}
+                        unit={p.unit}
+                        sellingPrice={p.sellingPrice}
+                        profitPct={p.profitPct ?? null}
+                        showProfit={!isStaff}
+                        onClick={() => onNavigate("inventory")}
+                        ocid={`dashboard.product_card.${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                )}
+                {filteredProducts.length > 12 && (
+                  <div className="mt-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("inventory")}
+                      className="text-xs text-primary font-semibold hover:underline"
+                    >
+                      +{filteredProducts.length - 12} more products — View All →
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
 
         {/* ══════════════════════════════════════════════════════════════════
             STOCK CONTROL SECTION
         ══════════════════════════════════════════════════════════════════ */}
-        <div
-          ref={refOutOfStock}
-          className="bg-card rounded-2xl border border-border p-4 shadow-card"
-          data-ocid="dashboard.stock_control.section"
-        >
-          <SectionHeader>Stock Control</SectionHeader>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              data-ocid="dashboard.stock.low_stock"
-              onClick={() => onNavigate("inventory")}
-              className={`flex flex-col gap-1.5 rounded-2xl p-3 border shadow-card active:scale-[0.96] transition-all duration-150 text-left bg-card border-border ${
-                lowStockItems.length > 0 ? "border-l-4 border-l-amber-400" : ""
-              }`}
+        {isDashSectionVisible("stockControl") &&
+          isModeVisible("otherSections") && (
+            <div
+              ref={refOutOfStock}
+              className="bg-card rounded-2xl border border-border p-4 shadow-card"
+              data-ocid="dashboard.stock_control.section"
             >
-              <AlertTriangle
-                size={15}
-                className={
-                  lowStockItems.length > 0 ? "text-amber-500" : "text-green-500"
-                }
-              />
-              <span
-                className={`text-xl font-extrabold leading-none ${
-                  lowStockItems.length > 0
-                    ? "text-amber-700 dark:text-amber-400"
-                    : "text-green-700 dark:text-green-400"
-                }`}
-              >
-                {lowStockItems.length}
-              </span>
-              <span
-                className={`text-[10px] font-semibold ${
-                  lowStockItems.length > 0
-                    ? "text-amber-600 dark:text-amber-500"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {t("Low Stock")}
-              </span>
-            </button>
-            <button
-              type="button"
-              data-ocid="dashboard.stock.out_of_stock"
-              onClick={() => onNavigate("inventory")}
-              className={`flex flex-col gap-1.5 rounded-2xl p-3 border shadow-card active:scale-[0.96] transition-all duration-150 text-left bg-card border-border ${
-                outOfStockItems.length > 0 ? "border-l-4 border-l-red-500" : ""
-              }`}
-            >
-              <PackageX
-                size={15}
-                className={
-                  outOfStockItems.length > 0 ? "text-red-500" : "text-green-500"
-                }
-              />
-              <span
-                className={`text-xl font-extrabold leading-none ${
-                  outOfStockItems.length > 0
-                    ? "text-red-700 dark:text-red-400"
-                    : "text-green-700 dark:text-green-400"
-                }`}
-              >
-                {outOfStockItems.length}
-              </span>
-              <span
-                className={`text-[10px] font-semibold ${
-                  outOfStockItems.length > 0
-                    ? "text-red-600 dark:text-red-500"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {t("Out of Stock")}
-              </span>
-            </button>
-            <button
-              type="button"
-              data-ocid="dashboard.stock.value"
-              onClick={() => onNavigate("inventory")}
-              className="flex flex-col gap-1.5 rounded-2xl p-3 border border-border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left"
-            >
-              <Wallet size={15} className="text-primary" />
-              <span className="text-base font-extrabold leading-none text-foreground truncate">
-                {fmt(totalValue)}
-              </span>
-              <span className="text-[10px] font-semibold text-muted-foreground">
-                {t("Stock Value")}
-              </span>
-            </button>
-          </div>
-        </div>
+              <SectionHeader>Stock Control</SectionHeader>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  data-ocid="dashboard.stock.low_stock"
+                  onClick={() => onNavigate("inventory")}
+                  className={`flex flex-col gap-1.5 rounded-2xl p-3 border shadow-card card-interactive active:scale-[0.96] transition-all duration-150 text-left bg-card border-border ${
+                    lowStockItems.length > 0
+                      ? "border-l-4 border-l-amber-400"
+                      : ""
+                  }`}
+                >
+                  <AlertTriangle
+                    size={15}
+                    className={
+                      lowStockItems.length > 0
+                        ? "text-amber-500"
+                        : "text-green-500"
+                    }
+                  />
+                  <span
+                    className={`text-xl font-extrabold leading-none ${
+                      lowStockItems.length > 0
+                        ? "text-amber-700 dark:text-amber-400"
+                        : "text-green-700 dark:text-green-400"
+                    }`}
+                  >
+                    {lowStockItems.length}
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold ${
+                      lowStockItems.length > 0
+                        ? "text-amber-600 dark:text-amber-500"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {t("Low Stock")}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  data-ocid="dashboard.stock.out_of_stock"
+                  onClick={() => onNavigate("inventory")}
+                  className={`flex flex-col gap-1.5 rounded-2xl p-3 border shadow-card card-interactive active:scale-[0.96] transition-all duration-150 text-left bg-card border-border ${
+                    outOfStockItems.length > 0
+                      ? "border-l-4 border-l-red-500"
+                      : ""
+                  }`}
+                >
+                  <PackageX
+                    size={15}
+                    className={
+                      outOfStockItems.length > 0
+                        ? "text-red-500"
+                        : "text-green-500"
+                    }
+                  />
+                  <span
+                    className={`text-xl font-extrabold leading-none ${
+                      outOfStockItems.length > 0
+                        ? "text-red-700 dark:text-red-400"
+                        : "text-green-700 dark:text-green-400"
+                    }`}
+                  >
+                    {outOfStockItems.length}
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold ${
+                      outOfStockItems.length > 0
+                        ? "text-red-600 dark:text-red-500"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {t("Out of Stock")}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  data-ocid="dashboard.stock.value"
+                  onClick={() => onNavigate("inventory")}
+                  className="flex flex-col gap-1.5 rounded-2xl p-3 border border-border bg-card shadow-card card-interactive active:scale-[0.96] transition-all duration-150 text-left"
+                >
+                  <Wallet size={15} className="text-primary" />
+                  <span className="text-base font-extrabold leading-none text-foreground truncate">
+                    {fmt(totalValue)}
+                  </span>
+                  <span className="text-[10px] font-semibold text-muted-foreground">
+                    {t("Stock Value")}
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
 
         {/* ══════════════════════════════════════════════════════════════════
             SMART INSIGHTS SECTION
         ══════════════════════════════════════════════════════════════════ */}
-        <div
-          className="bg-card rounded-2xl border border-border p-4 shadow-card"
-          data-ocid="dashboard.smart_insights.section"
-        >
-          <SectionHeader>Smart Insights</SectionHeader>
-          <div className="flex flex-col gap-2">
-            {/* Most Selling */}
-            <button
-              type="button"
-              className="rounded-2xl border border-border bg-card shadow-card p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-green-400"
-              data-ocid="dashboard.insights.most_selling"
-              onClick={() => onNavigate("reports")}
+        {isDashSectionVisible("smartInsights") &&
+          isModeVisible("otherSections") && (
+            <div
+              className="bg-card rounded-2xl border border-border p-4 shadow-card"
+              data-ocid="dashboard.smart_insights.section"
             >
-              <div className="flex items-center gap-2 mb-2.5">
-                <div className="w-6 h-6 rounded-lg bg-green-50 dark:bg-green-950/30 flex items-center justify-center">
-                  <Star
-                    size={12}
-                    className="text-green-600 dark:text-green-400"
-                  />
-                </div>
-                <span className="text-xs font-bold text-foreground">
-                  Most Selling Products
-                </span>
-              </div>
-              {mostSellingProducts.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Abhi koi sales data nahi
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {mostSellingProducts.map((item, i) => (
-                    <div key={item.name} className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-muted-foreground w-4">
-                        #{i + 1}
-                      </span>
-                      <span className="text-xs font-medium text-foreground flex-1 truncate">
-                        {item.name}
-                      </span>
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-secondary text-foreground border border-border">
-                        {item.qty} units
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </button>
-
-            {/* High Profit Items */}
-            <button
-              type="button"
-              className="rounded-2xl border border-border bg-card shadow-card p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-primary"
-              data-ocid="dashboard.insights.high_profit"
-              onClick={() => onNavigate("reports")}
-            >
-              <div className="flex items-center gap-2 mb-2.5">
-                <div className="w-6 h-6 rounded-lg bg-primary/8 flex items-center justify-center">
-                  <TrendingUp size={12} className="text-primary" />
-                </div>
-                <span className="text-xs font-bold text-foreground">
-                  High Profit Items
-                </span>
-              </div>
-              {highProfitItems.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Abhi koi profit data nahi
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {highProfitItems.map((item, i) => (
-                    <div key={item.name} className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-muted-foreground w-4">
-                        #{i + 1}
-                      </span>
-                      <span className="text-xs font-medium text-foreground flex-1 truncate">
-                        {item.name}
-                      </span>
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/40">
-                        {fmt(item.profit)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </button>
-
-            {/* Low Price Attempts (Owner only) */}
-            {isOwner && (
-              <button
-                type="button"
-                className="rounded-2xl border border-border bg-card shadow-card p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-amber-400"
-                data-ocid="dashboard.insights.low_price"
-                onClick={() => onNavigate("low-price-log")}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
-                      <ShieldAlert
+              <SectionHeader>Smart Insights</SectionHeader>
+              <div className="flex flex-col gap-2">
+                {/* Most Selling */}
+                <button
+                  type="button"
+                  className="rounded-2xl border border-border bg-card shadow-card card-interactive p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-green-400"
+                  data-ocid="dashboard.insights.most_selling"
+                  onClick={() => onNavigate("reports")}
+                >
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <div className="w-6 h-6 rounded-lg bg-green-50 dark:bg-green-950/30 flex items-center justify-center">
+                      <Star
                         size={12}
-                        className="text-amber-600 dark:text-amber-400"
+                        className="text-green-600 dark:text-green-400"
                       />
                     </div>
                     <span className="text-xs font-bold text-foreground">
-                      Low Price Attempts Today
+                      Most Selling Products
                     </span>
                   </div>
-                  <span
-                    className={`text-xl font-extrabold ${
-                      lowPriceAttemptsToday > 0
-                        ? "text-amber-700 dark:text-amber-400"
-                        : "text-muted-foreground"
-                    }`}
+                  {mostSellingProducts.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No sales data yet
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {mostSellingProducts.map((item, i) => (
+                        <div
+                          key={item.name}
+                          className="flex items-center gap-2"
+                        >
+                          <span className="text-[10px] font-bold text-muted-foreground w-4">
+                            #{i + 1}
+                          </span>
+                          <span className="text-xs font-medium text-foreground flex-1 truncate">
+                            {item.name}
+                          </span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-secondary text-foreground border border-border">
+                            {item.qty} units
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </button>
+
+                {/* High Profit Items */}
+                <button
+                  type="button"
+                  className="rounded-2xl border border-border bg-card shadow-card card-interactive p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-primary"
+                  data-ocid="dashboard.insights.high_profit"
+                  onClick={() => onNavigate("reports")}
+                >
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <div className="w-6 h-6 rounded-lg bg-primary/8 flex items-center justify-center">
+                      <TrendingUp size={12} className="text-primary" />
+                    </div>
+                    <span className="text-xs font-bold text-foreground">
+                      High Profit Items
+                    </span>
+                  </div>
+                  {highProfitItems.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No profit data yet
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {highProfitItems.map((item, i) => (
+                        <div
+                          key={item.name}
+                          className="flex items-center gap-2"
+                        >
+                          <span className="text-[10px] font-bold text-muted-foreground w-4">
+                            #{i + 1}
+                          </span>
+                          <span className="text-xs font-medium text-foreground flex-1 truncate">
+                            {item.name}
+                          </span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/40">
+                            {fmt(item.profit)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </button>
+
+                {/* Low Price Attempts (Owner only) */}
+                {isOwner && (
+                  <button
+                    type="button"
+                    className="rounded-2xl border border-border bg-card shadow-card card-interactive p-3.5 active:scale-[0.99] transition-all duration-150 text-left w-full border-l-4 border-l-amber-400"
+                    data-ocid="dashboard.insights.low_price"
+                    onClick={() => onNavigate("low-price-log")}
                   >
-                    {lowPriceAttemptsToday}
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1.5 pl-8">
-                  Tap to view full log →
-                </p>
-              </button>
-            )}
-          </div>
-        </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
+                          <ShieldAlert
+                            size={12}
+                            className="text-amber-600 dark:text-amber-400"
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-foreground">
+                          Low Price Attempts Today
+                        </span>
+                      </div>
+                      <span
+                        className={`text-xl font-extrabold ${
+                          lowPriceAttemptsToday > 0
+                            ? "text-amber-700 dark:text-amber-400"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {lowPriceAttemptsToday}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1.5 pl-8">
+                      Tap to view full log →
+                    </p>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
         {/* ══════════════════════════════════════════════════════════════════
             INVENTORY HEALTH SECTION
         ══════════════════════════════════════════════════════════════════ */}
-        <div
-          ref={(el) => {
-            (
-              refDeadStock as React.MutableRefObject<HTMLDivElement | null>
-            ).current = el;
-            (
-              refExpiryAlert as React.MutableRefObject<HTMLDivElement | null>
-            ).current = el;
-          }}
-          className="bg-card rounded-2xl border border-border p-4 shadow-card"
-          data-ocid="dashboard.inventory_health.section"
-        >
-          <SectionHeader>Inventory Health</SectionHeader>
-          <div className="flex gap-2">
-            {appConfig.featureFlags.expiry && (
-              <button
-                type="button"
-                data-ocid="dashboard.health.expiry"
-                onClick={() => onNavigate("inventory")}
-                className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
-                  expiryWithin30 > 0 ? "border-l-4 border-l-orange-400" : ""
-                }`}
-              >
-                <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                    expiryWithin30 > 0
-                      ? "bg-orange-50 dark:bg-orange-950/30"
-                      : "bg-green-50 dark:bg-green-950/30"
-                  }`}
-                >
-                  <Clock
-                    size={15}
-                    className={
-                      expiryWithin30 > 0
-                        ? "text-orange-600 dark:text-orange-400"
-                        : "text-green-600 dark:text-green-400"
-                    }
-                  />
-                </div>
-                <span
-                  className={`text-xl font-extrabold leading-none ${
-                    expiryWithin30 > 0
-                      ? "text-orange-700 dark:text-orange-400"
-                      : "text-green-700 dark:text-green-400"
-                  }`}
-                >
-                  {expiryWithin30}
-                </span>
-                <div>
-                  <div className="text-[11px] font-semibold text-foreground">
-                    Expiry Alert
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    Within 30 days
-                  </div>
-                </div>
-              </button>
-            )}
-            {appConfig.featureFlags.deadStock && (
-              <button
-                type="button"
-                data-ocid="dashboard.health.dead_stock"
-                onClick={() => onNavigate("inventory")}
-                className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
-                  deadStockItems.length > 0 ? "border-l-4 border-l-red-500" : ""
-                }`}
-              >
-                <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                    deadStockItems.length > 0
-                      ? "bg-red-50 dark:bg-red-950/30"
-                      : "bg-green-50 dark:bg-green-950/30"
-                  }`}
-                >
-                  <Skull
-                    size={15}
-                    className={
-                      deadStockItems.length > 0
-                        ? "text-red-600 dark:text-red-400"
-                        : "text-green-600 dark:text-green-400"
-                    }
-                  />
-                </div>
-                <span
-                  className={`text-xl font-extrabold leading-none ${
-                    deadStockItems.length > 0
-                      ? "text-red-700 dark:text-red-400"
-                      : "text-green-700 dark:text-green-400"
-                  }`}
-                >
-                  {deadStockItems.length}
-                </span>
-                <div>
-                  <div className="text-[11px] font-semibold text-foreground">
-                    Dead Stock
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {threshold}+ days unsold
-                  </div>
-                </div>
-              </button>
-            )}
-            <button
-              type="button"
-              data-ocid="dashboard.health.slow_moving"
-              onClick={() => onNavigate("inventory")}
-              className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
-                slowMovingItems.length > 0
-                  ? "border-l-4 border-l-amber-400"
-                  : ""
-              }`}
+        {isDashSectionVisible("inventoryHealth") &&
+          isModeVisible("otherSections") && (
+            <div
+              ref={(el) => {
+                (
+                  refDeadStock as React.MutableRefObject<HTMLDivElement | null>
+                ).current = el;
+                (
+                  refExpiryAlert as React.MutableRefObject<HTMLDivElement | null>
+                ).current = el;
+              }}
+              className="bg-card rounded-2xl border border-border p-4 shadow-card"
+              data-ocid="dashboard.inventory_health.section"
             >
-              <div
-                className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                  slowMovingItems.length > 0
-                    ? "bg-amber-50 dark:bg-amber-950/30"
-                    : "bg-green-50 dark:bg-green-950/30"
-                }`}
-              >
-                <TrendingDown
-                  size={15}
-                  className={
+              <SectionHeader>Inventory Health</SectionHeader>
+              <div className="flex gap-2">
+                {appConfig.featureFlags.expiry && (
+                  <button
+                    type="button"
+                    data-ocid="dashboard.health.expiry"
+                    onClick={() => onNavigate("inventory")}
+                    className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
+                      expiryWithin30 > 0 ? "border-l-4 border-l-orange-400" : ""
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                        expiryWithin30 > 0
+                          ? "bg-orange-50 dark:bg-orange-950/30"
+                          : "bg-green-50 dark:bg-green-950/30"
+                      }`}
+                    >
+                      <Clock
+                        size={15}
+                        className={
+                          expiryWithin30 > 0
+                            ? "text-orange-600 dark:text-orange-400"
+                            : "text-green-600 dark:text-green-400"
+                        }
+                      />
+                    </div>
+                    <span
+                      className={`text-xl font-extrabold leading-none ${
+                        expiryWithin30 > 0
+                          ? "text-orange-700 dark:text-orange-400"
+                          : "text-green-700 dark:text-green-400"
+                      }`}
+                    >
+                      {expiryWithin30}
+                    </span>
+                    <div>
+                      <div className="text-[11px] font-semibold text-foreground">
+                        Expiry Alert
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Within 30 days
+                      </div>
+                    </div>
+                  </button>
+                )}
+                {appConfig.featureFlags.deadStock && (
+                  <button
+                    type="button"
+                    data-ocid="dashboard.health.dead_stock"
+                    onClick={() => onNavigate("inventory")}
+                    className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
+                      deadStockItems.length > 0
+                        ? "border-l-4 border-l-red-500"
+                        : ""
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                        deadStockItems.length > 0
+                          ? "bg-red-50 dark:bg-red-950/30"
+                          : "bg-green-50 dark:bg-green-950/30"
+                      }`}
+                    >
+                      <Skull
+                        size={15}
+                        className={
+                          deadStockItems.length > 0
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-green-600 dark:text-green-400"
+                        }
+                      />
+                    </div>
+                    <span
+                      className={`text-xl font-extrabold leading-none ${
+                        deadStockItems.length > 0
+                          ? "text-red-700 dark:text-red-400"
+                          : "text-green-700 dark:text-green-400"
+                      }`}
+                    >
+                      {deadStockItems.length}
+                    </span>
+                    <div>
+                      <div className="text-[11px] font-semibold text-foreground">
+                        Dead Stock
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {threshold}+ days unsold
+                      </div>
+                    </div>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-ocid="dashboard.health.slow_moving"
+                  onClick={() => onNavigate("inventory")}
+                  className={`flex-1 min-w-0 flex flex-col gap-2 rounded-2xl p-3 border bg-card shadow-card active:scale-[0.96] transition-all duration-150 text-left border-border ${
                     slowMovingItems.length > 0
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-green-600 dark:text-green-400"
-                  }
-                />
+                      ? "border-l-4 border-l-amber-400"
+                      : ""
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                      slowMovingItems.length > 0
+                        ? "bg-amber-50 dark:bg-amber-950/30"
+                        : "bg-green-50 dark:bg-green-950/30"
+                    }`}
+                  >
+                    <TrendingDown
+                      size={15}
+                      className={
+                        slowMovingItems.length > 0
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-green-600 dark:text-green-400"
+                      }
+                    />
+                  </div>
+                  <span
+                    className={`text-xl font-extrabold leading-none ${
+                      slowMovingItems.length > 0
+                        ? "text-amber-700 dark:text-amber-400"
+                        : "text-green-700 dark:text-green-400"
+                    }`}
+                  >
+                    {slowMovingItems.length}
+                  </span>
+                  <div>
+                    <div className="text-[11px] font-semibold text-foreground">
+                      Slow Moving
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {halfThreshold}+ days
+                    </div>
+                  </div>
+                </button>
               </div>
-              <span
-                className={`text-xl font-extrabold leading-none ${
-                  slowMovingItems.length > 0
-                    ? "text-amber-700 dark:text-amber-400"
-                    : "text-green-700 dark:text-green-400"
-                }`}
-              >
-                {slowMovingItems.length}
-              </span>
-              <div>
-                <div className="text-[11px] font-semibold text-foreground">
-                  Slow Moving
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  {halfThreshold}+ days
-                </div>
-              </div>
-            </button>
-          </div>
-        </div>
+            </div>
+          )}
 
         {/* ══════════════════════════════════════════════════════════════════
             RECENT ACTIVITY SECTION
         ══════════════════════════════════════════════════════════════════ */}
-        <div
-          className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
-          data-ocid="dashboard.recent_activity.section"
-        >
-          <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center">
-                <Zap size={13} className="text-muted-foreground" />
-              </div>
-              <span className="text-sm font-bold text-foreground">
-                {t("Recent Activity")}
-              </span>
-            </div>
-            <span className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
-              Last 10
-            </span>
-          </div>
-          <div className="px-4 py-3">
-            {activityFeed.length === 0 ? (
-              <div
-                data-ocid="dashboard.recent_activity.empty_state"
-                className="flex flex-col items-center gap-2 py-8 text-muted-foreground text-sm"
-              >
-                <Zap size={24} className="text-muted-foreground/40" />
-                No recent activity yet
-              </div>
-            ) : (
-              <div className="flex flex-col gap-0.5">
-                {activityFeed.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    data-ocid={`dashboard.recent_activity.item.${idx + 1}`}
-                    className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0"
-                  >
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        item.kind === "invoice"
-                          ? "bg-green-100 dark:bg-green-950/40"
-                          : item.kind === "txn" && item.type === "in"
-                            ? "bg-blue-100 dark:bg-blue-950/40"
-                            : "bg-orange-100 dark:bg-orange-950/40"
-                      }`}
-                    >
-                      {item.kind === "invoice" ? (
-                        <ShoppingCart
-                          size={14}
-                          className="text-green-600 dark:text-green-400"
-                        />
-                      ) : item.kind === "txn" && item.type === "in" ? (
-                        <ArrowDownToLine
-                          size={14}
-                          className="text-blue-600 dark:text-blue-400"
-                        />
-                      ) : (
-                        <ArrowUpFromLine
-                          size={14}
-                          className="text-orange-500 dark:text-orange-400"
-                        />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-foreground truncate">
-                        {item.kind === "invoice"
-                          ? item.customerName
-                          : item.productName}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {item.kind === "invoice"
-                          ? `Sale · ${fmt(item.totalAmount)}`
-                          : `Stock ${item.type === "in" ? "In" : "Out"} · ${item.quantity} ${item.unit}`}
-                      </div>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground flex-shrink-0 bg-secondary/50 px-2 py-0.5 rounded-full">
-                      {relativeTime(item.date)}
-                    </div>
+        {isDashSectionVisible("recentActivity") &&
+          isModeVisible("otherSections") && (
+            <div
+              className="bg-card rounded-2xl border border-border overflow-hidden shadow-card"
+              data-ocid="dashboard.recent_activity.section"
+            >
+              <div className="px-4 pt-3.5 pb-3 border-b border-border/60 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center">
+                    <Zap size={13} className="text-muted-foreground" />
                   </div>
-                ))}
+                  <span className="text-sm font-bold text-foreground">
+                    {t("Recent Activity")}
+                  </span>
+                </div>
+                <span className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
+                  Last 10
+                </span>
               </div>
-            )}
-          </div>
-        </div>
+              <div className="px-4 py-3">
+                {activityFeed.length === 0 ? (
+                  <div
+                    data-ocid="dashboard.recent_activity.empty_state"
+                    className="flex flex-col items-center gap-2 py-8 text-muted-foreground text-sm"
+                  >
+                    <Zap size={24} className="text-muted-foreground/40" />
+                    No recent activity yet
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    {activityFeed.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        data-ocid={`dashboard.recent_activity.item.${idx + 1}`}
+                        className="flex items-center gap-3 py-2.5 border-b border-border/40 last:border-0"
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            item.kind === "invoice"
+                              ? "bg-green-100 dark:bg-green-950/40"
+                              : item.kind === "txn" && item.type === "in"
+                                ? "bg-blue-100 dark:bg-blue-950/40"
+                                : "bg-orange-100 dark:bg-orange-950/40"
+                          }`}
+                        >
+                          {item.kind === "invoice" ? (
+                            <ShoppingCart
+                              size={14}
+                              className="text-green-600 dark:text-green-400"
+                            />
+                          ) : item.kind === "txn" && item.type === "in" ? (
+                            <ArrowDownToLine
+                              size={14}
+                              className="text-blue-600 dark:text-blue-400"
+                            />
+                          ) : (
+                            <ArrowUpFromLine
+                              size={14}
+                              className="text-orange-500 dark:text-orange-400"
+                            />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-foreground truncate">
+                            {item.kind === "invoice"
+                              ? item.customerName
+                              : item.productName}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {item.kind === "invoice"
+                              ? `Sale · ${fmt(item.totalAmount)}`
+                              : `Stock ${item.type === "in" ? "In" : "Out"} · ${item.quantity} ${item.unit}`}
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground flex-shrink-0 bg-secondary/50 px-2 py-0.5 rounded-full">
+                          {relativeTime(item.date)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
         {/* Low Price Alert Banner (Owner only) */}
         {isOwner && lowPriceAttemptsToday > 0 && (
@@ -3410,11 +3999,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <Package size={28} className="text-primary/60" />
             </div>
             <p className="font-bold text-base text-foreground mb-1">
-              Shop abhi khali hai
+              Your shop is empty
             </p>
             <p className="text-sm text-muted-foreground mb-4">
-              Admin Panel mein product add karein, phir dashboard mein data
-              dikhega.
+              Add products in Admin Panel to see data on the dashboard.
             </p>
             {isOwner && (
               <Button
@@ -3422,7 +4010,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 onClick={() => onNavigate("admin")}
                 className="bg-primary text-primary-foreground"
               >
-                <Plus size={14} className="mr-1" /> Pehla Product Add Karein
+                <Plus size={14} className="mr-1" /> Add First Product
               </Button>
             )}
           </div>

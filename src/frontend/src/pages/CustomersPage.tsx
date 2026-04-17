@@ -28,6 +28,7 @@ import {
   MessageCircle,
   Receipt,
   Search,
+  Send,
   User,
   Users,
 } from "lucide-react";
@@ -91,7 +92,7 @@ function ReminderConfirmDialog({
   onConfirm: () => void;
   shopName: string;
 }) {
-  const preview = `Namaste ${ledger.customerName},\nAapka ₹${Math.round(ledger.totalDue).toLocaleString("en-IN")} baki hai.\n\nKripya jaldi payment kare.\n\nDhanyavaad 🙏\n${shopName}`;
+  const preview = `Hello ${ledger.customerName},\nYou have an outstanding balance of ₹${Math.round(ledger.totalDue).toLocaleString("en-IN")}.\n\nKindly make the payment at your earliest convenience.\n\nThank you 🙏\n${shopName}`;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -102,7 +103,7 @@ function ReminderConfirmDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle size={18} className="text-green-600" />
-            {mode === "send" ? "Reminder Bhejo" : "Reminder Request Bhejo"}
+            {mode === "send" ? "Send Reminder" : "Send Reminder Request"}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-1">
@@ -133,8 +134,8 @@ function ReminderConfirmDialog({
           {mode === "request" && (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-2">
               <p className="text-xs text-amber-700">
-                ⏳ Owner/Manager ko approval ke liye request jayegi. Unke
-                approve karne par WhatsApp khulega.
+                ⏳ This will send an approval request to Owner/Manager. Once
+                approved, the WhatsApp message will be sent.
               </p>
             </div>
           )}
@@ -161,7 +162,7 @@ function ReminderConfirmDialog({
             }}
             data-ocid="customers.reminder_confirm.submit"
           >
-            {mode === "send" ? "Haan, Bhejo" : "Request Bhejo"}
+            {mode === "send" ? "Yes, Send" : "Send Request"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -199,7 +200,7 @@ function ReminderButton({
         size="sm"
         className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} opacity-40 cursor-not-allowed`}
         disabled
-        title="Mobile number nahi hai"
+        title="Mobile number is not available"
         data-ocid={`customers.reminder.disabled.${index + 1}`}
       >
         <MessageCircle size={compact ? 10 : 12} className="mr-1" />
@@ -217,7 +218,7 @@ function ReminderButton({
           size="sm"
           className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} text-green-700 border-green-300 hover:bg-green-50`}
           onClick={() => setConfirmMode("send")}
-          title="WhatsApp reminder bhejo"
+          title="Send WhatsApp reminder"
           data-ocid={`customers.send_reminder.button.${index + 1}`}
         >
           <MessageCircle size={compact ? 10 : 12} className="mr-1" />
@@ -232,7 +233,7 @@ function ReminderButton({
             shopName={shopName}
             onConfirm={async () => {
               await sendReminder(ledger, currentUser);
-              toast.success(`🔔 Reminder bheja gaya ${ledger.customerName} ko`);
+              toast.success(`🔔 Reminder sent to ${ledger.customerName}`);
             }}
           />
         )}
@@ -248,7 +249,7 @@ function ReminderButton({
         size="sm"
         className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} opacity-40 cursor-not-allowed`}
         disabled
-        title="Admin ne staff reminders disable kiya hai"
+        title="Reminders are disabled by Admin"
         data-ocid={`customers.reminder.staff_disabled.${index + 1}`}
       >
         <MessageCircle size={compact ? 10 : 12} className="mr-1" />
@@ -277,13 +278,13 @@ function ReminderButton({
           onClick={() => !limitReached && setConfirmMode("send")}
           title={
             limitReached
-              ? "Aaj ka limit pura ho gaya (2/day)"
-              : "WhatsApp reminder bhejo"
+              ? "Daily limit reached (2/day)"
+              : "Send WhatsApp reminder"
           }
           data-ocid={`customers.send_reminder.staff.button.${index + 1}`}
         >
           <MessageCircle size={compact ? 10 : 12} className="mr-1" />
-          {limitReached ? "Reminder (Limit Pura)" : "Send Reminder"}
+          {limitReached ? "Reminder (Limit Reached)" : "Send Reminder"}
         </Button>
         {confirmMode && (
           <ReminderConfirmDialog
@@ -294,7 +295,7 @@ function ReminderButton({
             shopName={shopName}
             onConfirm={async () => {
               await sendReminder(ledger, currentUser);
-              toast.success(`🔔 Reminder bheja gaya ${ledger.customerName} ko`);
+              toast.success(`🔔 Reminder sent to ${ledger.customerName}`);
             }}
           />
         )}
@@ -310,7 +311,7 @@ function ReminderButton({
         size="sm"
         className={`${compact ? "h-6 text-[10px] px-2" : "h-7 text-xs px-2"} text-amber-700 border-amber-300 hover:bg-amber-50`}
         onClick={() => setConfirmMode("request")}
-        title="Owner/Manager se approval request karo"
+        title="Request approval from Owner/Manager"
         data-ocid={`customers.request_reminder.button.${index + 1}`}
       >
         <Bell size={compact ? 10 : 12} className="mr-1" />
@@ -326,12 +327,101 @@ function ReminderButton({
           onConfirm={async () => {
             await requestReminder(ledger, currentUser);
             toast.success(
-              "✅ Request bheja gaya — Owner/Manager approve karenge",
+              "✅ Request sent — waiting for Owner/Manager approval",
             );
           }}
         />
       )}
     </>
+  );
+}
+
+// ── Bulk Reminder Dialog ───────────────────────────────────────────────────────────────────────
+function BulkReminderDialog({
+  dueCount,
+  dueCustomers: dueLedgers,
+  open,
+  onClose,
+  onConfirm,
+}: {
+  dueCount: number;
+  dueCustomers: CustomerLedger[];
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent
+        className="max-w-sm"
+        data-ocid="customers.bulk_reminder.dialog"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send size={18} className="text-amber-600" />
+            Send Payment Reminders
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <p className="text-sm text-muted-foreground">
+            This will open WhatsApp for{" "}
+            <span className="font-semibold text-foreground">{dueCount}</span>{" "}
+            customer{dueCount !== 1 ? "s" : ""} with pending dues. Do you want
+            to continue?
+          </p>
+          <div className="rounded-lg border border-border bg-secondary/40 max-h-52 overflow-y-auto divide-y divide-border">
+            {dueLedgers.map((l) => (
+              <div
+                key={`${l.customerName}__${l.customerMobile}`}
+                className="flex items-center justify-between px-3 py-2 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium text-foreground truncate block">
+                    {l.customerName}
+                  </span>
+                  {l.customerMobile && (
+                    <span className="text-xs text-muted-foreground">
+                      📱 {l.customerMobile}
+                    </span>
+                  )}
+                </div>
+                <span className="font-semibold text-red-600 ml-3 flex-shrink-0">
+                  {fmt(l.totalDue)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-2">
+            <p className="text-xs text-amber-700">
+              ℹ️ Each customer's WhatsApp will open in a new tab — allow pop-ups
+              if prompted by your browser.
+            </p>
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            data-ocid="customers.bulk_reminder.cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="bg-amber-600 hover:bg-amber-700 text-white"
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+            data-ocid="customers.bulk_reminder.send_all"
+          >
+            <Send size={13} className="mr-1.5" />
+            Send to All
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -355,11 +445,11 @@ function ReceivePaymentDialog({
   const handleSubmit = () => {
     const amt = Number(amount);
     if (!amt || amt <= 0) {
-      toast.error("Valid amount daalen");
+      toast.error("Please enter a valid amount");
       return;
     }
     if (amt > ledger.totalDue) {
-      toast.error(`Due sirf ${fmt(ledger.totalDue)} hai`);
+      toast.error(`Outstanding due is only ${fmt(ledger.totalDue)}`);
       return;
     }
     receivePayment(
@@ -373,11 +463,11 @@ function ReceivePaymentDialog({
     const newDue = ledger.totalDue - amt;
     if (newDue <= 0) {
       toast.success(
-        `✅ ${fmt(amt)} mila — ${ledger.customerName} ka account Cleared ho gaya!`,
+        `✅ ${fmt(amt)} received — ${ledger.customerName}'s account is fully cleared!`,
       );
     } else {
       toast.success(
-        `✅ ${fmt(amt)} payment receive hua — Remaining due: ${fmt(newDue)}`,
+        `✅ ${fmt(amt)} payment received — Remaining due: ${fmt(newDue)}`,
       );
     }
     setAmount("");
@@ -784,7 +874,9 @@ function CustomerCard({
               </div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Due (Udhaar)</div>
+              <div className="text-xs text-muted-foreground">
+                Outstanding Due
+              </div>
               <div
                 className={`text-sm font-bold ${
                   ledger.totalDue > 0 ? "text-red-600" : "text-green-600"
@@ -817,13 +909,19 @@ function CustomerCard({
 
 // ── Main Customers Page ─────────────────────────────────────────────────────────────────────────────────────
 export function CustomersPage() {
-  const { invoices, getAllCustomerLedgers, mergeDuplicateCustomers } =
-    useStore();
+  const {
+    invoices,
+    getAllCustomerLedgers,
+    mergeDuplicateCustomers,
+    sendBulkReminder,
+    bulkReminderSentAt,
+  } = useStore();
   const { currentShop, currentUser } = useAuth();
   const shopName = currentShop?.name ?? "Save Shop System";
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<LedgerFilter>("all");
+  const [bulkReminderOpen, setBulkReminderOpen] = useState(false);
 
   // Derive ledgers from invoices (re-derived each render to stay in sync)
   // Already sorted by highest due first from getAllCustomerLedgers
@@ -848,6 +946,21 @@ export function CustomersPage() {
   const paidCustomers = allLedgers.filter((l) => l.totalDue === 0);
   const highDueCustomers = dueCustomers.filter((l) => l.totalDue > 5000);
 
+  // Anti-spam: disable if last bulk was within 5 minutes
+  const lastSentDate = bulkReminderSentAt ? new Date(bulkReminderSentAt) : null;
+  const minutesSinceLastSent = lastSentDate
+    ? Math.floor((Date.now() - lastSentDate.getTime()) / 60000)
+    : null;
+  const isRecentlySent =
+    minutesSinceLastSent !== null && minutesSinceLastSent < 5;
+  const bulkDisabled = dueCustomers.length === 0 || isRecentlySent;
+
+  const bulkButtonTitle = isRecentlySent
+    ? `Sent ${minutesSinceLastSent} min ago — wait before sending again`
+    : dueCustomers.length === 0
+      ? "No customers with outstanding dues"
+      : `Send WhatsApp reminder to all ${dueCustomers.length} due customers`;
+
   const user: AppUser = (currentUser as unknown as AppUser) ?? {
     id: "unknown",
     name: "Unknown",
@@ -864,24 +977,57 @@ export function CustomersPage() {
           <div>
             <h1 className="text-xl font-bold">Customer Due List</h1>
             <p className="text-muted-foreground text-sm">
-              Har customer ka alag hisaab — total purchase, paid aur udhaar
+              Customer ledger — total purchase, paid, and outstanding dues
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs border-amber-400 text-amber-700 hover:bg-amber-50 shrink-0"
-            onClick={() => {
-              const count = mergeDuplicateCustomers();
-              if (count > 0) {
-                toast.success(`✅ ${count} duplicate entries merge ho gayi`);
-              } else {
-                toast.info("Koi duplicate customers nahi mile");
-              }
-            }}
-          >
-            🔄 Duplicate Merge Karein
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Bulk Reminder Button */}
+            <div className="flex flex-col items-end gap-0.5">
+              <Button
+                size="sm"
+                className={`text-xs shrink-0 transition-colors ${
+                  bulkDisabled
+                    ? "opacity-50 cursor-not-allowed bg-amber-200 text-amber-700 border border-amber-300 hover:bg-amber-200"
+                    : "bg-amber-500 hover:bg-amber-600 text-white border-0"
+                }`}
+                disabled={bulkDisabled}
+                title={bulkButtonTitle}
+                onClick={() => !bulkDisabled && setBulkReminderOpen(true)}
+                data-ocid="customers.bulk_reminder.button"
+              >
+                <Send size={13} className="mr-1.5" />📱 Send Bulk Reminder (
+                {dueCustomers.length} due)
+              </Button>
+              {isRecentlySent && minutesSinceLastSent !== null && (
+                <span className="text-[10px] text-amber-600 text-right">
+                  Sent {minutesSinceLastSent} min ago — wait before sending
+                  again
+                </span>
+              )}
+              {!isRecentlySent &&
+                lastSentDate &&
+                minutesSinceLastSent !== null && (
+                  <span className="text-[10px] text-muted-foreground text-right">
+                    Last sent: {minutesSinceLastSent} min ago
+                  </span>
+                )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs border-amber-400 text-amber-700 hover:bg-amber-50 shrink-0"
+              onClick={() => {
+                const count = mergeDuplicateCustomers();
+                if (count > 0) {
+                  toast.success(`✅ ${count} duplicate entries merged`);
+                } else {
+                  toast.info("No duplicate customers found");
+                }
+              }}
+            >
+              🔄 Merge Duplicates
+            </Button>
+          </div>
         </div>
 
         {/* Stats bar */}
@@ -919,7 +1065,7 @@ export function CustomersPage() {
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">
-                  Total Udhaar
+                  Total Outstanding
                 </div>
                 <div
                   className={`text-base font-bold ${
@@ -969,8 +1115,8 @@ export function CustomersPage() {
           <Card className="border-red-300 bg-red-50/40 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Bell size={16} className="text-red-600" />💳 Reminder List —
-                Udhaar Wale Customers
+                <Bell size={16} className="text-red-600" /> 💳 Reminder List —
+                Customers with Outstanding Dues
               </CardTitle>
             </CardHeader>
             <CardContent className="pb-3">
@@ -1006,7 +1152,8 @@ export function CustomersPage() {
                 })}
                 {dueCustomers.length > 8 && (
                   <p className="text-xs text-muted-foreground mt-1 pl-1">
-                    + {dueCustomers.length - 8} aur customers ka due hai
+                    + {dueCustomers.length - 8} more customers have outstanding
+                    dues
                   </p>
                 )}
               </div>
@@ -1072,17 +1219,17 @@ export function CustomersPage() {
             </div>
             <p className="text-muted-foreground font-medium">
               {filter === "due"
-                ? "Koi udhaar nahi hai ✅"
+                ? "No outstanding dues ✅"
                 : filter === "paid"
-                  ? "Koi fully paid customer nahi"
+                  ? "No fully paid customers"
                   : invoices.length === 0
-                    ? "Koi invoice nahi bana abhi tak"
-                    : "Koi customer nahi mila"}
+                    ? "No invoices created yet"
+                    : "No customers found"}
             </p>
             <p className="text-muted-foreground text-sm mt-1">
               {invoices.length === 0
-                ? "Pehle Billing page par jaake sale karein"
-                : "Search filter change karein"}
+                ? "Go to the Billing page to make a sale first"
+                : "Try changing the search filter"}
             </p>
           </div>
         ) : (
@@ -1099,6 +1246,20 @@ export function CustomersPage() {
           </div>
         )}
       </div>
+
+      {/* Bulk Reminder Dialog */}
+      <BulkReminderDialog
+        dueCount={dueCustomers.length}
+        dueCustomers={dueCustomers}
+        open={bulkReminderOpen}
+        onClose={() => setBulkReminderOpen(false)}
+        onConfirm={() => {
+          const result = sendBulkReminder();
+          toast.success(
+            `📱 Reminders sent to ${result.sent} customer${result.sent !== 1 ? "s" : ""}`,
+          );
+        }}
+      />
     </div>
   );
 }

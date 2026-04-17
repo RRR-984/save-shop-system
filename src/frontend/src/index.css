@@ -262,8 +262,11 @@
   .shadow-card {
     box-shadow: 0 6px 16px 0 oklch(0 0 0 / 0.06);
   }
+  .shadow-card-lift {
+    box-shadow: 0 8px 20px 0 oklch(0 0 0 / 0.09);
+  }
   .shadow-card-hover {
-    box-shadow: 0 12px 24px 0 oklch(0 0 0 / 0.1);
+    box-shadow: 0 16px 32px 0 oklch(0 0 0 / 0.14);
   }
   .shadow-soft {
     box-shadow: 0 6px 16px 0 oklch(0 0 0 / 0.06);
@@ -356,6 +359,91 @@
   .animate-float {
     animation: float 3s ease-in-out infinite;
   }
+
+  /* ── Bounce-in entrance animation ────────────────────────────────── */
+  .animate-bounce-in {
+    animation: bounceIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* ── Tutorial guide animations ────────────────────────────────────── */
+  .animate-tutorial-arrow {
+    animation: tutorialArrow 1.2s ease-in-out infinite;
+    will-change: transform;
+  }
+  .animate-tutorial-highlight {
+    animation: tutorialHighlight 1.5s ease-in-out infinite;
+    will-change: opacity, transform;
+  }
+  .animate-tutorial-pulse {
+    animation: tutorialPulse 2s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  /* ── Interactive card: lift + shadow on hover ─────────────────────── */
+  .card-interactive {
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+    will-change: transform, box-shadow;
+    /* GPU layer promotion — prevents paint flicker on iOS Safari */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+  .card-interactive:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 32px 0 rgba(0, 0, 0, 0.14);
+  }
+  .card-interactive:active {
+    transform: scale(0.96);
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.08);
+  }
+
+  /* ── Quick action chip: springy hover + shadow ────────────────────── */
+  .quick-action-chip {
+    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow
+      200ms ease-out;
+    will-change: transform, box-shadow;
+    /* GPU layer promotion — prevents paint flicker on iOS Safari */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+  .quick-action-chip:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 10px 20px 0 rgba(0, 0, 0, 0.12);
+  }
+  .quick-action-chip:active {
+    transform: scale(0.91);
+    box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.08);
+  }
+
+  /* ── Button hover lift ────────────────────────────────────────────── */
+  .btn-hover {
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+    will-change: transform, box-shadow;
+    /* GPU layer promotion — prevents paint flicker on iOS Safari */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+  .btn-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.12);
+  }
+  .btn-hover:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.08);
+  }
+
+  /* ── Rank row interactive ─────────────────────────────────────────── */
+  .rank-row-interactive {
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out,
+      background-color 150ms ease-out;
+    will-change: transform;
+  }
+  .rank-row-interactive:hover {
+    transform: translateX(3px);
+    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.08);
+  }
+  .rank-row-interactive:active {
+    transform: scale(0.98);
+  }
 }
 
 @keyframes pageFadeIn {
@@ -401,10 +489,290 @@
   }
 }
 
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  60% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ===========================================================
+   LIVE UI ELEMENT — DO NOT REMOVE
+   marqueeScroll: powers the MarqueeAlertBar scrolling ticker.
+   Keep this keyframe persistent across all future updates.
+   =========================================================== */
+@keyframes marqueeScroll {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ===========================================================
+   TUTORIAL ANIMATIONS — DO NOT REMOVE
+   Powers AnimatedGuidePlayer arrows, highlights, and pulses.
+   =========================================================== */
+@keyframes tutorialArrow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-5px);
+  }
+  70% {
+    transform: translateY(2px);
+  }
+}
+
+@keyframes tutorialHighlight {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes tutorialPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-fade-in,
   .page-fade-out,
-  .animate-slide-in-left {
+  .animate-slide-in-left,
+  .animate-bounce-in {
     animation: none;
+  }
+  .card-interactive,
+  .quick-action-chip,
+  .btn-hover,
+  .rank-row-interactive {
+    transition: none;
+  }
+  /* Pause marquee for users who prefer reduced motion — do NOT hide it */
+  [data-ocid="marquee-alert-bar"] > div {
+    animation-play-state: paused;
+  }
+}
+
+/* ===========================================================
+   MOBILE BANNER VISIBILITY — DO NOT REMOVE
+   Ensure AdBannerCarousel and MarqueeAlertBar are always
+   visible on mobile, tablet, and desktop. No display:none.
+   =========================================================== */
+
+/* Outer banner wrapper: overflow visible so slides never clip */
+.banner-container {
+  width: 100% !important;
+  overflow: visible !important;
+  display: block !important;
+}
+
+/* Inner slides track clips slide transitions (intended) */
+.banner-slides-track {
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Carousel: always block, full width, minimum readable height */
+.ad-banner-carousel {
+  display: block !important;
+  width: 100% !important;
+  overflow: visible !important;
+}
+
+/* Marquee: always visible, full width on every screen size */
+.marquee-alert-bar {
+  display: block !important;
+  overflow: hidden !important;
+}
+
+/* Mobile portrait / landscape — explicit overrides */
+@media (max-width: 768px) {
+  .ad-banner-carousel {
+    display: block !important;
+    width: 100% !important;
+    min-height: 80px;
+    overflow: visible !important;
+  }
+
+  .banner-slides-track {
+    min-height: 80px;
+  }
+
+  .marquee-alert-bar {
+    display: block !important;
+    width: 100% !important;
+    min-height: 34px;
+  }
+
+  /* Ensure marquee animation is NOT paused on mobile */
+  [data-ocid="marquee-alert-bar"] > div {
+    animation-play-state: running !important;
+  }
+
+  /* Ensure filter chips horizontal scroll works on touch */
+  .smart-filter-bar-scroll {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    overflow-x: auto;
+  }
+}
+
+/* Tablet range — explicit overrides (769px–1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .ad-banner-carousel {
+    display: block !important;
+    width: 100% !important;
+    min-height: 90px;
+    overflow: visible !important;
+  }
+
+  .banner-slides-track {
+    min-height: 90px;
+  }
+
+  .marquee-alert-bar,
+  .marquee-wrapper,
+  [data-ocid="marquee-alert-bar"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    min-height: 38px;
+  }
+
+  /* Ensure marquee animation runs on tablet */
+  [data-ocid="marquee-alert-bar"] > div {
+    animation-play-state: running !important;
+  }
+
+  /* Ensure filter chips horizontal scroll works on touch */
+  .smart-filter-bar-scroll {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    overflow-x: auto;
+  }
+}
+
+/* ===========================================================
+   FLOATING ACTION BUTTON — always visible on ALL devices
+   new-sale-fab: fixed bottom-right, never hidden, never clipped
+   =========================================================== */
+.new-sale-fab {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+@media (max-width: 1024px) {
+  .new-sale-fab {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    bottom: 20px !important;
+    right: 20px !important;
+  }
+}
+
+/* ===========================================================
+   THERMAL BILL PRINT — 80mm thermal printer format
+   .thermal-bill-print is hidden normally.
+   @media print shows ONLY this element.
+   =========================================================== */
+.thermal-bill-print {
+  display: none;
+}
+
+@media print {
+  /* Hide the React app root — only affects main-window prints */
+  body > div#root {
+    display: none !important;
+  }
+
+  /* If a .print-portal is injected into body directly, show it */
+  .print-portal {
+    display: block !important;
+  }
+
+  /* Thermal bill styles — used when printing from a new window */
+  .thermal-bill-print {
+    display: block !important;
+    width: 80mm;
+    max-width: 80mm;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 8px;
+    color: #000;
+    background: #fff;
+    margin: 0 auto;
+  }
+
+  .thermal-bill-print * {
+    display: revert !important;
+  }
+
+  .thermal-bill-print .bill-header {
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+
+  .thermal-bill-print .bill-divider {
+    border: none;
+    border-top: 1px dashed #000;
+    margin: 4px 0;
+  }
+
+  .thermal-bill-print .bill-items {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+
+  .thermal-bill-print .bill-items th,
+  .thermal-bill-print .bill-items td {
+    padding: 1px 2px;
+    vertical-align: top;
+  }
+
+  .thermal-bill-print .bill-total {
+    font-weight: bold;
+    border-top: 2px solid #000;
+    margin-top: 4px;
+    padding-top: 4px;
+    font-size: 11px;
+  }
+
+  .thermal-bill-print .bill-footer {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 10px;
   }
 }

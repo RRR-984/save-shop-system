@@ -1,9 +1,18 @@
 import Map "mo:core/Map";
+import List "mo:core/List";
+import MultiShopTypes "types/multishop";
+import MultiShopLib "lib/multishop";
+import MultiShopMixin "mixins/multishop-api";
 
 actor {
   // Shop data: shopId -> (collectionName -> jsonData)
   // Uses enhanced orthogonal persistence - survives canister upgrades automatically
   let shopData = Map.empty<Text, Map.Map<Text, Text>>();
+
+  // Multi-shop registry: ownerMobile -> List<ShopMeta>
+  let shopRegistry : MultiShopLib.Registry = Map.empty<Text, List.List<MultiShopTypes.ShopMeta>>();
+
+  include MultiShopMixin(shopRegistry, shopData);
 
   public type UserProfile = {
     name : Text;
@@ -212,6 +221,33 @@ actor {
 
   public shared func saveCustomerOrders(shopId : Text, data : Text) : async () {
     saveShopCollection(shopId, "customerOrders", data);
+  };
+
+  // -- Feedback (bug reports, feature requests, improvement suggestions)
+  public query func getFeedback(shopId : Text) : async Text {
+    getShopCollection(shopId, "feedback");
+  };
+
+  public shared func saveFeedback(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "feedback", data);
+  };
+
+  // -- Referral Codes (each user's unique referral code)
+  public query func getReferralCodes(shopId : Text) : async Text {
+    getShopCollection(shopId, "referralCodes");
+  };
+
+  public shared func saveReferralCodes(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "referralCodes", data);
+  };
+
+  // -- Referral Signups (who joined via referral, date, reward status)
+  public query func getReferralSignups(shopId : Text) : async Text {
+    getShopCollection(shopId, "referralSignups");
+  };
+
+  public shared func saveReferralSignups(shopId : Text, data : Text) : async () {
+    saveShopCollection(shopId, "referralSignups", data);
   };
 
   // -- User Profiles (ICP identity-based)

@@ -2,7 +2,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, CheckCircle, ShieldAlert } from "lucide-react";
 import { useMemo, useState } from "react";
-import { TopBar } from "../components/TopBar";
 import { useStore } from "../context/StoreContext";
 
 function fmt(n: number) {
@@ -78,8 +77,6 @@ export function LowPriceAlertLogPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TopBar title="Low Price Alert Log" />
-
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-5">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center">
@@ -166,7 +163,7 @@ export function LowPriceAlertLogPage() {
                 className="flex flex-col items-center gap-2 py-12 text-muted-foreground text-sm"
               >
                 <CheckCircle size={28} className="text-success" />
-                Koi low price attempt nahi mila
+                No low price attempts found
               </div>
             ) : (
               <>

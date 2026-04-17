@@ -82,7 +82,7 @@ export function ReminderLogPage() {
         <XCircle size={40} className="text-red-400 mb-3" />
         <p className="font-semibold text-foreground">Access Denied</p>
         <p className="text-sm text-muted-foreground mt-1">
-          Yeh page sirf Owner aur Manager ke liye hai
+          This page is accessible to Owner and Manager only
         </p>
       </div>
     );
@@ -94,7 +94,7 @@ export function ReminderLogPage() {
         <div>
           <h1 className="text-xl font-bold">Reminder Log</h1>
           <p className="text-muted-foreground text-sm">
-            Sabhi reminders ka history — sent, requested, approved, rejected
+            Complete reminder history — sent, requested, approved, rejected
           </p>
         </div>
 
@@ -109,28 +109,28 @@ export function ReminderLogPage() {
               value="today"
               className="text-xs h-7 px-3"
             >
-              Aaj
+              Today
             </TabsTrigger>
             <TabsTrigger
               data-ocid="reminder_log.week.tab"
               value="week"
               className="text-xs h-7 px-3"
             >
-              Is Hafte
+              This Week
             </TabsTrigger>
             <TabsTrigger
               data-ocid="reminder_log.month.tab"
               value="month"
               className="text-xs h-7 px-3"
             >
-              Is Mahine
+              This Month
             </TabsTrigger>
             <TabsTrigger
               data-ocid="reminder_log.all.tab"
               value="all"
               className="text-xs h-7 px-3"
             >
-              Sab
+              All
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -201,10 +201,11 @@ export function ReminderLogPage() {
               <Bell size={28} className="text-muted-foreground" />
             </div>
             <p className="text-muted-foreground font-medium">
-              Koi reminder log nahi mila
+              No reminder logs found
             </p>
             <p className="text-muted-foreground text-sm mt-1">
-              Date filter change karein ya Customers page se reminder bhejein
+              Try changing the date filter or send a reminder from the Customers
+              page
             </p>
           </div>
         ) : (

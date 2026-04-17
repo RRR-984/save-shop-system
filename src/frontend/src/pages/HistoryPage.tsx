@@ -160,10 +160,10 @@ function SalesHistorySection() {
                     >
                       <Receipt className="mx-auto mb-2" size={24} />
                       {filter === "due"
-                        ? "Koi due invoice nahi hai"
+                        ? "No due invoices"
                         : filter === "paid"
-                          ? "Koi fully paid invoice nahi hai"
-                          : "Koi invoice nahi mila"}
+                          ? "No fully paid invoices"
+                          : "No invoices found"}
                     </TableCell>
                   </TableRow>
                 )}
@@ -303,7 +303,7 @@ function DraftRow({
               className="h-7 px-2 text-xs text-muted-foreground"
               onClick={() => setExpanded((v) => !v)}
             >
-              Kya Badla?{" "}
+              What Changed?{" "}
               {expanded ? (
                 <ChevronUp size={12} className="ml-1" />
               ) : (
@@ -319,7 +319,7 @@ function DraftRow({
               onClick={() => setConfirmOpen(true)}
             >
               <RotateCcw size={12} className="mr-1" />
-              Wapas Jao
+              Restore
             </Button>
           </div>
         </div>
@@ -329,7 +329,7 @@ function DraftRow({
           <div className="mt-3 pl-11 space-y-1.5">
             {snap.qaChanges.length === 0 ? (
               <p className="text-xs text-muted-foreground italic">
-                Koi change details nahi hain.
+                No change details available.
               </p>
             ) : (
               snap.qaChanges.map((change) => {
@@ -361,14 +361,13 @@ function DraftRow({
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent data-ocid={`history.item.dialog.${index + 1}`}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Data Restore Karein?</AlertDialogTitle>
+            <AlertDialogTitle>Restore Data?</AlertDialogTitle>
             <AlertDialogDescription>
-              Kya aap is snapshot se wapas jaana chahte hain?{" "}
+              Do you want to restore from this snapshot?{" "}
               <strong className="text-foreground">
-                Abhi ke saare product, stock aur invoice data overwrite ho
-                jaayenge.
+                All current product, stock and invoice data will be overwritten.
               </strong>{" "}
-              Yeh action undo nahi ho sakta.
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -385,7 +384,7 @@ function DraftRow({
                 setConfirmOpen(false);
               }}
             >
-              Haan, Restore Karein
+              Yes, Restore
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -415,7 +414,7 @@ function DraftHistorySection() {
         setSnapshotLabel("");
         setSnapshotDialogOpen(false);
         refreshDrafts();
-        toast.success("Snapshot save ho gaya! \u2713");
+        toast.success("Snapshot saved! ✓");
       })
       .catch(console.error);
   };
@@ -424,7 +423,7 @@ function DraftHistorySection() {
     restoreDraft(id)
       .then(() => {
         refreshDrafts();
-        toast.success("Data restore ho gaya! \u2713");
+        toast.success("Data restored successfully! \u2713");
       })
       .catch(console.error);
   };
@@ -435,9 +434,8 @@ function DraftHistorySection() {
         <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary flex-1">
           <Clock size={14} className="mt-0.5 flex-shrink-0" />
           <span>
-            Har product add/edit/delete aur stock change se pehle{" "}
-            <strong>automatic snapshot</strong> save hota hai. Last 10 snapshots
-            store hote hain.
+            An <strong>automatic snapshot</strong> is saved before every product
+            add/edit/delete and stock change. Last 10 snapshots are stored.
           </span>
         </div>
         <Button
@@ -447,7 +445,7 @@ function DraftHistorySection() {
           className="flex-shrink-0"
         >
           <Save size={14} className="mr-1.5" />
-          Abhi Snapshot Lo
+          Take Snapshot Now
         </Button>
       </div>
 
@@ -460,11 +458,11 @@ function DraftHistorySection() {
             <Clock size={28} className="text-muted-foreground" />
           </div>
           <p className="text-muted-foreground font-medium">
-            Koi draft nahi mila.
+            No snapshots found.
           </p>
           <p className="text-muted-foreground text-sm mt-1 max-w-xs">
-            Koi bhi change karo — product add, stock in/out — snapshot
-            automatically save ho jaayega.
+            Make any change — add product, stock in/out — a snapshot will be
+            saved automatically.
           </p>
         </div>
       ) : (
@@ -483,11 +481,11 @@ function DraftHistorySection() {
       <Dialog open={snapshotDialogOpen} onOpenChange={setSnapshotDialogOpen}>
         <DialogContent data-ocid="history.snapshot.dialog" className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Abhi Snapshot Lo</DialogTitle>
+            <DialogTitle>Take Snapshot Now</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1">
             <p className="text-sm text-muted-foreground">
-              Is snapshot ka ek naam likho (optional).
+              Give this snapshot a name (optional).
             </p>
             <Input
               data-ocid="history.snapshot.input"
@@ -531,7 +529,7 @@ export function HistoryPage() {
           <div>
             <h1 className="text-xl font-bold">History</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              Sales history aur draft snapshots
+              Sales history and draft snapshots
             </p>
           </div>
         </div>

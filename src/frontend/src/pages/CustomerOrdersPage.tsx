@@ -130,20 +130,20 @@ function OrderCard({
 
       {/* Created by */}
       <p className="text-xs text-muted-foreground mb-2">
-        बनाया: {order.createdBy}
+        Created by: {order.createdBy}
       </p>
 
       {/* Rejection reason */}
       {order.status === "rejected" && order.rejectionReason && (
         <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-1.5 mb-2">
-          कारण: {order.rejectionReason}
+          Reason: {order.rejectionReason}
         </p>
       )}
 
       {/* Accepted info */}
       {order.status === "accepted" && (
         <p className="text-xs text-success bg-success-light rounded-md px-3 py-1.5 mb-2">
-          ✅ यह order sale में convert हो गया है
+          ✅ This order has been converted to a sale
         </p>
       )}
 
@@ -296,14 +296,14 @@ function CreateOrderModal({
 
   function handleSave() {
     if (!customerId) {
-      toast.error("Customer select karein");
+      toast.error("Please select a customer");
       return;
     }
     const validItems = items.filter(
       (i) => i.productId && i.qty > 0 && i.price >= 0,
     );
     if (validItems.length === 0) {
-      toast.error("Kam se kam ek product add karein");
+      toast.error("Please add at least one product");
       return;
     }
     onSave({
@@ -359,7 +359,7 @@ function CreateOrderModal({
               htmlFor="order-customer-select"
               className="text-xs font-semibold text-muted-foreground mb-1 block"
             >
-              Customer चुनें *
+              Customer *
             </label>
             <select
               id="order-customer-select"
@@ -368,7 +368,7 @@ function CreateOrderModal({
               onChange={(e) => setCustomerId(e.target.value)}
               data-ocid="order-customer-select"
             >
-              <option value="">— Customer select करें —</option>
+              <option value="">— Select Customer —</option>
               <option value="walk-in">Walk-in Customer</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -460,7 +460,7 @@ function CreateOrderModal({
               data-ocid="order-add-item-btn"
             >
               <Plus className="w-3.5 h-3.5 mr-1" />
-              और Item जोड़ें
+              Add Item
             </Button>
           </div>
 
@@ -476,7 +476,7 @@ function CreateOrderModal({
               id="order-notes"
               className="text-sm resize-none"
               rows={2}
-              placeholder="कोई विशेष निर्देश..."
+              placeholder="Any special instructions..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               data-ocid="order-notes"
@@ -486,7 +486,7 @@ function CreateOrderModal({
           {/* Summary */}
           <div className="bg-muted/40 rounded-xl px-4 py-3 flex justify-between items-center">
             <span className="text-sm font-semibold text-foreground">
-              कुल राशि
+              Total Amount
             </span>
             <span className="text-lg font-bold text-primary">{fmt(total)}</span>
           </div>
@@ -507,7 +507,7 @@ function CreateOrderModal({
             onClick={handleSave}
             data-ocid="order-save-btn"
           >
-            Order Save करें
+            Save Order
           </Button>
         </div>
       </dialog>
@@ -544,10 +544,11 @@ function AcceptDialog({
           <div className="w-10 h-10 rounded-full bg-success-light flex items-center justify-center">
             <CheckCircle className="w-5 h-5 text-success" />
           </div>
-          <h3 className="font-bold text-foreground">Order Accept करें?</h3>
+          <h3 className="font-bold text-foreground">Accept Order?</h3>
         </div>
         <p className="text-sm text-muted-foreground mb-6">
-          यह order sale में convert हो जाएगा और stock automatically deduct होगा।
+          This order will be converted to a sale and stock will be automatically
+          deducted.
         </p>
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1 h-10" onClick={onClose}>
@@ -558,7 +559,7 @@ function AcceptDialog({
             onClick={onConfirm}
             data-ocid="order-accept-confirm-btn"
           >
-            हाँ, Accept करें
+            Yes, Accept
           </Button>
         </div>
       </dialog>
@@ -586,7 +587,7 @@ function RejectModal({
 
   function handleConfirm() {
     if (!reason.trim()) {
-      toast.error("Rejection reason जरूरी है");
+      toast.error("Rejection reason is required");
       return;
     }
     onConfirm(reason.trim());
@@ -612,7 +613,7 @@ function RejectModal({
           <div className="w-10 h-10 rounded-full bg-danger-light flex items-center justify-center">
             <XCircle className="w-5 h-5 text-danger" />
           </div>
-          <h3 className="font-bold text-foreground">Order Reject करें?</h3>
+          <h3 className="font-bold text-foreground">Reject Order?</h3>
         </div>
 
         {/* Quick reason chips */}
@@ -641,7 +642,7 @@ function RejectModal({
           id="reject-reason-textarea"
           className="text-sm resize-none mb-4"
           rows={2}
-          placeholder="Rejection reason लिखें (जरूरी है)..."
+          placeholder="Write rejection reason (required)..."
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           data-ocid="reject-reason-input"
@@ -656,7 +657,7 @@ function RejectModal({
             onClick={handleConfirm}
             data-ocid="order-reject-confirm-btn"
           >
-            Reject करें
+            Reject Order
           </Button>
         </div>
       </dialog>
@@ -718,14 +719,14 @@ export function CustomerOrdersPage() {
         : order.status === "accepted"
           ? "Accepted ✅"
           : `Rejected ❌ — ${order.rejectionReason ?? ""}`;
-    return `Namaste ${name},\nAapka order:\n${lines.join("\n")}\nTotal: ${fmt(order.totalAmount)}\nStatus: ${statusLabel}\n\n- ${shopName}`;
+    return `Hello ${name},\nYour order details:\n${lines.join("\n")}\nTotal: ${fmt(order.totalAmount)}\nStatus: ${statusLabel}\n\n- ${shopName}`;
   }
 
   function handleWhatsApp(order: CustomerOrder) {
     const { mobile } = getCustomer(order.customerId);
     const message = buildWhatsAppMessage(order);
     if (!mobile) {
-      toast.error("Customer ka mobile number nahi hai");
+      toast.error("Customer's mobile number is not available");
       return;
     }
     window.open(
@@ -739,14 +740,14 @@ export function CustomerOrdersPage() {
     if (!acceptingId) return;
     await acceptCustomerOrder(acceptingId);
     setAcceptingId(null);
-    toast.success("Order accepted aur sale mein convert ho gayi! ✅");
+    toast.success("Order accepted and converted to sale! ✅");
   }
 
   async function handleRejectConfirm(reason: string) {
     if (!rejectingId) return;
     await rejectCustomerOrder(rejectingId, reason);
     setRejectingId(null);
-    toast.success("Order reject ho gaya");
+    toast.success("Order rejected successfully");
   }
 
   async function handleCreateOrder(
@@ -754,11 +755,11 @@ export function CustomerOrdersPage() {
   ) {
     await addCustomerOrder(co);
     setShowCreate(false);
-    toast.success("Customer order save ho gaya! 📦");
+    toast.success("Customer order saved! 📦");
   }
 
   const FILTER_TABS: { key: FilterTab; label: string }[] = [
-    { key: "all", label: "सभी" },
+    { key: "all", label: "All" },
     { key: "pending", label: "Pending" },
     { key: "accepted", label: "Accepted" },
     { key: "rejected", label: "Rejected" },
@@ -777,7 +778,7 @@ export function CustomerOrdersPage() {
               <h1 className="font-bold text-foreground leading-tight truncate">
                 Customer Orders
               </h1>
-              <p className="text-xs text-muted-foreground">ग्राहक ऑर्डर</p>
+              <p className="text-xs text-muted-foreground">Customer Orders</p>
             </div>
             {pendingCount > 0 && (
               <Badge className="bg-warning-light text-warning border border-warning/20 shrink-0">
@@ -859,11 +860,11 @@ export function CustomerOrdersPage() {
             <div className="text-center">
               <p className="font-semibold text-foreground">
                 {filter === "all"
-                  ? "Koi customer order nahi hai."
-                  : `कोई ${filter} order नहीं है।`}
+                  ? "No customer orders found."
+                  : `No ${filter} orders found.`}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                "New Order" button se pehla order banayein
+                Click "New Order" to create your first order
               </p>
             </div>
             <Button

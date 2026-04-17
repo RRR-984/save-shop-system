@@ -18,10 +18,19 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useStore } from "../context/StoreContext";
+import { useAsyncAction } from "../hooks/useAsyncAction";
 import type { Vendor, VendorRateHistory } from "../types/store";
+
+// ─── Draft persistence ────────────────────────────────────────────────────────
+
+const VENDOR_FORM_DRAFT_KEY = "saveshop_vendor_form_draft";
+
+function getDraftKey(shopId: string) {
+  return `${VENDOR_FORM_DRAFT_KEY}_${shopId}`;
+}
 
 // ─── Vendor Form ──────────────────────────────────────────────────────────────
 
@@ -44,12 +53,41 @@ interface VendorFormProps {
   onSave: (data: VendorFormData) => Promise<void>;
   onCancel: () => void;
   isEditing: boolean;
+  shopId?: string;
 }
 
-function VendorForm({ initial, onSave, onCancel, isEditing }: VendorFormProps) {
+function VendorForm({
+  initial,
+  onSave,
+  onCancel,
+  isEditing,
+  shopId,
+}: VendorFormProps) {
+  // Load draft only for new (non-edit) forms
+  const savedDraft = useMemo<VendorFormData | null>(() => {
+    if (isEditing || !shopId) return null;
+    try {
+      const raw = localStorage.getItem(getDraftKey(shopId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as VendorFormData;
+      // Only treat as a real draft if at least one field is non-empty
+      if (!parsed.name && !parsed.mobile && !parsed.email && !parsed.address)
+        return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, [isEditing, shopId]);
+
   const [form, setForm] = useState<VendorFormData>(initial ?? EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<VendorFormData>>({});
-  const [saving, setSaving] = useState(false);
+  const [hasDraft, setHasDraft] = useState(!!savedDraft);
+
+  // Persist draft on every change (add-mode only)
+  useEffect(() => {
+    if (isEditing || !shopId) return;
+    localStorage.setItem(getDraftKey(shopId), JSON.stringify(form));
+  }, [form, isEditing, shopId]);
 
   const set =
     (field: keyof VendorFormData) =>
@@ -58,20 +96,33 @@ function VendorForm({ initial, onSave, onCancel, isEditing }: VendorFormProps) {
       if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
     };
 
-  const handleSave = async () => {
-    const newErrors: Partial<VendorFormData> = {};
-    if (!form.name.trim()) newErrors.name = "Naam zaruri hai";
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-    setSaving(true);
-    try {
+  const clearDraft = useCallback(() => {
+    if (shopId) localStorage.removeItem(getDraftKey(shopId));
+  }, [shopId]);
+
+  const handleResumeDraft = useCallback(() => {
+    if (savedDraft) setForm(savedDraft);
+    setHasDraft(false);
+  }, [savedDraft]);
+
+  const handleDiscardDraft = useCallback(() => {
+    clearDraft();
+    setForm(EMPTY_FORM);
+    setHasDraft(false);
+  }, [clearDraft]);
+
+  const { execute: handleSave, isLoading: saving } = useAsyncAction(
+    useCallback(async () => {
+      const newErrors: Partial<VendorFormData> = {};
+      if (!form.name.trim()) newErrors.name = "Name is required";
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
+        return;
+      }
       await onSave(form);
-    } finally {
-      setSaving(false);
-    }
-  };
+      clearDraft();
+    }, [form, onSave, clearDraft]),
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-foreground/20 backdrop-blur-sm p-4">
@@ -79,7 +130,7 @@ function VendorForm({ initial, onSave, onCancel, isEditing }: VendorFormProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/40">
           <h2 className="font-bold text-foreground text-lg">
-            {isEditing ? "✏️ Vendor Edit Karein" : "➕ Naya Vendor"}
+            {isEditing ? "✏️ Edit Vendor" : "➕ New Vendor"}
           </h2>
           <button
             type="button"
@@ -91,6 +142,34 @@ function VendorForm({ initial, onSave, onCancel, isEditing }: VendorFormProps) {
           </button>
         </div>
 
+        {/* Draft resume banner */}
+        {!isEditing && hasDraft && savedDraft && (
+          <div className="mx-4 mt-3 px-3 py-2 rounded-lg bg-yellow-50 border border-yellow-200 flex items-center justify-between gap-2">
+            <span className="text-xs text-yellow-800 font-medium">
+              📋 Unsaved vendor data from last time.
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleResumeDraft}
+                data-ocid="vendor_form.resume_draft_button"
+                className="text-xs font-semibold text-yellow-700 underline underline-offset-2 hover:text-yellow-900"
+              >
+                Resume
+              </button>
+              <span className="text-yellow-400">·</span>
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                data-ocid="vendor_form.discard_draft_button"
+                className="text-xs font-semibold text-yellow-600 underline underline-offset-2 hover:text-yellow-800"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Fields */}
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           <div>
@@ -98,13 +177,13 @@ function VendorForm({ initial, onSave, onCancel, isEditing }: VendorFormProps) {
               htmlFor="vname"
               className="text-sm font-medium text-foreground mb-1.5 block"
             >
-              Naam <span className="text-destructive">*</span>
+              Name <span className="text-destructive">*</span>
             </Label>
             <Input
               id="vname"
               value={form.name}
               onChange={set("name")}
-              placeholder="Vendor ka naam"
+              placeholder="Vendor name"
               data-ocid="vendor_form.name_input"
               className={errors.name ? "border-destructive" : ""}
             />
@@ -152,13 +231,13 @@ function VendorForm({ initial, onSave, onCancel, isEditing }: VendorFormProps) {
               htmlFor="vaddress"
               className="text-sm font-medium text-foreground mb-1.5 block"
             >
-              Pata (Address)
+              Address
             </Label>
             <Textarea
               id="vaddress"
               value={form.address}
               onChange={set("address")}
-              placeholder="Shop / office ka pata"
+              placeholder="Shop / office address"
               rows={3}
               data-ocid="vendor_form.address_input"
               className="resize-none"
@@ -171,10 +250,11 @@ function VendorForm({ initial, onSave, onCancel, isEditing }: VendorFormProps) {
           <Button
             variant="outline"
             onClick={onCancel}
+            disabled={saving}
             className="flex-1"
             data-ocid="vendor_form.cancel_button"
           >
-            रद्द करें
+            Cancel
           </Button>
           <Button
             onClick={handleSave}
@@ -182,11 +262,16 @@ function VendorForm({ initial, onSave, onCancel, isEditing }: VendorFormProps) {
             className="flex-1"
             data-ocid="vendor_form.save_button"
           >
-            {saving
-              ? "Save ho raha hai..."
-              : isEditing
-                ? "Update Karein"
-                : "Save Karein"}
+            {saving ? (
+              <span className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground animate-spin" />
+                Saving…
+              </span>
+            ) : isEditing ? (
+              "Update"
+            ) : (
+              "Save"
+            )}
           </Button>
         </div>
       </div>
@@ -210,11 +295,11 @@ function DeleteConfirm({ vendor, onConfirm, onCancel }: DeleteConfirmProps) {
           <Trash2 className="w-6 h-6 text-destructive" />
         </div>
         <h3 className="text-center font-bold text-foreground text-lg mb-1">
-          Vendor Delete Karein?
+          Delete Vendor?
         </h3>
         <p className="text-center text-muted-foreground text-sm mb-6">
           <span className="font-semibold text-foreground">{vendor.name}</span>{" "}
-          ko permanently delete kar diya jaayega.
+          will be permanently deleted.
         </p>
         <div className="flex gap-3">
           <Button
@@ -223,7 +308,7 @@ function DeleteConfirm({ vendor, onConfirm, onCancel }: DeleteConfirmProps) {
             className="flex-1"
             data-ocid="vendor_delete.cancel_button"
           >
-            Nahi
+            No
           </Button>
           <Button
             variant="destructive"
@@ -231,7 +316,7 @@ function DeleteConfirm({ vendor, onConfirm, onCancel }: DeleteConfirmProps) {
             className="flex-1"
             data-ocid="vendor_delete.confirm_button"
           >
-            Haan, Delete Karein
+            Yes, Delete
           </Button>
         </div>
       </div>
@@ -294,10 +379,10 @@ function RateHistoryModal({
             <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
               <History className="w-10 h-10 text-muted-foreground/40" />
               <p className="text-muted-foreground text-sm">
-                Koi rate history nahi hai.
+                No rate history found.
               </p>
               <p className="text-xs text-muted-foreground">
-                Jab bhi rate change hoga, yahan record aayega.
+                Every time the rate changes, it will be recorded here.
               </p>
             </div>
           ) : (
@@ -380,7 +465,7 @@ function RateHistoryModal({
 
         <div className="p-4 border-t shrink-0">
           <Button variant="outline" className="w-full" onClick={onClose}>
-            Bandh Karein
+            Close
           </Button>
         </div>
       </div>
@@ -461,11 +546,11 @@ function VendorCard({
 }: VendorCardProps) {
   const handleWhatsApp = () => {
     if (!vendor.mobile) {
-      toast.error("Mobile number nahi hai");
+      toast.error("Mobile number is not available");
       return;
     }
     const msg = encodeURIComponent(
-      `Namaste ${vendor.name},\nHamara ek order hai. Kripya reply karein.\n\n— Save Shop System`,
+      `Hello ${vendor.name},\nWe have a new order request. Please reply at your earliest convenience.\n\n— Save Shop System`,
     );
     window.open(
       `https://wa.me/91${vendor.mobile.replace(/\D/g, "")}?text=${msg}`,
@@ -475,10 +560,10 @@ function VendorCard({
 
   const handleEmail = () => {
     if (!vendor.email) {
-      toast.error("Email nahi hai");
+      toast.error("Email address is not available");
       return;
     }
-    window.location.href = `mailto:${vendor.email}?subject=Order Enquiry&body=Namaste ${vendor.name},%0A%0AHamara ek order hai. Kripya reply karein.%0A%0A— Save Shop System`;
+    window.location.href = `mailto:${vendor.email}?subject=Order Enquiry&body=Hello ${vendor.name},%0A%0AWe have a new order request. Please reply at your earliest convenience.%0A%0A— Save Shop System`;
   };
 
   const createdDate = new Date(vendor.createdAt).toLocaleDateString("en-IN", {
@@ -513,7 +598,7 @@ function VendorCard({
             aria-label="Rate history"
             data-ocid={`vendor_card.history_button.${vendor.id}`}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors relative"
-            title="Rate History dekhein"
+            title="View Rate History"
           >
             <History className="w-4 h-4" />
             {rateHistoryCount > 0 && (
@@ -603,7 +688,7 @@ function VendorCard({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export function VendorsPage() {
+function VendorsPageInner() {
   const {
     vendors,
     addVendor,
@@ -613,6 +698,7 @@ export function VendorsPage() {
     products,
     vendorRateHistory,
     getVendorRateHistoryForVendor,
+    shopId,
   } = useStore();
 
   const [search, setSearch] = useState("");
@@ -629,29 +715,37 @@ export function VendorsPage() {
     );
   }, [vendors, search]);
 
-  const handleAdd = async (data: VendorFormData) => {
-    await addVendor(data);
-    toast.success("Vendor add ho gaya! ✅");
-    setShowForm(false);
-  };
+  const handleAdd = useCallback(
+    async (data: VendorFormData) => {
+      await addVendor(data);
+      toast.success("Vendor added successfully! ✅");
+      setShowForm(false);
+    },
+    [addVendor],
+  );
 
-  const handleUpdate = async (data: VendorFormData) => {
-    if (!editTarget) return;
-    await updateVendor(editTarget.id, data);
-    toast.success("Vendor update ho gaya! ✅");
-    setEditTarget(null);
-  };
+  const handleUpdate = useCallback(
+    async (data: VendorFormData) => {
+      if (!editTarget) return;
+      await updateVendor(editTarget.id, data);
+      toast.success("Vendor updated successfully! ✅");
+      setEditTarget(null);
+    },
+    [editTarget, updateVendor],
+  );
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
     await deleteVendor(deleteTarget.id);
-    toast.success("Vendor delete ho gaya");
+    toast.success("Vendor deleted");
     setDeleteTarget(null);
-  };
+  }, [deleteTarget, deleteVendor]);
 
-  const historyForTarget = historyTarget
-    ? getVendorRateHistoryForVendor(historyTarget.id)
-    : [];
+  const historyForTarget = useMemo(
+    () =>
+      historyTarget ? getVendorRateHistoryForVendor(historyTarget.id) : [],
+    [historyTarget, getVendorRateHistoryForVendor],
+  );
 
   return (
     <div className="flex-1 flex flex-col min-h-0 page-fade-in">
@@ -660,7 +754,7 @@ export function VendorsPage() {
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-foreground">Vendors</h1>
-            <span className="text-xs text-muted-foreground">(विक्रेता)</span>
+            <span className="text-xs text-muted-foreground">(Vendors)</span>
             {vendors.length > 0 && (
               <Badge
                 variant="secondary"
@@ -689,7 +783,7 @@ export function VendorsPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Naam ya mobile se dhundhein..."
+            placeholder="Search by name or mobile..."
             className="pl-9 bg-muted/40"
             data-ocid="vendors.search_input"
           />
@@ -709,10 +803,10 @@ export function VendorsPage() {
             </div>
             <div>
               <h3 className="font-bold text-foreground text-lg mb-1">
-                Koi vendor nahi hai
+                No vendors yet
               </h3>
               <p className="text-muted-foreground text-sm max-w-xs">
-                'Add Vendor' button dabao aur pehla vendor add karo.
+                Click 'Add Vendor' to add your first vendor.
               </p>
             </div>
             <Button
@@ -720,7 +814,7 @@ export function VendorsPage() {
               data-ocid="vendors.empty_add_button"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Pehla Vendor Add Karein
+              Add First Vendor
             </Button>
           </div>
         ) : filtered.length === 0 ? (
@@ -732,14 +826,14 @@ export function VendorsPage() {
             <Search className="w-10 h-10 text-muted-foreground/50" />
             <div>
               <h3 className="font-semibold text-foreground">
-                Koi vendor nahi mila
+                No vendors found
               </h3>
               <p className="text-muted-foreground text-sm mt-1">
-                "{search}" se koi vendor nahi mila. Search clear karein.
+                No vendor found for "{search}". Try clearing the search.
               </p>
             </div>
             <Button variant="outline" onClick={() => setSearch("")}>
-              Search Clear Karein
+              Clear Search
             </Button>
           </div>
         ) : (
@@ -772,6 +866,7 @@ export function VendorsPage() {
           onSave={handleAdd}
           onCancel={() => setShowForm(false)}
           isEditing={false}
+          shopId={shopId}
         />
       )}
 
@@ -811,3 +906,6 @@ export function VendorsPage() {
     </div>
   );
 }
+
+export const VendorsPage = React.memo(VendorsPageInner);
+export default VendorsPage;

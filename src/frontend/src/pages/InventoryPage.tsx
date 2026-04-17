@@ -38,7 +38,7 @@ import {
   Search,
   ShoppingCart,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { NavPage, Product, StockBatch } from "../types/store";
@@ -191,7 +191,7 @@ function BatchViewDialog({
                   <TableHead className="text-xs font-semibold">Qty</TableHead>
                   {canViewCost && (
                     <TableHead className="text-xs font-semibold">
-                      Rate (\u20b9)
+                      Rate (₹)
                     </TableHead>
                   )}
                   <TableHead className="text-xs font-semibold">Date</TableHead>
@@ -285,7 +285,9 @@ export function InventoryPage({
     getProductStock,
     getProductBatches,
     purchaseOrders,
+    refreshCounter,
   } = useStore();
+  void refreshCounter; // ensures InventoryPage re-renders whenever a mutation fires
   const { currentUser } = useAuth();
   const userRole = currentUser?.role ?? "staff";
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
@@ -312,17 +314,23 @@ export function InventoryPage({
     return () => clearTimeout(timer);
   }, [initialSelectedProductId]);
 
-  const filtered = products.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    const matchCat =
-      categoryFilter === "all" || p.categoryId === categoryFilter;
-    return matchSearch && matchCat;
-  });
+  const filtered = useMemo(
+    () =>
+      products.filter((p) => {
+        const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
+        const matchCat =
+          categoryFilter === "all" || p.categoryId === categoryFilter;
+        return matchSearch && matchCat;
+      }),
+    [products, search, categoryFilter],
+  );
 
   const totalStockItems = products.length;
-  const lowStockCount = products.filter(
-    (p) => getProductStock(p.id) < p.minStockAlert,
-  ).length;
+  const lowStockCount = useMemo(
+    () =>
+      products.filter((p) => getProductStock(p.id) < p.minStockAlert).length,
+    [products, getProductStock],
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -343,7 +351,7 @@ export function InventoryPage({
                 className="gap-1.5 text-sm font-semibold"
               >
                 <Plus size={15} />
-                <span className="hidden sm:inline">Naya Stock Add Karein</span>
+                <span className="hidden sm:inline">Add New Stock</span>
                 <span className="sm:hidden">Add Stock</span>
               </Button>
             )}
@@ -713,9 +721,7 @@ function ProductCard({
                         <TableHead className="text-xs">Qty</TableHead>
                         {canViewCost && (
                           <>
-                            <TableHead className="text-xs">
-                              Rate (\u20b9)
-                            </TableHead>
+                            <TableHead className="text-xs">Rate (₹)</TableHead>
                             <TableHead className="text-xs">Value</TableHead>
                           </>
                         )}

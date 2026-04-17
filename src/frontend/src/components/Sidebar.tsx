@@ -4,13 +4,18 @@ import {
   BarChart2,
   Bell,
   Building2,
+  CalendarCheck,
   ClipboardList,
   CreditCard,
+  FileText,
   Gem,
+  Gift,
   History,
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
   Menu,
+  MessageCircle,
   Package,
   Receipt,
   RotateCcw,
@@ -26,9 +31,10 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
+import { useStore } from "../context/StoreContext";
 import type { NavPage, UserRole } from "../types/store";
 
 // Role badge component
@@ -45,11 +51,20 @@ interface NavItem {
   icon: React.ElementType;
   /** Which roles can see this item. Undefined = all roles. */
   roles?: UserRole[];
+  /** If true, only show when allShops.length >= 2 */
+  multiShopOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  // Staff can only see Dashboard + Billing
+  // Owner Dashboard — multi-shop only
+  {
+    id: "owner-dashboard",
+    label: "Owner Overview",
+    icon: Store,
+    roles: ["owner"],
+    multiShopOnly: true,
+  },
   {
     id: "inventory",
     label: "Inventory",
@@ -63,6 +78,7 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["owner", "manager"],
   },
   { id: "billing", label: "Billing", icon: Receipt },
+  { id: "drafts", label: "Draft Sales", icon: FileText },
   {
     id: "customers",
     label: "Customers",
@@ -111,7 +127,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: RotateCcw,
     roles: ["owner", "manager"],
   },
-  // Owner-only nav items
   {
     id: "staff-management",
     label: "Staff Management",
@@ -119,17 +134,13 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["owner"],
   },
   {
-    id: "admin",
-    label: "Admin Panel",
-    icon: Settings,
-    roles: ["owner"],
+    id: "attendance",
+    label: "Staff Attendance",
+    icon: CalendarCheck,
+    roles: ["owner", "manager"],
   },
-  {
-    id: "history",
-    label: "Draft History",
-    icon: History,
-    roles: ["owner"],
-  },
+  { id: "admin", label: "Admin Panel", icon: Settings, roles: ["owner"] },
+  { id: "history", label: "Draft History", icon: History, roles: ["owner"] },
   {
     id: "settings",
     label: "App Settings",
@@ -154,18 +165,51 @@ const NAV_ITEMS: NavItem[] = [
     icon: Bell,
     roles: ["owner", "manager"],
   },
-  {
-    id: "diamond-rewards",
-    label: "Diamond Rewards",
-    icon: Gem,
-  },
+  { id: "diamond-rewards", label: "Diamond Rewards", icon: Gem },
   {
     id: "rankings",
     label: "Rankings",
     icon: Trophy,
     roles: ["owner", "manager"],
   },
+  {
+    id: "shop-board",
+    label: "Live Board",
+    icon: LayoutGrid,
+    roles: ["owner", "manager"],
+  },
+  { id: "feedback-page", label: "Feedback", icon: MessageCircle },
+  { id: "referral-page", label: "Refer & Earn", icon: Gift },
 ];
+
+// ─── Mode-based nav visibility ────────────────────────────────────────────────
+const MODE_1_PAGES = new Set<NavPage>([
+  "dashboard",
+  "owner-dashboard",
+  "stock",
+  "billing",
+  "settings",
+]);
+
+const MODE_2_PAGES = new Set<NavPage>([
+  "dashboard",
+  "owner-dashboard",
+  "inventory",
+  "stock",
+  "billing",
+  "drafts",
+  "customers",
+  "vendors",
+  "reports",
+  "purchase-orders",
+  "settings",
+]);
+
+function filterByMode(items: NavItem[], mode: 1 | 2 | 3): NavItem[] {
+  if (mode === 3) return items;
+  const allowed = mode === 1 ? MODE_1_PAGES : MODE_2_PAGES;
+  return items.filter((item) => allowed.has(item.id));
+}
 
 interface SidebarProps {
   currentPage: NavPage;
@@ -174,8 +218,13 @@ interface SidebarProps {
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { currentUser, currentShop, logout } = useAuth();
+  const { currentUser, currentShop, logout, allShops } = useAuth();
   const { t } = useLanguage();
+  const { appConfig } = useStore();
+
+  const featureMode = (appConfig.featureMode ?? 3) as 1 | 2 | 3;
+  const role = currentUser?.role ?? "staff";
+  const multiShopOwner = role === "owner" && allShops.length >= 2;
 
   const handleNav = (page: NavPage) => {
     onNavigate(page);
@@ -187,11 +236,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     logout();
   };
 
-  const role = currentUser?.role ?? "staff";
-
-  // Filter nav items based on role
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.roles || item.roles.includes(role),
+  // Filter nav items by role, then by mode, then by multi-shop condition
+  const visibleItems = filterByMode(
+    NAV_ITEMS.filter((item) => {
+      if (item.roles && !item.roles.includes(role)) return false;
+      if (item.multiShopOnly && !multiShopOwner) return false;
+      return true;
+    }),
+    featureMode,
   );
 
   function SidebarContent() {
@@ -217,6 +269,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const active = currentPage === item.id;
+            const isOwnerDash = item.id === "owner-dashboard";
             return (
               <button
                 type="button"
@@ -228,19 +281,29 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   active
                     ? "bg-sidebar-accent text-sidebar-foreground"
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                  isOwnerDash &&
+                    !active &&
+                    "border border-primary/20 bg-primary/5 hover:bg-primary/10",
                 )}
               >
                 <Icon
                   className={cn(
                     "flex-shrink-0",
-                    active ? "text-primary" : "",
-                    // Differentiate Staff Management icon from Customers icon
-                    item.id === "staff-management" ? "opacity-90" : "",
+                    active
+                      ? "text-primary"
+                      : isOwnerDash
+                        ? "text-primary/70"
+                        : "",
                   )}
                   size={17}
                 />
                 <span className="truncate">{t(item.label)}</span>
-                {active && (
+                {isOwnerDash && (
+                  <span className="ml-auto text-[9px] font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5 leading-none flex-shrink-0">
+                    ALL
+                  </span>
+                )}
+                {active && !isOwnerDash && (
                   <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
                 )}
               </button>
@@ -264,6 +327,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   <span className="text-sidebar-foreground/50 text-xs truncate">
                     {currentShop.name}
                   </span>
+                  {allShops.length > 1 && (
+                    <span className="ml-auto text-[9px] text-primary/60 flex-shrink-0">
+                      {allShops.length} shops
+                    </span>
+                  )}
                 </div>
               )}
               <div className="flex items-center gap-2.5">
@@ -345,3 +413,5 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     </>
   );
 }
+
+export const MemoSidebar = React.memo(Sidebar);

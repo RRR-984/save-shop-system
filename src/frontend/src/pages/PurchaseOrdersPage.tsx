@@ -93,11 +93,11 @@ function RateChangeBanner({ currentRate, lastRate }: RateChangeBannerProps) {
       >
         <TrendingUp className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
         <span>
-          <strong>⚠️ Rate badal gaya!</strong> Pichla rate{" "}
-          <strong>{fmt(lastRate)}</strong> tha, ab{" "}
-          <strong>{fmt(currentRate)}</strong> hai —{" "}
+          <strong>⚠️ Rate changed!</strong> Previous rate{" "}
+          <strong>{fmt(lastRate)}</strong> was, now{" "}
+          <strong>{fmt(currentRate)}</strong> —{" "}
           <span className="text-red-700 font-semibold">
-            {fmt(diffAbs)} zyada ({pct}% change)
+            {fmt(diffAbs)} more ({pct}% change)
           </span>
         </span>
       </div>
@@ -111,11 +111,11 @@ function RateChangeBanner({ currentRate, lastRate }: RateChangeBannerProps) {
     >
       <TrendingDown className="w-4 h-4 shrink-0 mt-0.5 text-green-600" />
       <span>
-        <strong>✅ Rate kam hua!</strong> Pichla rate{" "}
-        <strong>{fmt(lastRate)}</strong> tha, ab{" "}
-        <strong>{fmt(currentRate)}</strong> hai —{" "}
+        <strong>✅ Rate decreased!</strong> Previous rate{" "}
+        <strong>{fmt(lastRate)}</strong> was, now{" "}
+        <strong>{fmt(currentRate)}</strong> —{" "}
         <span className="text-green-700 font-semibold">
-          {fmt(diffAbs)} kam ({pct}% change)
+          {fmt(diffAbs)} less ({pct}% change)
         </span>
       </span>
     </div>
@@ -147,11 +147,9 @@ function CostUpdateDialog({
             <AlertTriangle className="w-5 h-5 text-amber-600" />
           </div>
           <div>
-            <h3 className="font-bold text-foreground">
-              Cost Price Update Karein?
-            </h3>
+            <h3 className="font-bold text-foreground">Cost Price Update?</h3>
             <p className="text-xs text-muted-foreground">
-              Vendor ka rate badal gaya hai
+              Vendor rate has changed
             </p>
           </div>
         </div>
@@ -161,23 +159,23 @@ function CostUpdateDialog({
             {productName}
           </p>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Purana Cost Price</span>
+            <span className="text-muted-foreground">Old Cost Price</span>
             <span className="font-medium line-through text-muted-foreground">
               {fmt(oldCost)}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Naya Cost Price</span>
+            <span className="text-muted-foreground">New Cost Price</span>
             <span className="font-bold text-primary">{fmt(newCost)}</span>
           </div>
         </div>
 
         <p className="text-sm text-muted-foreground">
-          Kya is product ki cost price{" "}
+          Would you like to update this product's cost price{" "}
           <strong className="text-foreground">
             {fmt(oldCost)} → {fmt(newCost)}
-          </strong>{" "}
-          update karein?
+          </strong>
+          ?
         </p>
 
         <div className="flex gap-2">
@@ -187,14 +185,14 @@ function CostUpdateDialog({
             onClick={onCancel}
             data-ocid="cost-update-cancel"
           >
-            Nahi, Skip Karein
+            No, Skip
           </Button>
           <Button
             className="flex-1"
             onClick={onConfirm}
             data-ocid="cost-update-confirm"
           >
-            Haan, Update Karein
+            Yes, Update
           </Button>
         </div>
       </div>
@@ -376,7 +374,7 @@ function AddPOModal({
       ) {
         await doSavePO(poData);
         updateProduct(productId, { costPrice: rateNum });
-        toast.success(`Cost price ${fmt(rateNum)} mein update ho gaya ✅`);
+        toast.success(`Cost price updated to ${fmt(rateNum)} ✅`);
         onClose();
         return;
       }
@@ -405,9 +403,7 @@ function AddPOModal({
     try {
       await doSavePO(pendingPOData);
       updateProduct(pendingPOData.productId, { costPrice: pendingPOData.rate });
-      toast.success(
-        `Cost price ${fmt(pendingPOData.rate)} mein update ho gaya ✅`,
-      );
+      toast.success(`Cost price updated to ${fmt(pendingPOData.rate)} ✅`);
     } finally {
       setSaving(false);
       setShowCostUpdateDialog(false);
@@ -420,7 +416,7 @@ function AddPOModal({
     setSaving(true);
     try {
       await doSavePO(pendingPOData);
-      toast.success("Purchase order save ho gaya");
+      toast.success("Purchase order saved");
     } finally {
       setSaving(false);
       setShowCostUpdateDialog(false);
@@ -434,7 +430,7 @@ function AddPOModal({
         <div className="bg-card w-full max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between px-4 py-3 border-b">
             <h2 className="font-bold text-foreground text-base">
-              {isReorder ? "⚡ Quick Reorder" : "Naya Purchase Order"}
+              {isReorder ? "⚡ Quick Reorder" : "New Purchase Order"}
             </h2>
             <button
               type="button"
@@ -456,7 +452,7 @@ function AddPOModal({
             {!isReorder && (
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase">
-                  Vendor चुनें *
+                  Vendor *
                 </Label>
                 <div className="relative">
                   <select
@@ -465,7 +461,7 @@ function AddPOModal({
                     className="w-full h-10 px-3 pr-8 rounded-lg border border-input bg-background text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-ring"
                     data-ocid="po-vendor-select"
                   >
-                    <option value="">-- Vendor select karein --</option>
+                    <option value="">-- Select Vendor --</option>
                     {storeVendors.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.name} ({v.mobile})
@@ -488,7 +484,7 @@ function AddPOModal({
             {!isReorder && (
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase">
-                  Product चुनें *
+                  Product *
                 </Label>
                 <div className="relative">
                   <select
@@ -497,7 +493,7 @@ function AddPOModal({
                     className="w-full h-10 px-3 pr-8 rounded-lg border border-input bg-background text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-ring"
                     data-ocid="po-product-select"
                   >
-                    <option value="">-- Product select karein --</option>
+                    <option value="">-- Select Product --</option>
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
@@ -528,7 +524,7 @@ function AddPOModal({
                   Rate (₹) *
                   {lastKnownRate != null && (
                     <span className="ml-1 text-muted-foreground font-normal normal-case">
-                      (Pichla: {fmt(lastKnownRate)})
+                      (Last: {fmt(lastKnownRate)})
                     </span>
                   )}
                 </Label>
@@ -629,7 +625,7 @@ function AddPOModal({
                 disabled={!canSave || saving}
                 data-ocid="po-save-btn"
               >
-                {saving ? "Saving..." : "Order Save Karein"}
+                {saving ? "Saving..." : "Save Order"}
               </Button>
             </div>
           </div>
@@ -698,7 +694,7 @@ function MarkReceivedModal({
         // Check if auto-update enabled
         if (appConfig.autoUpdateCostOnVendorRateChange && selectedProduct) {
           updateProduct(po.productId, { costPrice: po.rate });
-          toast.success(`Cost price ${`₹${po.rate}`} mein auto-update ho gaya`);
+          toast.success(`Cost price auto-updated to ${`₹${po.rate}`}`);
           onClose();
           return;
         }
@@ -721,7 +717,7 @@ function MarkReceivedModal({
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
         <div className="bg-card w-full max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-bold text-foreground">Mal Prapt Karein ✅</h3>
+            <h3 className="font-bold text-foreground">Receive Stock ✅</h3>
             <button
               type="button"
               onClick={onClose}
@@ -749,7 +745,7 @@ function MarkReceivedModal({
               data-ocid="po-received-qty-input"
             />
             <p className="text-xs text-muted-foreground">
-              Partial receive karne par status "Partial" ho jaayega
+              Partial receive will change status to "Partial"
             </p>
           </div>
           <div className="flex gap-2">
@@ -775,7 +771,7 @@ function MarkReceivedModal({
           newCost={po.rate}
           onConfirm={() => {
             updateProduct(po.productId, { costPrice: po.rate });
-            toast.success("Cost price update ho gaya ✅");
+            toast.success("Cost price updated ✅");
             setShowCostUpdateDialog(false);
             onClose();
           }}
@@ -805,7 +801,7 @@ function SendOrderModal({
   onClose,
 }: SendOrderModalProps) {
   const total = po.qty * po.rate;
-  const message = `Namaste ${vendor.name},\nhume ye items chahiye:\nProduct: ${productName}\nQty: ${po.qty}\nRate: ₹${po.rate}\n\nTotal: ₹${total}\n\nPlease confirm order.`;
+  const message = `Hello ${vendor.name},\nWe require the following items:\nProduct: ${productName}\nQty: ${po.qty}\nRate: ₹${po.rate}\n\nTotal: ₹${total}\n\nPlease confirm the order.`;
   const [copied, setCopied] = useState(false);
 
   function handleWhatsApp() {
@@ -839,9 +835,7 @@ function SendOrderModal({
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
       <div className="bg-card w-full max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-foreground">
-            Order Message Bhejein 📤
-          </h3>
+          <h3 className="font-bold text-foreground">Send Order Message 📤</h3>
           <button
             type="button"
             onClick={onClose}
@@ -860,7 +854,7 @@ function SendOrderModal({
             data-ocid="po-whatsapp-btn"
           >
             <MessageCircle className="w-4 h-4" />
-            WhatsApp pe Bhejein
+            Send via WhatsApp
           </Button>
           {vendor.email && (
             <Button
@@ -870,7 +864,7 @@ function SendOrderModal({
               data-ocid="po-email-btn"
             >
               <Mail className="w-4 h-4" />
-              Email Bhejein
+              Send via Email
             </Button>
           )}
           <Button
@@ -880,7 +874,7 @@ function SendOrderModal({
             data-ocid="po-copy-btn"
           >
             <Copy className="w-4 h-4" />
-            {copied ? "Copied! ✓" : "Message Copy Karein"}
+            {copied ? "Copied! ✓" : "Copy Message"}
           </Button>
         </div>
       </div>
@@ -958,7 +952,7 @@ export function PurchaseOrdersPage({
   }, [vendors, purchaseOrders]);
 
   const filterTabs: { id: FilterTab; label: string; count: number }[] = [
-    { id: "all", label: "Sab", count: purchaseOrders.length },
+    { id: "all", label: "All", count: purchaseOrders.length },
     {
       id: "pending",
       label: "Pending",
@@ -991,9 +985,6 @@ export function PurchaseOrdersPage({
             <ShoppingCart className="w-5 h-5 text-primary" />
             <h1 className="text-lg font-bold text-foreground">
               Purchase Orders
-              <span className="text-sm font-normal text-muted-foreground ml-1">
-                (खरीद ऑर्डर)
-              </span>
             </h1>
             <Badge variant="secondary" className="text-xs">
               {purchaseOrders.length}
@@ -1050,7 +1041,7 @@ export function PurchaseOrdersPage({
               <ShoppingCart className="w-7 h-7 text-muted-foreground" />
             </div>
             <p className="text-muted-foreground text-sm">
-              Koi purchase order nahi hai.
+              No purchase orders found.
             </p>
             {canManage && (
               <Button
@@ -1060,7 +1051,7 @@ export function PurchaseOrdersPage({
                 className="gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Pehla Order Banayein
+                Create First Order
               </Button>
             )}
           </div>
@@ -1169,7 +1160,7 @@ export function PurchaseOrdersPage({
           >
             <span className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-primary" />
-              Vendor Ledger (विक्रेता खाता)
+              Vendor Ledger
             </span>
             <ChevronDown
               className={`w-4 h-4 text-muted-foreground transition-transform ${expandedLedger ? "rotate-180" : ""}`}

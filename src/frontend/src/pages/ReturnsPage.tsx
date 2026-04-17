@@ -37,12 +37,12 @@ const RETURN_REASONS: ReturnReason[] = [
 ];
 
 const REASON_LABELS: Record<ReturnReason, string> = {
-  Damaged: "Damaged (Kharab)",
-  "Wrong Product": "Wrong Product (Galat Maal)",
+  Damaged: "Damaged",
+  "Wrong Product": "Wrong Product",
   "Customer Changed Mind": "Customer Changed Mind",
-  "Expiry Issue": "Expiry Issue (Meyadat Khatam)",
+  "Expiry Issue": "Expiry Issue",
   "Quality Problem": "Quality Problem",
-  Other: "Other (Aur)",
+  Other: "Other",
 };
 
 function fmt(n: number) {
@@ -92,12 +92,12 @@ export function ReturnsPage() {
     setReasonError(false);
 
     if (!selectedProductId) {
-      toast.error("Product select karein");
+      toast.error("Please select a product");
       return;
     }
     if (!reason) {
       setReasonError(true);
-      toast.error("Reason mandatory hai");
+      toast.error("Reason is required");
       return;
     }
 
@@ -106,7 +106,7 @@ export function ReturnsPage() {
     const sellingPriceNum = Number.parseFloat(sellingPrice) || 0;
 
     if (!qty || Number.isNaN(qtyNum) || qtyNum <= 0) {
-      toast.error("Valid qty daalen");
+      toast.error("Please enter a valid quantity");
       return;
     }
 
@@ -126,7 +126,7 @@ export function ReturnsPage() {
     setSaving(false);
 
     if (success) {
-      toast.success("Return darz ho gaya!");
+      toast.success("Return recorded successfully!");
       setSelectedProductId("");
       setQty("1");
       setReturnValue("");
@@ -154,7 +154,7 @@ export function ReturnsPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <RotateCcw size={18} className="text-rose-600" />
-              Return Report — Aaj Ki
+              Return Report — Today
               <Badge className="bg-rose-100 text-rose-700 border-rose-300 ml-1">
                 {new Date().toLocaleDateString("en-IN", {
                   day: "numeric",
@@ -216,9 +216,7 @@ export function ReturnsPage() {
                     report.totalLoss > 0 ? "text-red-400" : "text-green-400"
                   }`}
                 >
-                  {report.totalLoss > 0
-                    ? "Nuksaan hua aaj"
-                    : "Koi nuksaan nahi"}
+                  {report.totalLoss > 0 ? "Loss today" : "No losses"}
                 </div>
               </div>
 
@@ -238,7 +236,7 @@ export function ReturnsPage() {
                 </div>
                 {report.topReasonCount > 0 && (
                   <div className="text-xs text-amber-500">
-                    {report.topReasonCount} baar hua (all time)
+                    {report.topReasonCount} times (all time)
                   </div>
                 )}
               </div>
@@ -251,7 +249,7 @@ export function ReturnsPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <IndianRupee size={18} className="text-primary" />
-              Naya Return Darz Karein
+              Record New Return
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -269,7 +267,7 @@ export function ReturnsPage() {
                       data-ocid="returns.product.select"
                       className="w-full"
                     >
-                      <SelectValue placeholder="Product chunein..." />
+                      <SelectValue placeholder="Select product..." />
                     </SelectTrigger>
                     <SelectContent>
                       {products.map((p) => (
@@ -329,7 +327,7 @@ export function ReturnsPage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="Customer ko kitna wapas diya"
+                    placeholder="How much was refunded to the customer"
                     value={returnValue}
                     onChange={(e) =>
                       setReturnValue(clearLeadingZeros(e.target.value))
@@ -358,7 +356,7 @@ export function ReturnsPage() {
                       data-ocid="returns.reason.select"
                       className={reasonError ? "border-destructive" : ""}
                     >
-                      <SelectValue placeholder="Reason chunein (mandatory)" />
+                      <SelectValue placeholder="Select reason (required)" />
                     </SelectTrigger>
                     <SelectContent>
                       {RETURN_REASONS.map((r) => (
@@ -373,7 +371,7 @@ export function ReturnsPage() {
                       className="text-xs text-destructive"
                       data-ocid="returns.reason.error_state"
                     >
-                      Reason mandatory hai
+                      Reason is required
                     </p>
                   )}
                 </div>
@@ -456,7 +454,7 @@ export function ReturnsPage() {
                 ) : (
                   <RotateCcw className="mr-2 h-4 w-4" />
                 )}
-                {saving ? "Save ho raha hai..." : "Return Darz Karein"}
+                {saving ? "Saving..." : "Record Return"}
               </Button>
             </form>
           </CardContent>
@@ -467,7 +465,7 @@ export function ReturnsPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <RotateCcw size={18} className="text-primary" />
-              Sab Returns
+              All Returns
               {returns.length > 0 && (
                 <Badge className="bg-primary/10 text-primary border-0">
                   {returns.length}
@@ -482,8 +480,10 @@ export function ReturnsPage() {
                 data-ocid="returns.list.empty_state"
               >
                 <RotateCcw size={40} className="opacity-20" />
-                <p className="font-medium">Koi return nahi</p>
-                <p className="text-sm">Pehla return upar form se darz karein</p>
+                <p className="font-medium">No returns recorded</p>
+                <p className="text-sm">
+                  Record your first return using the form above
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -628,7 +628,7 @@ export function ReturnsPage() {
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground px-1">
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-full bg-red-400" />
-            <span>Red = Loss (Nuksaan)</span>
+            <span>Red = Loss</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded-full bg-yellow-400" />

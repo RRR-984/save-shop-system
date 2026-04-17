@@ -4,6 +4,13 @@ type Data__791452850<K, V> =
 type Internal__8484328<K, V> =
   {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
 type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type List__415060402<T> = List__790383201<T>;
+type List__790383201<T> =
+  {
+    var blockIndex : Nat__490723111;
+    var blocks : [var [var ?T]];
+    var elementIndex : Nat__490723111
+  };
 type Map__158565046<K, V> = Map__297112838<K, V>;
 type Map__297112838<K, V> =
   {var root : Node__46230540<K, V>; var size : Nat__490723111};
@@ -12,11 +19,26 @@ type Nat__490723111 = Nat__920180692;
 type Nat__920180692 = Nat;
 type Node__46230540<K, V> =
   {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type ShopMeta__216240044 =
+  {
+    address : Text;
+    city : Text;
+    createdAt : Text;
+    id : Text;
+    isDeleted : Bool;
+    name : Text;
+    ownerMobile : Text
+  };
 type UserProfile__491224006 = {name : Text};
 actor {
   stable shopData :
     {
       var root : Node__46230540<Text, Map__605269027<Text, Text>>;
+      var size : Nat__490723111
+    };
+  stable shopRegistry :
+    {
+      var root : Node__46230540<Text, List__415060402<ShopMeta__216240044>>;
       var size : Nat__490723111
     };
   stable userProfiles :

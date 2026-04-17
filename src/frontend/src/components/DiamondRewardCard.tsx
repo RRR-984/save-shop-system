@@ -119,7 +119,7 @@ export function DiamondRewardCard({
         type="button"
         data-ocid="dashboard.diamond_reward.card"
         onClick={() => setModalOpen(true)}
-        className="w-full flex flex-col gap-3 rounded-2xl p-4 border border-violet-200 dark:border-violet-800/50 bg-[#EDE9FE] dark:bg-violet-950/40 shadow-card active:scale-[0.97] transition-all duration-150 ease-out text-left"
+        className="w-full flex flex-col gap-3 rounded-2xl p-4 border border-violet-200 dark:border-violet-800/50 bg-[#EDE9FE] dark:bg-violet-950/40 shadow-card card-interactive active:scale-[0.97] transition-all duration-150 ease-out text-left"
       >
         {/* Header row */}
         <div className="flex items-center justify-between">
@@ -131,7 +131,7 @@ export function DiamondRewardCard({
               </div>
               <div className="text-[10px] text-violet-500 dark:text-violet-400">
                 {isHi
-                  ? "10 transaction par 1 💎 milta hai"
+                  ? "10 transaction पर 1 💎 मिलता है"
                   : "1 💎 per 10 transactions"}
               </div>
             </div>
@@ -240,9 +240,9 @@ export function DiamondRewardCard({
                   </p>
                   <p className="text-xs text-center text-muted-foreground/70">
                     {isHi
-                      ? "10 transactions complete karein — 1 💎 milega"
+                      ? "Complete 10 transactions to earn 1 💎"
                       : "Complete 10 transactions to earn your first 💎"}
-                  </p>
+                  </p>{" "}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -280,7 +280,7 @@ export function DiamondRewardCard({
                     setModalOpen(false);
                     onViewAll();
                   }}
-                  className="w-full py-3 rounded-xl bg-violet-600 text-white text-sm font-bold active:scale-[0.98] transition-all"
+                  className="w-full py-3 rounded-xl bg-violet-600 text-white text-sm font-bold btn-hover active:scale-[0.98] transition-all"
                 >
                   {isHi ? "सभी देखें →" : "View All Rewards →"}
                 </button>

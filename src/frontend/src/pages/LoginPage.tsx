@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   ArrowLeft,
+  Gift,
   KeyRound,
   MessageSquare,
   Phone,
@@ -32,9 +33,9 @@ function ModeSelect({
   return (
     <Card className="shadow-xl border-border/60">
       <CardHeader className="pb-2 pt-5 px-5">
-        <h2 className="text-base font-semibold">Login Type Chunein</h2>
+        <h2 className="text-base font-semibold">Select Login Type</h2>
         <p className="text-xs text-muted-foreground">
-          Apni role ke hisaab se login karein
+          Choose your role and login
         </p>
       </CardHeader>
       <CardContent className="px-5 pb-5 space-y-3">
@@ -52,7 +53,7 @@ function ModeSelect({
               Owner / New Shop Login
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Mobile OTP se login karein
+              Login with mobile OTP
             </p>
           </div>
           <span className="badge-owner ml-auto flex-shrink-0">Owner</span>
@@ -72,7 +73,7 @@ function ModeSelect({
               Staff / Manager Login
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Mobile number aur PIN se login karein
+              Login with mobile number and PIN
             </p>
           </div>
           <div className="flex flex-col gap-1 ml-auto flex-shrink-0 items-end">
@@ -87,12 +88,22 @@ function ModeSelect({
 
 // ─── OTP Login flow ───────────────────────────────────────────────────────────
 
-function OtpLoginFlow({ onBack }: { onBack: () => void }) {
+function OtpLoginFlow({
+  onBack,
+  initialReferralCode,
+}: {
+  onBack: () => void;
+  initialReferralCode?: string;
+}) {
   const { sendOtp, verifyOtp } = useAuth();
   const [step, setStep] = useState<OtpStep>("mobile");
 
   const [mobile, setMobile] = useState("");
   const [shopName, setShopName] = useState("");
+  const [referralCode, setReferralCode] = useState(
+    initialReferralCode?.trim().toUpperCase() ?? "",
+  );
+  const [referralError, setReferralError] = useState("");
   const [mobileError, setMobileError] = useState("");
   const [isSending, setIsSending] = useState(false);
 
@@ -121,15 +132,21 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
     e.preventDefault();
     const cleaned = mobile.replace(/\D/g, "");
     if (cleaned.length !== 10) {
-      setMobileError("10-digit mobile number daalein");
+      setMobileError("Enter your 10-digit mobile number");
+      return;
+    }
+    // Validate referral code format if entered (basic client-side check only)
+    if (referralCode.trim() && referralCode.trim().length < 4) {
+      setReferralError("Invalid referral code");
       return;
     }
     setIsSending(true);
     setMobileError("");
+    setReferralError("");
     await new Promise((r) => setTimeout(r, 400));
     const result = sendOtp(cleaned);
     if (!result.success) {
-      setMobileError(result.error ?? "OTP bhejne mein error");
+      setMobileError(result.error ?? "Error sending OTP");
       setIsSending(false);
       return;
     }
@@ -144,7 +161,7 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.trim().length !== 6) {
-      setOtpError("6-digit OTP daalein");
+      setOtpError("Enter your 6-digit OTP");
       return;
     }
     setIsVerifying(true);
@@ -152,9 +169,29 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
     await new Promise((r) => setTimeout(r, 350));
     const result = verifyOtp(mobile.replace(/\D/g, ""), otp, shopName);
     if (!result.success) {
-      setOtpError(result.error ?? "OTP verify karne mein error");
+      setOtpError(result.error ?? "Error verifying OTP");
     } else {
       toast.success("Welcome! Owner login successful 🎉");
+      // Store referral code in localStorage so StoreProvider can process it
+      // after mounting (post-login). This avoids calling useStore() from
+      // outside StoreProvider.
+      const code = referralCode.trim().toUpperCase();
+      if (code) {
+        const cleanMobile = mobile.replace(/\D/g, "");
+        try {
+          localStorage.setItem(
+            "pending_referral",
+            JSON.stringify({
+              code,
+              newUserId: `user_${cleanMobile}`,
+              shopName: shopName || `User ${cleanMobile.slice(-4)}`,
+              mobile: cleanMobile,
+            }),
+          );
+        } catch {
+          /* ignore storage errors */
+        }
+      }
     }
     setIsVerifying(false);
   };
@@ -188,7 +225,7 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                   type="button"
                   onClick={onBack}
                   className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                  aria-label="Wapas jao"
+                  aria-label="Go back"
                 >
                   <ArrowLeft size={15} />
                 </button>
@@ -203,7 +240,7 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                 <span className="badge-owner ml-auto">Owner</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Mobile number daalein — OTP bheja jaayega
+                Enter mobile number — OTP will be sent
               </p>
             </CardHeader>
             <CardContent className="px-5 pb-5">
@@ -238,7 +275,7 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="shop-name" className="text-sm font-medium">
-                    Dukaan Ka Naam{" "}
+                    Shop Name{" "}
                     <span className="text-muted-foreground font-normal">
                       (optional)
                     </span>
@@ -253,8 +290,47 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                     className="h-11"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Pehli baar login pe dukaan banayi jaayegi
+                    Your shop will be created on first login
                   </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="referral-code"
+                    className="text-sm font-medium flex items-center gap-1.5"
+                  >
+                    <Gift size={13} className="text-amber-500" />
+                    Referral Code{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    id="referral-code"
+                    data-ocid="login.referral_code.input"
+                    type="text"
+                    placeholder="Enter referral code"
+                    value={referralCode}
+                    onChange={(e) => {
+                      setReferralCode(
+                        e.target.value.toUpperCase().replace(/\s/g, ""),
+                      );
+                      setReferralError("");
+                    }}
+                    className="h-11 font-mono tracking-wider"
+                  />
+                  {referralCode && !referralError && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                      <Gift size={11} /> Referral code detected — earn 10 💎
+                      after your first transaction
+                    </p>
+                  )}
+                  {referralError && (
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <span className="w-1 h-1 rounded-full bg-destructive flex-shrink-0" />
+                      {referralError}
+                    </p>
+                  )}
                 </div>
 
                 {mobileError && (
@@ -278,12 +354,12 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                   {isSending ? (
                     <span className="flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      OTP bhej raha hoon...
+                      Sending OTP...
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
                       <MessageSquare size={16} />
-                      OTP Bhejo
+                      Send OTP
                     </span>
                   )}
                 </Button>
@@ -300,7 +376,7 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                       Data Privacy
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Aapka data sirf aapke mobile number se linked rahega.
+                      Your data is securely linked to your mobile number.
                     </p>
                   </div>
                 </div>
@@ -329,7 +405,7 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                     setOtpError("");
                   }}
                   className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                  aria-label="Wapas jao"
+                  aria-label="Go back"
                 >
                   <ArrowLeft size={15} />
                 </button>
@@ -340,10 +416,8 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                   <span className="text-sm font-semibold">+91 {mobile}</span>
                 </div>
               </div>
-              <h2 className="text-base font-semibold">OTP Verify Karein</h2>
-              <p className="text-xs text-muted-foreground">
-                6-digit OTP daalein
-              </p>
+              <h2 className="text-base font-semibold">Verify OTP</h2>
+              <p className="text-xs text-muted-foreground">Enter 6-digit OTP</p>
             </CardHeader>
             <CardContent className="px-5 pb-5">
               {otpHint && (
@@ -407,12 +481,12 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                   {isVerifying ? (
                     <span className="flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Verify ho raha hai...
+                      Verifying...
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
                       <ShieldCheck size={16} />
-                      Login Karein
+                      Verify & Login
                     </span>
                   )}
                 </Button>
@@ -428,7 +502,7 @@ function OtpLoginFlow({ onBack }: { onBack: () => void }) {
                     <RefreshCw size={13} />
                     {resendCooldown > 0
                       ? `Resend OTP (${resendCooldown}s)`
-                      : "OTP Dobara Bhejo"}
+                      : "Resend OTP"}
                   </button>
                 </div>
               </form>
@@ -467,7 +541,7 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
     e.preventDefault();
     const cleaned = mobile.replace(/\D/g, "");
     if (cleaned.length !== 10) {
-      setMobileError("10-digit mobile number daalein");
+      setMobileError("Enter your 10-digit mobile number");
       return;
     }
     setMobileError("");
@@ -509,7 +583,7 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
     e.preventDefault();
     const pin = pins.join("");
     if (pin.length !== 6) {
-      setPinError("6-digit PIN daalein");
+      setPinError("Enter your 6-digit PIN");
       return;
     }
     setIsLogging(true);
@@ -517,20 +591,20 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
     await new Promise((r) => setTimeout(r, 350));
     const result = loginWithPin(mobile.replace(/\D/g, ""), pin);
     if (!result.success) {
-      const msg = result.error ?? "Mobile ya PIN galat hai";
+      const msg = result.error ?? "Mobile number or PIN is incorrect";
       // Map specific error cases
       if (
         msg.toLowerCase().includes("inactive") ||
         msg.toLowerCase().includes("active")
       ) {
-        setPinError("Yeh account inactive hai. Owner se contact karein.");
+        setPinError("This account is inactive. Please contact the owner.");
       } else if (
         msg.toLowerCase().includes("deleted") ||
         msg.toLowerCase().includes("nahi mila")
       ) {
-        setPinError("Account nahi mila.");
+        setPinError("Account not found.");
       } else {
-        setPinError("Mobile ya PIN galat hai");
+        setPinError("Mobile number or PIN is incorrect");
       }
       setPins(["", "", "", "", "", ""]);
       setTimeout(() => inputRefs.current[0]?.focus(), 50);
@@ -559,7 +633,7 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
                   type="button"
                   onClick={onBack}
                   className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                  aria-label="Wapas jao"
+                  aria-label="Go back"
                 >
                   <ArrowLeft size={15} />
                 </button>
@@ -577,7 +651,7 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Apna registered mobile number daalein
+                Enter your registered mobile number
               </p>
             </CardHeader>
             <CardContent className="px-5 pb-5">
@@ -629,7 +703,7 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
                 >
                   <span className="flex items-center gap-2">
                     <KeyRound size={16} />
-                    PIN Daalein
+                    Enter PIN
                   </span>
                 </Button>
               </form>
@@ -658,7 +732,7 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
                     setPins(["", "", "", "", "", ""]);
                   }}
                   className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                  aria-label="Wapas jao"
+                  aria-label="Go back"
                 >
                   <ArrowLeft size={15} />
                 </button>
@@ -669,9 +743,9 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
                   <span className="text-sm font-semibold">+91 {mobile}</span>
                 </div>
               </div>
-              <h2 className="text-base font-semibold">PIN Daalein</h2>
+              <h2 className="text-base font-semibold">Enter PIN</h2>
               <p className="text-xs text-muted-foreground">
-                Apna 6-digit PIN enter karein
+                Enter your 6-digit PIN
               </p>
             </CardHeader>
             <CardContent className="px-5 pb-5">
@@ -722,20 +796,20 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
                   {isLogging ? (
                     <span className="flex items-center gap-2">
                       <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Login ho raha hai...
+                      Logging in...
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
                       <ShieldCheck size={16} />
-                      Login Karein
+                      Login
                     </span>
                   )}
                 </Button>
 
                 <p className="text-center text-xs text-muted-foreground">
-                  PIN bhool gaye?{" "}
+                  Forgot PIN?{" "}
                   <span className="font-medium text-foreground">
-                    Store owner se contact karein.
+                    Please contact the store owner.
                   </span>
                 </p>
               </form>
@@ -751,36 +825,201 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
 
 export function LoginPage() {
   const [mode, setMode] = useState<LoginMode>("select");
+  const [detectedRefCode, setDetectedRefCode] = useState<string>("");
+
+  // Detect ?ref=CODE in URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    if (ref) {
+      const code = ref.trim().toUpperCase();
+      setDetectedRefCode(code);
+      // Auto-navigate to OTP flow when referral code is present
+      setMode("otp");
+      toast.info(`Referral code detected: ${code} — Sign up to earn 10 💎`, {
+        duration: 5000,
+      });
+    }
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/30 flex items-center justify-center p-4">
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{
+        background:
+          "linear-gradient(160deg, #ffffff 0%, #f0f4ff 55%, #ede9fe 100%)",
+      }}
+    >
       <div className="w-full max-w-sm">
-        {/* Logo */}
+        {/* Animated Logo */}
         <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+          initial={{ opacity: 0, y: -20, scale: 0.92 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
           className="text-center mb-7"
         >
+          {/* SVG animated diamond logo */}
           <div className="inline-flex items-center justify-center mb-3">
-            <img
-              src="/assets/diamond-logo.jpg"
-              alt="DIAMOND Logo"
+            <svg
+              width="72"
+              height="72"
+              viewBox="0 0 96 96"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-label="FIFO Bridge Logo"
               style={{
-                height: "80px",
-                width: "auto",
-                borderRadius: "12px",
-                objectFit: "contain",
-                margin: "0 auto",
-                display: "block",
+                filter: "drop-shadow(0 6px 18px rgba(99,102,241,0.30))",
               }}
-            />
+            >
+              <title>FIFO Bridge Logo</title>
+              <defs>
+                <linearGradient
+                  id="login-gem-main"
+                  x1="0"
+                  y1="0"
+                  x2="96"
+                  y2="96"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0%" stopColor="#6366F1" />
+                  <stop offset="50%" stopColor="#8B5CF6" />
+                  <stop offset="100%" stopColor="#EC4899" />
+                </linearGradient>
+                <linearGradient
+                  id="login-gem-top"
+                  x1="48"
+                  y1="8"
+                  x2="48"
+                  y2="40"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0%" stopColor="#a5b4fc" />
+                  <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.7" />
+                </linearGradient>
+                <linearGradient
+                  id="login-gem-left"
+                  x1="8"
+                  y1="36"
+                  x2="48"
+                  y2="88"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0%" stopColor="#818cf8" />
+                  <stop offset="100%" stopColor="#6366F1" stopOpacity="0.8" />
+                </linearGradient>
+                <linearGradient
+                  id="login-gem-right"
+                  x1="88"
+                  y1="36"
+                  x2="48"
+                  y2="88"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0%" stopColor="#c084fc" />
+                  <stop offset="100%" stopColor="#EC4899" stopOpacity="0.9" />
+                </linearGradient>
+                <radialGradient id="login-sparkle" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="#a5b4fc" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              {/* Gem facets */}
+              <polygon
+                points="48,8 88,36 48,88 8,36"
+                fill="url(#login-gem-main)"
+              />
+              <polygon
+                points="48,8 88,36 48,40 8,36"
+                fill="url(#login-gem-top)"
+                opacity="0.9"
+              />
+              <polygon
+                points="8,36 48,40 48,88"
+                fill="url(#login-gem-left)"
+                opacity="0.8"
+              />
+              <polygon
+                points="88,36 48,40 48,88"
+                fill="url(#login-gem-right)"
+                opacity="0.8"
+              />
+              {/* Facet lines */}
+              <line
+                x1="8"
+                y1="36"
+                x2="88"
+                y2="36"
+                stroke="white"
+                strokeWidth="0.8"
+                strokeOpacity="0.4"
+              />
+              <line
+                x1="48"
+                y1="8"
+                x2="48"
+                y2="88"
+                stroke="white"
+                strokeWidth="0.6"
+                strokeOpacity="0.25"
+              />
+              <line
+                x1="48"
+                y1="8"
+                x2="8"
+                y2="36"
+                stroke="white"
+                strokeWidth="0.8"
+                strokeOpacity="0.3"
+              />
+              <line
+                x1="48"
+                y1="8"
+                x2="88"
+                y2="36"
+                stroke="white"
+                strokeWidth="0.8"
+                strokeOpacity="0.3"
+              />
+              {/* Sparkle highlight */}
+              <ellipse
+                cx="34"
+                cy="25"
+                rx="7"
+                ry="5"
+                fill="url(#login-sparkle)"
+                transform="rotate(-20, 34, 25)"
+              />
+              {/* FB text */}
+              <text
+                x="48"
+                y="51"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontFamily="system-ui, -apple-system, sans-serif"
+                fontSize="17"
+                fontWeight="800"
+                fill="white"
+                opacity="0.92"
+                letterSpacing="1"
+              >
+                FB
+              </text>
+            </svg>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1
+            className="text-2xl font-bold"
+            style={{
+              background:
+                "linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
             Save Shop System
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Apni role chunein aur login karein
+            Choose your role and login
           </p>
         </motion.div>
 
@@ -805,7 +1044,10 @@ export function LoginPage() {
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.25 }}
             >
-              <OtpLoginFlow onBack={() => setMode("select")} />
+              <OtpLoginFlow
+                onBack={() => setMode("select")}
+                initialReferralCode={detectedRefCode}
+              />
             </motion.div>
           )}
 

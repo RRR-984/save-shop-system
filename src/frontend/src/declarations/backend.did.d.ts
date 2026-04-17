@@ -10,8 +10,46 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AddShopResult {
+  'shopId' : string,
+  'error' : [] | [string],
+  'success' : boolean,
+}
+export interface DeleteShopResult { 'success' : boolean }
+export interface OwnerStats {
+  'totalProducts' : bigint,
+  'totalProfit' : bigint,
+  'totalSales' : bigint,
+  'totalCustomers' : bigint,
+  'shopStats' : Array<ShopStats>,
+  'totalTransactions' : bigint,
+}
+export interface ShopMeta {
+  'id' : string,
+  'isDeleted' : boolean,
+  'city' : string,
+  'name' : string,
+  'createdAt' : string,
+  'address' : string,
+  'ownerMobile' : string,
+}
+export interface ShopStats {
+  'shopId' : string,
+  'sales' : bigint,
+  'shopName' : string,
+  'profit' : bigint,
+  'transactions' : bigint,
+  'products' : bigint,
+  'customers' : bigint,
+}
+export interface UpdateShopResult {
+  'error' : [] | [string],
+  'success' : boolean,
+}
 export interface UserProfile { 'name' : string }
 export interface _SERVICE {
+  'addShop' : ActorMethod<[string, string, string, string], AddShopResult>,
+  'deleteShop' : ActorMethod<[string], DeleteShopResult>,
   'getAuditLogs' : ActorMethod<[string], string>,
   'getBatches' : ActorMethod<[string], string>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
@@ -19,21 +57,27 @@ export interface _SERVICE {
   'getCustomerOrders' : ActorMethod<[string], string>,
   'getCustomers' : ActorMethod<[string], string>,
   'getDrafts' : ActorMethod<[string], string>,
+  'getFeedback' : ActorMethod<[string], string>,
   'getInvoices' : ActorMethod<[string], string>,
   'getLowPriceAlertLogs' : ActorMethod<[string], string>,
+  'getOwnerStats' : ActorMethod<[string], OwnerStats>,
   'getPayments' : ActorMethod<[string], string>,
   'getProducts' : ActorMethod<[string], string>,
   'getPurchaseOrders' : ActorMethod<[string], string>,
+  'getReferralCodes' : ActorMethod<[string], string>,
+  'getReferralSignups' : ActorMethod<[string], string>,
   'getReminderLogs' : ActorMethod<[string], string>,
   'getReminderRequests' : ActorMethod<[string], string>,
   'getReturns' : ActorMethod<[string], string>,
   'getSettings' : ActorMethod<[string], string>,
+  'getShop' : ActorMethod<[string], [] | [ShopMeta]>,
   'getShopUnits' : ActorMethod<[string], string>,
   'getTransactions' : ActorMethod<[string], string>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUsers' : ActorMethod<[string], string>,
   'getVendorRateHistory' : ActorMethod<[string], string>,
   'getVendors' : ActorMethod<[string], string>,
+  'listShopsForOwner' : ActorMethod<[string], Array<ShopMeta>>,
   'saveAuditLogs' : ActorMethod<[string, string], undefined>,
   'saveBatches' : ActorMethod<[string, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
@@ -41,11 +85,14 @@ export interface _SERVICE {
   'saveCustomerOrders' : ActorMethod<[string, string], undefined>,
   'saveCustomers' : ActorMethod<[string, string], undefined>,
   'saveDrafts' : ActorMethod<[string, string], undefined>,
+  'saveFeedback' : ActorMethod<[string, string], undefined>,
   'saveInvoices' : ActorMethod<[string, string], undefined>,
   'saveLowPriceAlertLogs' : ActorMethod<[string, string], undefined>,
   'savePayments' : ActorMethod<[string, string], undefined>,
   'saveProducts' : ActorMethod<[string, string], undefined>,
   'savePurchaseOrders' : ActorMethod<[string, string], undefined>,
+  'saveReferralCodes' : ActorMethod<[string, string], undefined>,
+  'saveReferralSignups' : ActorMethod<[string, string], undefined>,
   'saveReminderLogs' : ActorMethod<[string, string], undefined>,
   'saveReminderRequests' : ActorMethod<[string, string], undefined>,
   'saveReturns' : ActorMethod<[string, string], undefined>,
@@ -55,6 +102,10 @@ export interface _SERVICE {
   'saveUsers' : ActorMethod<[string, string], undefined>,
   'saveVendorRateHistory' : ActorMethod<[string, string], undefined>,
   'saveVendors' : ActorMethod<[string, string], undefined>,
+  'updateShop' : ActorMethod<
+    [string, string, string, string],
+    UpdateShopResult
+  >,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

@@ -44,4 +44,29 @@ export const mockBackend: backendInterface = {
   saveCustomerOrders: async (_shopId: string, _data: string) => undefined,
   getVendorRateHistory: async (_shopId: string) => JSON.stringify([]),
   saveVendorRateHistory: async (_shopId: string, _data: string) => undefined,
+  getFeedback: async (_shopId: string) => JSON.stringify([]),
+  saveFeedback: async (_shopId: string, _data: string) => undefined,
+  getReferralCodes: async (_shopId: string) => JSON.stringify([]),
+  saveReferralCodes: async (_shopId: string, _data: string) => undefined,
+  getReferralSignups: async (_shopId: string) => JSON.stringify([]),
+  saveReferralSignups: async (_shopId: string, _data: string) => undefined,
+  // Multi-shop system
+  addShop: async (_ownerMobile: string, _shopName: string, _address: string, _city: string) => ({
+    success: true,
+    shopId: `shop_${Date.now()}`,
+  }),
+  deleteShop: async (_shopId: string) => ({ success: true }),
+  getShop: async (_shopId: string) => null,
+  listShopsForOwner: async (_mobile: string) => [],
+  updateShop: async (_shopId: string, _name: string, _address: string, _city: string) => ({
+    success: true,
+  }),
+  getOwnerStats: async (_mobile: string) => ({
+    totalProducts: BigInt(0),
+    totalProfit: BigInt(0),
+    totalSales: BigInt(0),
+    totalCustomers: BigInt(0),
+    shopStats: [],
+    totalTransactions: BigInt(0),
+  }),
 };

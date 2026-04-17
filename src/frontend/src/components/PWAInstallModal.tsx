@@ -88,7 +88,7 @@ export function PWAInstallModal() {
             {/* Logo */}
             <div className="flex justify-center mb-4">
               <img
-                src="/assets/diamond-logo.jpg"
+                src="/assets/fb-logo.jpg"
                 alt="FIFO Bridge"
                 className="w-12 h-12 rounded-xl object-contain shadow-md"
               />

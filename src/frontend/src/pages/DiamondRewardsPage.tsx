@@ -185,7 +185,7 @@ export function DiamondRewardsPage() {
             </h1>
             <p className="text-violet-200 text-sm">
               {isHi
-                ? "10 transactions par 1 💎 milta hai"
+                ? "10 transactions पर 1 💎 मिलता है"
                 : "Earn 1 💎 for every 10 transactions"}
             </p>
           </div>
@@ -412,7 +412,7 @@ export function DiamondRewardsPage() {
               </p>
               <p className="text-xs text-center px-6 text-muted-foreground/70">
                 {isHi
-                  ? "10 transactions complete karein — 1 💎 milega"
+                  ? "Complete 10 transactions to earn 1 💎"
                   : "Complete 10 transactions to start earning — 1 💎 per 10 transactions"}
               </p>
             </div>
@@ -431,8 +431,8 @@ export function DiamondRewardsPage() {
                     <p className="text-sm font-semibold text-foreground truncate">
                       {r.productId === "sale"
                         ? isHi
-                          ? `बिक्री — ${r.productName}`
-                          : `Sale — ${r.productName}`
+                          ? "Transaction Cycle"
+                          : "Transaction Cycle"
                         : r.productName}
                     </p>
                     <p className="text-[11px] text-muted-foreground">

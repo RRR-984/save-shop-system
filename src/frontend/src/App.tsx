@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useEffect, useRef, useState } from "react";
+import { FirstTimeUserWelcomePopup } from "./components/FirstTimeUserWelcomePopup";
 import { PWAInstallModal } from "./components/PWAInstallModal";
-import { Sidebar } from "./components/Sidebar";
+import { MemoSidebar as Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LanguageProvider, useLanguage } from "./context/LanguageContext";
@@ -15,16 +16,22 @@ import { CustomerOrdersPage } from "./pages/CustomerOrdersPage";
 import { CustomersPage } from "./pages/CustomersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DiamondRewardsPage } from "./pages/DiamondRewardsPage";
+import { DraftsPage } from "./pages/DraftsPage";
+import { FeedbackPage } from "./pages/FeedbackPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { LowPriceAlertLogPage } from "./pages/LowPriceAlertLogPage";
+import { OwnerDashboardPage } from "./pages/OwnerDashboardPage";
 import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { RankingsPage } from "./pages/RankingsPage";
+import { ReferralPage } from "./pages/ReferralPage";
 import { ReminderLogPage } from "./pages/ReminderLogPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ReturnsPage } from "./pages/ReturnsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ShopBoardPage } from "./pages/ShopBoardPage";
+import { StaffAttendancePage } from "./pages/StaffAttendancePage";
 import { StaffCreditReportPage } from "./pages/StaffCreditReportPage";
 import { StaffManagementPage } from "./pages/StaffManagementPage";
 import { StaffPerformancePage } from "./pages/StaffPerformancePage";
@@ -60,6 +67,7 @@ const PAGE_TITLES: Record<NavPage, string> = {
   inventory: "Inventory",
   stock: "Stock In / Out",
   billing: "Billing",
+  drafts: "Draft Sales",
   customers: "Customers",
   reports: "Reports",
   admin: "Admin Panel",
@@ -78,6 +86,11 @@ const PAGE_TITLES: Record<NavPage, string> = {
   "cash-counter": "Cash Counter",
   "diamond-rewards": "💎 Diamond Rewards",
   rankings: "🏆 Rankings",
+  "shop-board": "📊 Live Board",
+  "feedback-page": "💬 Feedback",
+  "referral-page": "🔗 Refer & Earn",
+  attendance: "📅 Attendance",
+  "owner-dashboard": "🏪 Owner Overview",
 };
 
 function AppContent() {
@@ -86,9 +99,20 @@ function AppContent() {
   const [navHistory, setNavHistory] = useState<NavPage[]>(initial.history);
   const [transitioning, setTransitioning] = useState(false);
   const [pageParams, setPageParams] = useState<Record<string, unknown>>({});
-  const { isLoading } = useStore();
+  const { isLoading, actorError, referralCodes, recordReferralSignup } =
+    useStore();
   const [loadingTooLong, setLoadingTooLong] = useState(false);
+
+  // Dispatch 'app-ready' once the store finishes loading so main.tsx can hide the splash
+  useEffect(() => {
+    if (!isLoading) {
+      window.dispatchEvent(new Event("app-ready"));
+    }
+  }, [isLoading]);
   const pendingPageRef = useRef<NavPage | null>(null);
+  // Ref mirrors keep the popstate handler free of stale closure issues
+  const navHistoryRef = useRef<NavPage[]>(initial.history);
+  const currentPageRef = useRef<NavPage>(initial.page);
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -100,8 +124,38 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, [isLoading]);
 
+  // Process any referral code that was saved to localStorage during login
+  // (LoginPage cannot call useStore() since it renders outside StoreProvider)
+  useEffect(() => {
+    if (isLoading) return;
+    try {
+      const raw = localStorage.getItem("pending_referral");
+      if (!raw) return;
+      localStorage.removeItem("pending_referral");
+      const pending = JSON.parse(raw) as {
+        code: string;
+        newUserId: string;
+        shopName: string;
+        mobile: string;
+      };
+      const matchedCode = referralCodes.find((rc) => rc.code === pending.code);
+      if (matchedCode) {
+        recordReferralSignup(
+          matchedCode,
+          pending.newUserId,
+          pending.shopName,
+          pending.mobile,
+        );
+      }
+    } catch {
+      /* ignore parse / storage errors */
+    }
+  }, [isLoading, referralCodes, recordReferralSignup]);
+
   useEffect(() => {
     writeNavState(currentPage, navHistory);
+    navHistoryRef.current = navHistory;
+    currentPageRef.current = currentPage;
   }, [currentPage, navHistory]);
 
   useEffect(() => {
@@ -110,14 +164,14 @@ function AppContent() {
 
   useEffect(() => {
     const onPopState = () => {
-      if (navHistory.length > 0) {
-        const history = [...navHistory];
+      const history = [...navHistoryRef.current];
+      if (history.length > 0) {
         const prev = history.pop()!;
         setNavHistory(history);
         doTransition(prev);
       } else {
         window.history.pushState(
-          { page: currentPage },
+          { page: currentPageRef.current },
           "",
           window.location.href,
         );
@@ -125,7 +179,7 @@ function AppContent() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  });
+  }, []);
 
   const doTransition = (nextPage: NavPage) => {
     setTransitioning(true);
@@ -164,9 +218,11 @@ function AppContent() {
           />
         );
       case "stock":
-        return <StockPage />;
+        return <StockPage onNavigate={handleNavigate} />;
       case "billing":
         return <BillingPage onNavigate={handleNavigate} />;
+      case "drafts":
+        return <DraftsPage onNavigate={handleNavigate} />;
       case "customers":
         return <CustomersPage />;
       case "reports":
@@ -209,10 +265,46 @@ function AppContent() {
         return <DiamondRewardsPage />;
       case "rankings":
         return <RankingsPage />;
+      case "shop-board":
+        return <ShopBoardPage onNavigate={handleNavigate} />;
+      case "feedback-page":
+        return <FeedbackPage />;
+      case "referral-page":
+        return <ReferralPage />;
+      case "attendance":
+        return <StaffAttendancePage />;
+      case "owner-dashboard":
+        return <OwnerDashboardPage onNavigate={handleNavigate} />;
       default:
         return <DashboardPage onNavigate={handleNavigate} />;
     }
   };
+
+  if (actorError) {
+    return (
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background p-6"
+        data-ocid="app.actor_error_state"
+      >
+        <div className="text-4xl">🔌</div>
+        <p className="text-foreground font-semibold text-base text-center">
+          Connection failed
+        </p>
+        <p className="text-muted-foreground text-sm text-center max-w-xs">
+          Could not connect to the backend. Please check your internet
+          connection and try again.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+          data-ocid="app.actor_error_retry_button"
+        >
+          Tap to Retry
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -221,13 +313,11 @@ function AppContent() {
         data-ocid="app.loading_state"
       >
         <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-        <p className="text-muted-foreground text-sm">
-          Data load ho raha hai...
-        </p>
+        <p className="text-muted-foreground text-sm">Loading data...</p>
         {loadingTooLong && (
           <div className="flex flex-col items-center gap-2 mt-2">
             <p className="text-xs text-muted-foreground">
-              Kuch zyada time lag raha hai...
+              Taking longer than usual...
             </p>
             <button
               type="button"
@@ -235,7 +325,7 @@ function AppContent() {
               className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
               data-ocid="app.reload_button"
             >
-              Reload karein
+              Reload
             </button>
           </div>
         )}
@@ -245,6 +335,14 @@ function AppContent() {
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* Top progress bar — shows during initial data load */}
+      {isLoading && (
+        <div
+          className="fixed top-0 left-0 h-[3px] bg-primary z-[9999] transition-all duration-300"
+          style={{ width: "70%", animation: "none" }}
+          data-ocid="app.top_progress_bar"
+        />
+      )}
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-auto">
@@ -281,9 +379,11 @@ function AppContent() {
           type="button"
           data-ocid="fab.new_sale.button"
           onClick={() => handleNavigate("billing")}
-          className="fixed bottom-6 right-5 z-40 flex items-center gap-2 px-5 py-3.5 rounded-full font-bold text-sm text-white shadow-lg hover:opacity-90 active:scale-95 transition-all duration-150"
+          className="new-sale-fab flex items-center gap-2 px-5 py-3.5 rounded-full font-bold text-sm text-white shadow-xl hover:opacity-90 active:scale-95 transition-all duration-150"
           style={{
             background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+            boxShadow:
+              "0 8px 32px 0 rgba(37,99,235,0.45), 0 2px 8px 0 rgba(0,0,0,0.18)",
           }}
           aria-label="New Sale"
         >
@@ -293,6 +393,7 @@ function AppContent() {
 
       <Toaster position="bottom-right" richColors />
       <PWAInstallModal />
+      <FirstTimeUserWelcomePopup />
     </div>
   );
 }

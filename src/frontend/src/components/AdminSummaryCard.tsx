@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Eye, EyeOff, Trophy } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 
@@ -54,7 +54,7 @@ function isWithinFilter(dateStr: string, filter: DateFilter): boolean {
   return true;
 }
 
-export function AdminSummaryCard() {
+export function AdminSummaryCardInner() {
   const { currentUser } = useAuth();
   const { invoices } = useStore();
   const [filter, setFilter] = useState<DateFilter>("today");
@@ -177,7 +177,7 @@ export function AdminSummaryCard() {
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+              className={`px-3 py-1 text-xs font-medium rounded-md btn-hover transition-all ${
                 filter === f
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -210,7 +210,7 @@ export function AdminSummaryCard() {
               data-ocid="admin.staff.empty_state"
               className="text-center py-6 text-sm text-muted-foreground bg-secondary/50 rounded-xl border border-border"
             >
-              Is period mein koi sale nahi
+              No sales in this period
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border">
@@ -301,7 +301,7 @@ export function AdminSummaryCard() {
             B. Totals
           </h3>
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-xl p-3 flex flex-col gap-1">
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-xl p-3 flex flex-col gap-1 card-interactive">
               <span className="text-lg">🔵</span>
               <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
                 Total Sale
@@ -310,7 +310,7 @@ export function AdminSummaryCard() {
                 {showAmt(totals.totalSale)}
               </span>
             </div>
-            <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-xl p-3 flex flex-col gap-1">
+            <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-xl p-3 flex flex-col gap-1 card-interactive">
               <span className="text-lg">🔴</span>
               <span className="text-[11px] text-red-600 dark:text-red-400 font-medium">
                 Total Discount
@@ -319,7 +319,7 @@ export function AdminSummaryCard() {
                 {showAmt(totals.totalDiscount)}
               </span>
             </div>
-            <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/40 rounded-xl p-3 flex flex-col gap-1">
+            <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/40 rounded-xl p-3 flex flex-col gap-1 card-interactive">
               <span className="text-lg">🟢</span>
               <span className="text-[11px] text-green-600 dark:text-green-400 font-medium">
                 Extra Profit
@@ -339,7 +339,7 @@ export function AdminSummaryCard() {
             C. Final Summary
           </h3>
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/40 rounded-xl p-4 flex flex-col gap-1">
+            <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/40 rounded-xl p-4 flex flex-col gap-1 card-interactive">
               <span className="text-2xl">💚</span>
               <span className="text-xs text-green-600 dark:text-green-400 font-medium">
                 Net Income
@@ -351,7 +351,7 @@ export function AdminSummaryCard() {
                 Actual collected
               </span>
             </div>
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-4 flex flex-col gap-1">
+            <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-4 flex flex-col gap-1 card-interactive">
               <span className="text-2xl">📈</span>
               <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                 Total Profit
@@ -371,3 +371,5 @@ export function AdminSummaryCard() {
     </div>
   );
 }
+
+export const AdminSummaryCard = React.memo(AdminSummaryCardInner);

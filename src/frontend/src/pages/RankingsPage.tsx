@@ -33,7 +33,7 @@ function RankRow({ row, rank }: { row: RankRow; rank: number }) {
   const medal = MEDAL[rank];
   return (
     <div
-      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all duration-150 ${getRankBg(rank)}`}
+      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl rank-row-interactive ${getRankBg(rank)}`}
       data-ocid={`rankings.row.${rank}`}
     >
       <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
@@ -217,11 +217,11 @@ export function RankingsPage() {
   };
 
   const emptyMessages: Record<TabKey, string> = {
-    products: "Koi bhi sales record nahi mila",
-    profit: "Profit data available nahi hai",
-    customers: "Customer purchase history nahi mili",
-    vendors: "Vendor order history nahi mila",
-    staff: "Staff sales data nahi mila",
+    products: "No sales records found",
+    profit: "Profit data is not available",
+    customers: "No customer purchase history found",
+    vendors: "No vendor order history found",
+    staff: "No staff sales data found",
   };
 
   const rows = dataMap[activeTab];

@@ -19,6 +19,7 @@ import {
   Eye,
   EyeOff,
   Info,
+  LayoutGrid,
   Lock,
   Package,
   Pencil,
@@ -37,7 +38,11 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
-import type { AppConfig, FeatureFlags } from "../types/store";
+import type {
+  AppConfig,
+  DashboardSectionConfig,
+  FeatureFlags,
+} from "../types/store";
 import { STORAGE_KEYS, saveData } from "../utils/localStorage";
 
 interface FeatureItem {
@@ -51,43 +56,43 @@ const FEATURE_LIST: FeatureItem[] = [
   {
     key: "expiry",
     label: "Expiry Date Tracking",
-    description: "Products ke expiry dates track karo aur alerts pao",
+    description: "Track product expiry dates and receive alerts",
     icon: "📅",
   },
   {
     key: "deadStock",
     label: "Dead Stock Detection",
-    description: "Jo products nahin bik rahe unhe identify karo",
+    description: "Identify products that are not selling",
     icon: "📦",
   },
   {
     key: "rental",
     label: "Rental / Lending Module",
-    description: "Kiraye ya udhaari wali items ka hisaab rakhna",
+    description: "Manage rental and lending items",
     icon: "🔑",
   },
   {
     key: "service",
     label: "Service / Repair Orders",
-    description: "Service aur repair orders manage karo",
+    description: "Manage service and repair orders",
     icon: "🔧",
   },
   {
     key: "staff",
     label: "Staff Management",
-    description: "Staff performance, credit aur bonus track karo",
+    description: "Track staff performance, credit, and bonuses",
     icon: "👥",
   },
   {
     key: "credit",
-    label: "Credit / Udhaar Tracking",
-    description: "Customer credit aur due payments ka hisaab rakhna",
+    label: "Credit / Due Amount Tracking",
+    description: "Track customer credit and due payments",
     icon: "💳",
   },
   {
     key: "discount",
     label: "Discount & Pricing Controls",
-    description: "Discount rules, min price lock aur staff pricing controls",
+    description: "Discount rules, min price lock, and staff pricing controls",
     icon: "🏷️",
   },
 ];
@@ -108,6 +113,7 @@ export function SettingsPage() {
     featureFlags,
     saveAppConfig,
     setFeatureFlag,
+    setDashboardSection,
     updateShopSettings,
     shopUnits,
     addShopUnit,
@@ -216,7 +222,7 @@ export function SettingsPage() {
 
     setImportConfirming(false);
     setPendingImport(null);
-    toast.success("Data restore ho gaya — page reload karein");
+    toast.success("Data restored successfully — please reload the page");
     setTimeout(() => window.location.reload(), 1500);
   }
 
@@ -256,6 +262,14 @@ export function SettingsPage() {
     );
   }
 
+  async function handleDashboardSectionToggle(
+    key: keyof DashboardSectionConfig,
+    value: boolean,
+  ) {
+    await setDashboardSection(key, value);
+    toast.success(`Dashboard section ${value ? "shown" : "hidden"}`);
+  }
+
   async function handleMixedUnitsToggle(value: boolean) {
     await saveAppConfig({ allowMixedUnits: value } as Partial<AppConfig>);
     updateShopSettings({ allowMixedUnits: value });
@@ -277,7 +291,7 @@ export function SettingsPage() {
   async function handleCustomDays() {
     const days = Number.parseInt(customDays, 10);
     if (Number.isNaN(days) || days < 1) {
-      toast.error("Valid number of days enter karein");
+      toast.error("Please enter a valid number of days");
       return;
     }
     await saveAppConfig({
@@ -303,7 +317,7 @@ export function SettingsPage() {
   async function handleSavePin() {
     const trimmed = pinValue.trim();
     if (trimmed.length < 4 || trimmed.length > 6 || !/^\d+$/.test(trimmed)) {
-      toast.error("PIN 4-6 digits ka hona chahiye");
+      toast.error("PIN must be 4-6 digits");
       return;
     }
     setPinSaving(true);
@@ -316,17 +330,17 @@ export function SettingsPage() {
     const trimmed = newUnit.trim();
     if (!trimmed) return;
     if (shopUnits.some((u) => u.name.toLowerCase() === trimmed.toLowerCase())) {
-      toast.error("Yeh unit pehle se exist karti hai");
+      toast.error("This unit already exists");
       return;
     }
     addShopUnit(trimmed);
     setNewUnit("");
-    toast.success(`Unit "${trimmed}" add ho gayi`);
+    toast.success(`Unit "${trimmed}" added`);
   }
 
   function handleDeleteUnit(id: string, name: string) {
     deleteShopUnit(id);
-    toast.success(`Unit "${name}" delete ho gayi`);
+    toast.success(`Unit "${name}" deleted`);
   }
 
   function handleAddCategory() {
@@ -335,12 +349,12 @@ export function SettingsPage() {
     if (
       categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())
     ) {
-      toast.error("Yeh category pehle se exist karti hai");
+      toast.error("This category already exists");
       return;
     }
     addCategory(trimmed);
     setNewCategory("");
-    toast.success(`Category "${trimmed}" add ho gayi`);
+    toast.success(`Category "${trimmed}" added`);
   }
 
   function handleStartEditCat(id: string, name: string) {
@@ -359,7 +373,7 @@ export function SettingsPage() {
 
   function handleDeleteCategory(id: string, name: string) {
     deleteCategory(id);
-    toast.success(`Category "${name}" delete ho gayi`);
+    toast.success(`Category "${name}" deleted`);
   }
 
   const currentDeadStockValue = isCustomDeadStock
@@ -377,7 +391,7 @@ export function SettingsPage() {
           <div>
             <h1 className="text-lg font-bold text-foreground">App Settings</h1>
             <p className="text-xs text-muted-foreground">
-              Apni shop ke liye features aur settings manage karein
+              Manage features and settings for your shop
             </p>
           </div>
         </div>
@@ -392,7 +406,7 @@ export function SettingsPage() {
               <CardTitle className="text-base">App Settings</CardTitle>
             </div>
             <CardDescription>
-              Shop ki basic settings configure karein
+              Configure your shop's basic settings
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -414,7 +428,7 @@ export function SettingsPage() {
               <div className="flex-1">
                 <Label className="text-sm font-medium">Allow Mixed Units</Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Length (meter) + Weight (kg) dono ek saath use karein
+                  Use both Length (meter) and Weight (kg) together
                 </p>
               </div>
               <Switch
@@ -431,7 +445,7 @@ export function SettingsPage() {
               <div>
                 <Label className="text-sm font-medium">Dead Stock Period</Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Itne time mein na bika toh product "Dead Stock" maana jayega
+                  Unsold for this period will be flagged as "Dead Stock"
                 </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -457,7 +471,7 @@ export function SettingsPage() {
                     data-ocid="settings.custom_days.input"
                     type="number"
                     min="1"
-                    placeholder="Days enter karein"
+                    placeholder="Enter number of days"
                     value={customDays}
                     onChange={(e) => setCustomDays(e.target.value)}
                     className="max-w-[180px] h-8 text-sm"
@@ -484,7 +498,7 @@ export function SettingsPage() {
               <CardTitle className="text-base">Feature Control</CardTitle>
             </div>
             <CardDescription>
-              Features enable/disable karein — data kabhi delete nahi hoga
+              Enable or disable features — your data is never deleted
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-1">
@@ -492,9 +506,8 @@ export function SettingsPage() {
             <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 mb-4">
               <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
               <p className="text-xs text-blue-700 dark:text-blue-300">
-                Feature disable karne se sirf UI hide hoti hai — koi bhi data
-                delete nahi hota. Baad mein feature wapas ON karne par sab data
-                waisa hi rahega.
+                Disabling a feature only hides the UI — your data is never
+                deleted. You can re-enable any feature later without data loss.
               </p>
             </div>
 
@@ -547,15 +560,239 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* ── Dashboard Settings (Owner only) ── */}
+        {isOwner && (
+          <Card data-ocid="settings.dashboard_sections.panel">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="w-4 h-4 text-primary" />
+                <CardTitle className="text-base">Dashboard Settings</CardTitle>
+              </div>
+              <CardDescription>
+                Choose which sections to show on your dashboard. Hidden sections
+                still update in the background.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 mb-4">
+                <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Hiding a section only removes it from view — data continues to
+                  update in the background. Turn it back on anytime.
+                </p>
+              </div>
+
+              {(
+                [
+                  {
+                    group: "Overview",
+                    items: [
+                      {
+                        key: "marqueeAlertBar" as const,
+                        icon: "📢",
+                        label: "Marquee Alert Bar",
+                        description: "Scrolling ticker with live messages",
+                      },
+                      {
+                        key: "adBannerCarousel" as const,
+                        icon: "🎠",
+                        label: "Ad Banner Carousel",
+                        description: "Promotional banner slideshow",
+                      },
+                      {
+                        key: "quickActions" as const,
+                        icon: "⚡",
+                        label: "Quick Actions",
+                        description: "Shortcut buttons for common actions",
+                      },
+                      {
+                        key: "smartFilterBar" as const,
+                        icon: "🔽",
+                        label: "Smart Filter Bar",
+                        description:
+                          "Quick filters for Dead Stock, Low Stock etc.",
+                      },
+                    ],
+                  },
+                  {
+                    group: "Analytics",
+                    items: [
+                      {
+                        key: "todaySummary" as const,
+                        icon: "📊",
+                        label: "Today's Summary",
+                        description: "Total sales, profit, cash/UPI breakdown",
+                      },
+                      {
+                        key: "topPerformance" as const,
+                        icon: "⭐",
+                        label: "Top Performance Card",
+                        description: "Top selling product, customer, vendor",
+                      },
+                      {
+                        key: "smartAlerts" as const,
+                        icon: "🚨",
+                        label: "Smart Alerts",
+                        description:
+                          "Low stock, out of stock, customer due alerts",
+                      },
+                      {
+                        key: "smartInsights" as const,
+                        icon: "💡",
+                        label: "Smart Insights",
+                        description:
+                          "Most selling, high profit, low price attempt insights",
+                      },
+                      {
+                        key: "smartInsightsCards" as const,
+                        icon: "🃏",
+                        label: "Smart Insights Cards",
+                        description: "Compact horizontal insights cards",
+                      },
+                    ],
+                  },
+                  {
+                    group: "Inventory & Finance",
+                    items: [
+                      {
+                        key: "productsList" as const,
+                        icon: "📦",
+                        label: "Products List",
+                        description: "Products ranked by sales",
+                      },
+                      {
+                        key: "stockControl" as const,
+                        icon: "🏷️",
+                        label: "Stock Control",
+                        description:
+                          "Low stock, out of stock, slow moving counts",
+                      },
+                      {
+                        key: "inventoryHealth" as const,
+                        icon: "🩺",
+                        label: "Inventory Health",
+                        description: "Expiry alerts and dead stock trends",
+                      },
+                      {
+                        key: "customerDue" as const,
+                        icon: "💳",
+                        label: "Customer Due",
+                        description: "Customers with pending payments",
+                      },
+                      {
+                        key: "pendingOrders" as const,
+                        icon: "🛒",
+                        label: "Pending Orders",
+                        description:
+                          "Vendor and customer orders awaiting action",
+                      },
+                    ],
+                  },
+                  {
+                    group: "Rewards & Activity",
+                    items: [
+                      {
+                        key: "diamondRewards" as const,
+                        icon: "💎",
+                        label: "Diamond Rewards",
+                        description: "Your diamond count and progress",
+                      },
+                      {
+                        key: "recentActivity" as const,
+                        icon: "🕐",
+                        label: "Recent Activity Feed",
+                        description: "Last 10 transactions",
+                      },
+                      {
+                        key: "tutorialGuide" as const,
+                        icon: "🎓",
+                        label: "Tutorial Guide",
+                        description: "App tutorial cards",
+                      },
+                      {
+                        key: "sponsoredAd" as const,
+                        icon: "📣",
+                        label: "Sponsored Ad",
+                        description: "Sponsored partner card",
+                      },
+                    ],
+                  },
+                ] as {
+                  group: string;
+                  items: {
+                    key: keyof DashboardSectionConfig;
+                    icon: string;
+                    label: string;
+                    description: string;
+                  }[];
+                }[]
+              ).map((section, gIdx) => (
+                <div key={section.group} className={gIdx > 0 ? "mt-4" : ""}>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
+                    {section.group}
+                  </p>
+                  <div className="space-y-2">
+                    {section.items.map((item, idx) => {
+                      const enabled =
+                        appConfig.dashboardSections?.[item.key] !== false;
+                      return (
+                        <div
+                          key={item.key}
+                          data-ocid={`settings.dashboard.item.${gIdx * 10 + idx + 1}`}
+                          className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <span className="text-lg flex-shrink-0 mt-0.5">
+                              {item.icon}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-medium text-foreground">
+                                  {item.label}
+                                </span>
+                                <Badge
+                                  variant={enabled ? "default" : "secondary"}
+                                  className={`text-xs px-1.5 py-0 ${
+                                    enabled
+                                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800"
+                                      : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {enabled ? "Visible" : "Hidden"}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {item.description}
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            data-ocid={`settings.dashboard.switch.${gIdx * 10 + idx + 1}`}
+                            checked={enabled}
+                            onCheckedChange={(val) =>
+                              handleDashboardSectionToggle(item.key, val)
+                            }
+                            className="ml-3 flex-shrink-0"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* ── Section 3: Edit Units ── */}
         <Card data-ocid="settings.units.panel">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Package className="w-4 h-4 text-primary" />
-              <CardTitle className="text-base">Units Manage Karein</CardTitle>
+              <CardTitle className="text-base">Manage Units</CardTitle>
             </div>
             <CardDescription>
-              Shop ke liye measurement units add ya delete karein
+              Add or delete measurement units for your shop
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -563,7 +800,7 @@ export function SettingsPage() {
             <div className="flex gap-2">
               <Input
                 data-ocid="settings.unit.input"
-                placeholder="Naya unit likhein (jaise: kg, meter, piece)"
+                placeholder="Add new unit (e.g. kg, meter, piece)"
                 value={newUnit}
                 onChange={(e) => setNewUnit(e.target.value)}
                 onKeyDown={(e) => {
@@ -588,7 +825,7 @@ export function SettingsPage() {
                 data-ocid="settings.units.empty_state"
               >
                 <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                Koi unit add nahi ki gayi
+                No units added yet
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -620,12 +857,10 @@ export function SettingsPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Tag className="w-4 h-4 text-primary" />
-              <CardTitle className="text-base">
-                Categories Manage Karein
-              </CardTitle>
+              <CardTitle className="text-base">Manage Categories</CardTitle>
             </div>
             <CardDescription>
-              Product categories add, edit ya delete karein
+              Add, edit, or delete product categories
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -633,7 +868,7 @@ export function SettingsPage() {
             <div className="flex gap-2">
               <Input
                 data-ocid="settings.category.input"
-                placeholder="Naya category likhein (jaise: Electronics, Food)"
+                placeholder="Add new category (e.g. Electronics, Food)"
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
                 onKeyDown={(e) => {
@@ -658,7 +893,7 @@ export function SettingsPage() {
                 data-ocid="settings.categories.empty_state"
               >
                 <Tag className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                Koi category add nahi ki gayi
+                No categories added yet
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -743,7 +978,7 @@ export function SettingsPage() {
               </CardTitle>
             </div>
             <CardDescription>
-              Staff ko minimum profit se neeche bechne se rokne ka system
+              Prevent staff from selling below the minimum profit price
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -785,14 +1020,14 @@ export function SettingsPage() {
                 Owner Override PIN (4-6 digits)
               </Label>
               <p className="text-xs text-muted-foreground">
-                Lock Mode mein staff ko is PIN se override ki permission milegi
+                In Lock Mode, staff can request override approval using this PIN
               </p>
               <div className="flex gap-2">
                 <div className="relative flex-1 max-w-[200px]">
                   <Input
                     data-ocid="settings.owner_pin.input"
                     type={showPin ? "text" : "password"}
-                    placeholder="PIN enter karein"
+                    placeholder="Enter PIN"
                     value={pinValue}
                     onChange={(e) => setPinValue(e.target.value)}
                     maxLength={6}
@@ -829,7 +1064,7 @@ export function SettingsPage() {
               </div>
               {appConfig.ownerPin && (
                 <p className="text-xs text-green-600 flex items-center gap-1">
-                  <Check className="w-3 h-3" /> PIN set hai
+                  <Check className="w-3 h-3" /> PIN is set
                 </p>
               )}
             </div>
@@ -847,7 +1082,7 @@ export function SettingsPage() {
                 </CardTitle>
               </div>
               <CardDescription>
-                Staff ke liye WhatsApp reminder system control karein
+                Control the WhatsApp reminder system for staff
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -858,8 +1093,7 @@ export function SettingsPage() {
                     Allow Staff Reminders
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ON karein toh staff customers ko reminders send ya request
-                    kar sakenge
+                    When ON, staff can send or request customer reminders
                   </p>
                   <div className="mt-2">
                     {appConfig.allowStaffReminders ? (
@@ -901,7 +1135,7 @@ export function SettingsPage() {
                           await saveAppConfig({
                             staffReminderMode: "approval",
                           } as Partial<AppConfig>);
-                          toast.success("Approval Mode set kiya gaya");
+                          toast.success("Approval Mode activated");
                         }}
                         className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
                           (appConfig.staffReminderMode ?? "approval") ===
@@ -941,7 +1175,7 @@ export function SettingsPage() {
                           await saveAppConfig({
                             staffReminderMode: "simple",
                           } as Partial<AppConfig>);
-                          toast.success("Simple Mode set kiya gaya");
+                          toast.success("Simple Mode activated");
                         }}
                         className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
                           appConfig.staffReminderMode === "simple"
@@ -986,10 +1220,9 @@ export function SettingsPage() {
               Data Safety
             </p>
             <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-              Koi bhi setting change karne se purana data delete nahi hoga.
-              Features disable karne par sirf UI hide hoti hai — data safe rehta
-              hai. Future mein naye features bhi bina purana data hataye add
-              kiye ja sakte hain.
+              Changing any setting will not delete existing data. Disabling
+              features only hides the UI — data is always safe. New features can
+              be added later without removing existing data.
             </p>
           </div>
         </div>
@@ -1001,9 +1234,7 @@ export function SettingsPage() {
               <Download className="w-4 h-4 text-primary" />
               <CardTitle className="text-base">Backup &amp; Restore</CardTitle>
             </div>
-            <CardDescription>
-              Apna data export aur import karein
-            </CardDescription>
+            <CardDescription>Export and import your data</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Confirm dialog */}
@@ -1012,8 +1243,7 @@ export function SettingsPage() {
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
                   <p className="text-sm font-medium text-destructive">
-                    Yeh action existing data overwrite kar dega. Kya aap sure
-                    hain?
+                    This action will overwrite existing data. Are you sure?
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -1023,7 +1253,7 @@ export function SettingsPage() {
                     onClick={handleImportConfirm}
                     data-ocid="settings.import.confirm_button"
                   >
-                    <Check className="w-3.5 h-3.5 mr-1" /> Haan, Restore Karein
+                    <Check className="w-3.5 h-3.5 mr-1" /> Yes, Restore
                   </Button>
                   <Button
                     size="sm"
@@ -1070,14 +1300,14 @@ export function SettingsPage() {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Export: JSON file download hoga &nbsp;|&nbsp; Import: file se data
-              restore hoga
+              Export: Downloads a JSON backup file &nbsp;|&nbsp; Import:
+              Restores data from a backup file
             </p>
             <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
               <AlertCircle className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
               <p className="text-xs text-amber-700 dark:text-amber-400">
-                Import karne se existing data overwrite ho jaata hai. Pehle
-                export zarur karein.
+                Importing will overwrite existing data. Please export first as a
+                backup.
               </p>
             </div>
           </CardContent>
@@ -1087,8 +1317,8 @@ export function SettingsPage() {
         <div className="flex items-center justify-center gap-2 py-4 px-4 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
           <Shield className="w-4 h-4 text-green-600 flex-shrink-0" />
           <p className="text-xs text-green-700 dark:text-green-400 text-center">
-            🔒 Aapka data ICP cloud aur browser storage dono mein safe rehta hai
-            — kabhi delete nahi hoga
+            🔒 Your data is safely stored in ICP cloud and browser storage — it
+            is never deleted
           </p>
         </div>
       </div>
