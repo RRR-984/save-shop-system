@@ -39,6 +39,7 @@ import {
   ShoppingCart,
   Skull,
   Star,
+  Store,
   ThumbsDown,
   ThumbsUp,
   TrendingDown,
@@ -541,7 +542,7 @@ function GlobalSearchBar({
   const showDropdown = searchQuery.trim().length > 0 && searchOpen;
 
   return (
-    <div ref={searchContainerRef} className="relative z-30">
+    <div ref={searchContainerRef} className="relative z-[150]">
       {/* Search input */}
       <div className="relative">
         <Search
@@ -579,11 +580,11 @@ function GlobalSearchBar({
         )}
       </div>
 
-      {/* Global results dropdown */}
+      {/* Global results dropdown — z-[150] keeps it below mode dropdown (z-[200]) */}
       {showDropdown && (
         <div
           className="absolute top-full mt-2 left-0 right-0 bg-card border border-border rounded-2xl shadow-xl overflow-hidden"
-          style={{ maxHeight: "75vh", overflowY: "auto" }}
+          style={{ maxHeight: "75vh", overflowY: "auto", zIndex: 150 }}
           data-ocid="dashboard.global_search.dropdown"
         >
           {!globalSearchResults || !globalSearchResults.hasResults ? (
@@ -912,7 +913,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     refreshCounter,
   } = useStore();
 
-  const { currentShop, session, currentUser } = useAuth();
+  const { currentShop, session, currentUser, createNewShop } = useAuth();
   const { t } = useLanguage();
   const { language } = useLanguage();
 
@@ -928,13 +929,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   };
 
   // ── Feature mode — controls which sections are rendered ───────────────────
-  const featureMode = (appConfig.featureMode ?? 3) as 1 | 2 | 3;
+  const featureMode = (appConfig.featureMode ?? 1) as 1 | 2 | 3 | 4;
 
   /**
    * Returns true if a dashboard section should be shown in the current mode.
-   * Mode 1 = Simple: only todaySummary + FAB.
-   * Mode 2 = Advanced: summary, alerts, quickActions, filterBar.
-   * Mode 3 = All System: everything (fall back to isDashSectionVisible).
+   * Mode 1 = Basic:   only todaySummary + FAB.
+   * Mode 2 = Normal:  summary, alerts, quickActions, filterBar.
+   * Mode 3 = Advance: Normal + banner, marquee, liveBoard, topPerformance.
+   * Mode 4 = Super:   everything (fall back to isDashSectionVisible).
    */
   const isModeVisible = (
     section:
@@ -953,19 +955,33 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       | "rankings"
       | "otherSections",
   ): boolean => {
-    if (featureMode === 3) return true;
+    if (featureMode === 4) return true;
     if (featureMode === 1) {
       return section === "todaySummary";
     }
-    // mode 2
-    const mode2Visible = new Set([
+    if (featureMode === 2) {
+      const mode2Visible = new Set([
+        "todaySummary",
+        "smartAlerts",
+        "quickActions",
+        "filterBar",
+        "otherSections",
+      ]);
+      return mode2Visible.has(section);
+    }
+    // mode 3 = Advance: mode 2 sections + banner, marquee, liveBoard, topPerformance
+    const mode3Visible = new Set([
       "todaySummary",
       "smartAlerts",
       "quickActions",
       "filterBar",
       "otherSections",
+      "banner",
+      "marquee",
+      "liveBoard",
+      "topPerformance",
     ]);
-    return mode2Visible.has(section);
+    return mode3Visible.has(section);
   };
 
   const [productTab, setProductTab] = useState<
@@ -976,6 +992,33 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // ── Add Shop modal state (for Dashboard quick action) ─────────────────────
+  const [showAddShopModal, setShowAddShopModal] = useState(false);
+  const [addShopForm, setAddShopForm] = useState({
+    name: "",
+    address: "",
+    city: "",
+  });
+  const [addShopSaving, setAddShopSaving] = useState(false);
+
+  const handleDashboardCreateShop = async () => {
+    if (!addShopForm.name.trim()) return;
+    setAddShopSaving(true);
+    const result = await createNewShop(
+      addShopForm.name.trim(),
+      addShopForm.address.trim(),
+      addShopForm.city.trim(),
+    );
+    setAddShopSaving(false);
+    if (result.success) {
+      setShowAddShopModal(false);
+      setAddShopForm({ name: "", address: "", city: "" });
+      toast.success(`"${addShopForm.name}" created and switched!`);
+    } else {
+      toast.error(result.error ?? "Failed to create shop");
+    }
+  };
 
   // Close search dropdown on click outside or Escape
   useEffect(() => {
@@ -2093,9 +2136,40 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                       ocid="dashboard.attendance.button"
                     />
                   )}
+                  {/* + Add Shop — always visible in all modes for owners */}
+                  {isOwner && (
+                    <QuickActionBtn
+                      icon={<Store size={24} />}
+                      label={language === "hi" ? "+ शॉप जोड़ें" : "+ Add Shop"}
+                      onClick={() => {
+                        setAddShopForm({ name: "", address: "", city: "" });
+                        setShowAddShopModal(true);
+                      }}
+                      pastelColor="blue"
+                      ocid="dashboard.add_shop.button"
+                    />
+                  )}
                 </div>
               </>
             )}
+          {/* + Add Shop shortcut — visible in ALL modes for owners (even Basic) */}
+          {isOwner && !isModeVisible("quickActions") && (
+            <div className="mt-2">
+              <SectionHeader>Manage Shops</SectionHeader>
+              <div className="flex gap-3.5 overflow-x-auto scrollbar-hide pb-1 -mx-3 px-3">
+                <QuickActionBtn
+                  icon={<Store size={24} />}
+                  label={language === "hi" ? "+ शॉप जोड़ें" : "+ Add Shop"}
+                  onClick={() => {
+                    setAddShopForm({ name: "", address: "", city: "" });
+                    setShowAddShopModal(true);
+                  }}
+                  pastelColor="blue"
+                  ocid="dashboard.add_shop_basic.button"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -2346,10 +2420,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           isDashSectionVisible("topPerformance") &&
           isModeVisible("topPerformance") && (
             <div
-              className="rounded-2xl overflow-hidden relative animate-bounce-in"
+              className="rounded-2xl overflow-hidden relative animate-bounce-in bg-card"
               data-ocid="dashboard.top_performance.section"
               style={{
-                background: "var(--top-perf-bg, white)",
                 boxShadow:
                   "0 0 0 2px #F59E0B, 0 0 20px rgba(245,158,11,0.22), 0 4px 16px rgba(0,0,0,0.08)",
               }}
@@ -2373,14 +2446,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   {/* #1 Product */}
                   <div className="flex items-start gap-2 px-3 py-2.5">
                     <div className="flex-shrink-0 mt-0.5">
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-400/25 text-yellow-800 dark:text-yellow-400 border border-yellow-400/40">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-400/25 text-yellow-700 dark:text-yellow-300 border border-yellow-400/40">
                         🥇 Product
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       {topPerformanceData.topProduct ? (
                         <>
-                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                          <p className="text-xs font-bold text-foreground dark:text-white truncate leading-tight">
                             {topPerformanceData.topProduct.name}
                           </p>
                           <p className="text-[10px] text-green-600 dark:text-green-400 font-semibold mt-0.5">
@@ -2396,14 +2469,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   {/* #1 Customer */}
                   <div className="flex items-start gap-2 px-3 py-2.5">
                     <div className="flex-shrink-0 mt-0.5">
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-400/20 text-blue-800 dark:text-blue-400 border border-blue-400/30">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-400/20 text-blue-700 dark:text-blue-300 border border-blue-400/30">
                         🥇 Customer
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       {topPerformanceData.topCustomer ? (
                         <>
-                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                          <p className="text-xs font-bold text-foreground dark:text-white truncate leading-tight">
                             {topPerformanceData.topCustomer.name}
                           </p>
                           <p className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold mt-0.5">
@@ -2419,14 +2492,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   {/* #1 Vendor */}
                   <div className="flex items-start gap-2 px-3 py-2.5">
                     <div className="flex-shrink-0 mt-0.5">
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-400/20 text-orange-800 dark:text-orange-400 border border-orange-400/30">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-400/20 text-orange-700 dark:text-orange-300 border border-orange-400/30">
                         🥇 Vendor
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       {topPerformanceData.topVendor ? (
                         <>
-                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                          <p className="text-xs font-bold text-foreground dark:text-white truncate leading-tight">
                             {topPerformanceData.topVendor.name}
                           </p>
                           <p className="text-[10px] text-orange-600 dark:text-orange-400 font-semibold mt-0.5">
@@ -2445,14 +2518,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   {/* #1 Diamond Earner */}
                   <div className="flex items-start gap-2 px-3 py-2.5">
                     <div className="flex-shrink-0 mt-0.5">
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-400/20 text-purple-800 dark:text-purple-400 border border-purple-400/30">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-400/20 text-purple-700 dark:text-purple-300 border border-purple-400/30">
                         💎 Performer
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       {topPerformanceData.topDiamondEarner ? (
                         <>
-                          <p className="text-xs font-bold text-foreground truncate leading-tight">
+                          <p className="text-xs font-bold text-foreground dark:text-white truncate leading-tight">
                             {topPerformanceData.topDiamondEarner.name}
                           </p>
                           <p className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
@@ -4016,6 +4089,146 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           </div>
         )}
       </div>
+
+      {/* ── Add Shop Modal (from Dashboard quick action) ── */}
+      {showAddShopModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          data-ocid="dashboard.add_shop_modal"
+        >
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowAddShopModal(false)}
+            onKeyDown={(e) => e.key === "Escape" && setShowAddShopModal(false)}
+            role="presentation"
+          />
+          <div className="relative bg-card border border-border rounded-2xl shadow-xl p-6 w-full max-w-sm">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-semibold text-base text-foreground">
+                {language === "hi" ? "नई शॉप बनाएं" : "Create New Shop"}
+              </h3>
+              <button
+                type="button"
+                data-ocid="dashboard.add_shop_modal.close_button"
+                onClick={() => setShowAddShopModal(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-lg leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-3 mb-5">
+              <div>
+                <label
+                  htmlFor="dash-shop-name"
+                  className="block text-xs font-medium text-foreground mb-1"
+                >
+                  {language === "hi" ? "शॉप का नाम" : "Shop Name"}{" "}
+                  <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  id="dash-shop-name"
+                  data-ocid="dashboard.add_shop_modal.name_input"
+                  value={addShopForm.name}
+                  onChange={(e) =>
+                    setAddShopForm((p) => ({ ...p, name: e.target.value }))
+                  }
+                  placeholder={
+                    language === "hi"
+                      ? "जैसे: शर्मा इलेक्ट्रॉनिक्स"
+                      : "e.g. Sharma Electronics"
+                  }
+                  className="h-9 text-sm"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="dash-shop-address"
+                  className="block text-xs font-medium text-foreground mb-1"
+                >
+                  {language === "hi" ? "पता" : "Address"}
+                </label>
+                <Input
+                  id="dash-shop-address"
+                  data-ocid="dashboard.add_shop_modal.address_input"
+                  value={addShopForm.address}
+                  onChange={(e) =>
+                    setAddShopForm((p) => ({ ...p, address: e.target.value }))
+                  }
+                  placeholder={
+                    language === "hi"
+                      ? "सड़क / क्षेत्र (वैकल्पिक)"
+                      : "Street / Area (optional)"
+                  }
+                  className="h-9 text-sm"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="dash-shop-city"
+                  className="block text-xs font-medium text-foreground mb-1"
+                >
+                  {language === "hi" ? "शहर" : "City"}
+                </label>
+                <Input
+                  id="dash-shop-city"
+                  data-ocid="dashboard.add_shop_modal.city_input"
+                  value={addShopForm.city}
+                  onChange={(e) =>
+                    setAddShopForm((p) => ({ ...p, city: e.target.value }))
+                  }
+                  placeholder={
+                    language === "hi" ? "शहर (वैकल्पिक)" : "City (optional)"
+                  }
+                  className="h-9 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-ocid="dashboard.add_shop_modal.cancel_button"
+                onClick={() => setShowAddShopModal(false)}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-border bg-secondary text-sm font-medium text-foreground hover:bg-muted transition-colors"
+              >
+                {language === "hi" ? "रद्द करें" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                data-ocid="dashboard.add_shop_modal.submit_button"
+                onClick={handleDashboardCreateShop}
+                disabled={addShopSaving || !addShopForm.name.trim()}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {addShopSaving && (
+                  <svg
+                    className="animate-spin h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                )}
+                {language === "hi" ? "शॉप बनाएं" : "Create Shop"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

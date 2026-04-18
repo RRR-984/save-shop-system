@@ -149,7 +149,7 @@ export function AdminSummaryCardInner() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-3 border-b border-border">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
+          <h2 className="text-base font-semibold text-foreground dark:text-white flex items-center gap-2">
             <span>📊</span> Admin Summary
           </h2>
           {/* Eye toggle */}
@@ -193,7 +193,7 @@ export function AdminSummaryCardInner() {
         {/* Section A: Staff Performance */}
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+            <h3 className="text-sm font-semibold text-foreground dark:text-white uppercase tracking-wide">
               A. Staff Performance
             </h3>
             {highestBonusStaff && highestBonusStaff.bonus > 0 && (
@@ -220,7 +220,7 @@ export function AdminSummaryCardInner() {
                     <TableHead className="text-xs font-semibold text-muted-foreground w-[140px]">
                       Staff Name
                     </TableHead>
-                    <TableHead className="text-xs font-semibold text-blue-600 text-right">
+                    <TableHead className="text-xs font-semibold text-blue-600 dark:text-blue-400 text-right">
                       Total Sale
                     </TableHead>
                     <TableHead className="text-xs font-semibold text-success text-right">
@@ -254,7 +254,7 @@ export function AdminSummaryCardInner() {
                               />
                             )}
                             <span
-                              className={`text-sm font-medium ${isTop ? "text-amber-800" : "text-foreground"}`}
+                              className={`text-sm font-medium ${isTop ? "text-amber-700 dark:text-amber-300" : "text-foreground dark:text-white"}`}
                             >
                               {staff.name}
                             </span>
@@ -266,7 +266,7 @@ export function AdminSummaryCardInner() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right py-2.5">
-                          <span className="text-sm font-semibold text-blue-700">
+                          <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
                             {amountsVisible ? fmt(staff.totalSale) : "••••"}
                           </span>
                         </TableCell>
@@ -297,7 +297,7 @@ export function AdminSummaryCardInner() {
 
         {/* Section B: Totals */}
         <div>
-          <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">
+          <h3 className="text-sm font-semibold text-foreground dark:text-white uppercase tracking-wide mb-3">
             B. Totals
           </h3>
           <div className="grid grid-cols-3 gap-3">
@@ -335,7 +335,7 @@ export function AdminSummaryCardInner() {
 
         {/* Section C: Final Summary */}
         <div>
-          <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">
+          <h3 className="text-sm font-semibold text-foreground dark:text-white uppercase tracking-wide mb-3">
             C. Final Summary
           </h3>
           <div className="grid grid-cols-2 gap-3">

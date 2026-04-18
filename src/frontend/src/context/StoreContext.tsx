@@ -15,6 +15,7 @@ import type {
   AppUser,
   AttendanceRecord,
   AuditLog,
+  AutoModeType,
   CartDraftItem,
   Category,
   Customer,
@@ -48,8 +49,10 @@ import type {
 } from "../types/store";
 import {
   STORAGE_KEYS,
+  loadAutoMode,
   loadData,
   loadDrafts,
+  saveAutoMode,
   saveData,
   saveDrafts,
 } from "../utils/localStorage";
@@ -119,6 +122,8 @@ interface FIFOResult {
 export interface CustomerLedger {
   customerName: string;
   customerMobile: string;
+  /** Address from most recent invoice or customer record */
+  customerAddress?: string;
   totalPurchase: number;
   totalPaid: number;
   totalDue: number;
@@ -288,8 +293,12 @@ interface StoreContextValue {
     key: keyof DashboardSectionConfig,
     value: boolean,
   ) => Promise<void>;
-  /** Set feature mode (1=Simple, 2=Advanced, 3=All) — saved per-shop in localStorage */
-  setFeatureMode: (mode: 1 | 2 | 3) => void;
+  /** Set feature mode (1=Basic, 2=Normal, 3=Advance, 4=Super) — saved per-shop in localStorage */
+  setFeatureMode: (mode: 1 | 2 | 3 | 4) => void;
+  /** Auto Mode: 'simple' | 'smart' | 'pro' — high-level 3-mode abstraction */
+  autoMode: AutoModeType;
+  /** Switch auto mode. Automatically syncs featureMode. Persisted per-shop. */
+  setAutoMode: (mode: AutoModeType) => void;
 
   // Low Price Alert Log
   lowPriceAlertLogs: LowPriceAlertLog[];
@@ -640,7 +649,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const sid = localStorage.getItem("last_shop_id") ?? "shop-default";
       const raw = localStorage.getItem(`appConfig_${sid}`);
       const modeRaw = localStorage.getItem(`feature_mode_${sid}`);
-      const featureMode = modeRaw ? (Number(modeRaw) as 1 | 2 | 3) : 3;
+      // Migrate: old mode 3 (Super) maps to new mode 4; default for new users is 1 (Basic)
+      const rawMode = modeRaw ? Number(modeRaw) : null;
+      const featureMode = (rawMode === 3 ? 4 : (rawMode ?? 1)) as 1 | 2 | 3 | 4;
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<AppConfig>;
         return { ...DEFAULT_APP_CONFIG, ...parsed, featureMode } as AppConfig;
@@ -648,7 +659,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch (_) {
       // ignore parse errors
     }
-    return { ...DEFAULT_APP_CONFIG, featureMode: 3 };
+    return { ...DEFAULT_APP_CONFIG, featureMode: 1 };
   });
 
   // Re-load appConfig when shopId changes
@@ -656,7 +667,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(`appConfig_${shopId}`);
       const modeRaw = localStorage.getItem(`feature_mode_${shopId}`);
-      const featureMode = modeRaw ? (Number(modeRaw) as 1 | 2 | 3) : 3;
+      // Migrate: old mode 3 (Super) maps to new mode 4; default for new users is 1 (Basic)
+      const rawMode = modeRaw ? Number(modeRaw) : null;
+      const featureMode = (rawMode === 3 ? 4 : (rawMode ?? 1)) as 1 | 2 | 3 | 4;
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<AppConfig>;
         setAppConfig({
@@ -668,7 +681,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setAppConfig({ ...DEFAULT_APP_CONFIG, featureMode });
       }
     } catch (_) {
-      setAppConfig({ ...DEFAULT_APP_CONFIG, featureMode: 3 });
+      setAppConfig({ ...DEFAULT_APP_CONFIG, featureMode: 1 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shopId]);
@@ -716,10 +729,56 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const setFeatureMode = useCallback(
-    (mode: 1 | 2 | 3): void => {
+    (mode: 1 | 2 | 3 | 4): void => {
       localStorage.setItem(`feature_mode_${shopId}`, String(mode));
       setAppConfig((prev) => {
         const updated: AppConfig = { ...prev, featureMode: mode };
+        localStorage.setItem(`appConfig_${shopId}`, JSON.stringify(updated));
+        return updated;
+      });
+    },
+    [shopId],
+  );
+
+  // ── Auto Mode (3-mode abstraction: simple | smart | pro) ─────────────────
+  // Maps: simple→featureMode 1, smart→featureMode 3, pro→featureMode 4
+  const [autoMode, setAutoModeState] = useState<AutoModeType>(() =>
+    loadAutoMode(localStorage.getItem("last_shop_id") ?? "shop-default"),
+  );
+
+  // Re-load autoMode when shopId changes
+  useEffect(() => {
+    const saved = loadAutoMode(shopId);
+    setAutoModeState(saved);
+    // Sync featureMode to match the loaded autoMode
+    const mapped: 1 | 2 | 3 | 4 =
+      saved === "pro" ? 4 : saved === "smart" ? 3 : 1;
+    localStorage.setItem(`feature_mode_${shopId}`, String(mapped));
+    setAppConfig((prev) => {
+      const updated: AppConfig = {
+        ...prev,
+        featureMode: mapped,
+        autoMode: saved,
+      };
+      localStorage.setItem(`appConfig_${shopId}`, JSON.stringify(updated));
+      return updated;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shopId]);
+
+  const setAutoMode = useCallback(
+    (mode: AutoModeType): void => {
+      const mapped: 1 | 2 | 3 | 4 =
+        mode === "pro" ? 4 : mode === "smart" ? 3 : 1;
+      saveAutoMode(shopId, mode);
+      setAutoModeState(mode);
+      localStorage.setItem(`feature_mode_${shopId}`, String(mapped));
+      setAppConfig((prev) => {
+        const updated: AppConfig = {
+          ...prev,
+          featureMode: mapped,
+          autoMode: mode,
+        };
         localStorage.setItem(`appConfig_${shopId}`, JSON.stringify(updated));
         return updated;
       });
@@ -1891,16 +1950,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         return inv.customerName.trim().toLowerCase() === normName;
       });
+      // Pick address from customer record or latest invoice
+      const custRecord = customers.find((c) =>
+        mobile
+          ? normMobile(c.mobile) === mobile
+          : c.name.trim().toLowerCase() === normName,
+      );
+      const address =
+        custRecord?.address ||
+        custInvoices.find((i) => i.customerAddress)?.customerAddress;
       return {
         customerName,
         customerMobile,
+        customerAddress: address,
         totalPurchase: custInvoices.reduce((s, i) => s + i.totalAmount, 0),
         totalPaid: custInvoices.reduce((s, i) => s + i.paidAmount, 0),
         totalDue: custInvoices.reduce((s, i) => s + (i.dueAmount ?? 0), 0),
         invoices: custInvoices,
       };
     },
-    [invoices],
+    [invoices, customers],
   );
 
   const getAllCustomerLedgers = useCallback((): CustomerLedger[] => {
@@ -1915,12 +1984,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (mode !== "credit" && due <= 0) continue;
 
       const mobile = normMobile(inv.customerMobile ?? "");
+      // Resolve address: invoice address or customer record
+      const custRecord = customers.find((c) =>
+        mobile
+          ? normMobile(c.mobile) === mobile
+          : c.name.trim().toLowerCase() === name.toLowerCase(),
+      );
+      const resolvedAddress = custRecord?.address || inv.customerAddress;
 
       if (mobile) {
         if (!byMobile.has(mobile)) {
           byMobile.set(mobile, {
             customerName: name,
             customerMobile: mobile,
+            customerAddress: resolvedAddress,
             totalPurchase: 0,
             totalPaid: 0,
             totalDue: 0,
@@ -1929,6 +2006,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         const entry = byMobile.get(mobile)!;
         entry.customerName = name;
+        if (resolvedAddress && !entry.customerAddress)
+          entry.customerAddress = resolvedAddress;
         entry.totalPurchase += inv.totalAmount;
         entry.totalPaid += inv.paidAmount;
         entry.totalDue += due;
@@ -1939,6 +2018,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           byName.set(key, {
             customerName: name,
             customerMobile: "",
+            customerAddress: resolvedAddress,
             totalPurchase: 0,
             totalPaid: 0,
             totalDue: 0,
@@ -1946,6 +2026,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
         }
         const entry = byName.get(key)!;
+        if (resolvedAddress && !entry.customerAddress)
+          entry.customerAddress = resolvedAddress;
         entry.totalPurchase += inv.totalAmount;
         entry.totalPaid += inv.paidAmount;
         entry.totalDue += due;
@@ -1955,7 +2037,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const all = [...byMobile.values(), ...byName.values()];
     return all.sort((a, b) => b.totalDue - a.totalDue);
-  }, [invoices]);
+  }, [invoices, customers]);
 
   const mergeDuplicateCustomers = useCallback((): number => {
     const mobileToName = new Map<string, string>();
@@ -3511,6 +3593,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setFeatureFlag,
     setDashboardSection,
     setFeatureMode,
+    autoMode,
+    setAutoMode,
     lowPriceAlertLogs,
     addLowPriceAlertLog,
     auditLogs,

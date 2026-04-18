@@ -1,3 +1,10 @@
+// Version check — must run before any React code
+const APP_VERSION = "v161";
+if (localStorage.getItem("app_version") !== APP_VERSION) {
+  localStorage.setItem("app_version", APP_VERSION);
+  window.location.reload();
+}
+
 import { InternetIdentityProvider } from "@caffeineai/core-infrastructure";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ReactDOM from "react-dom/client";

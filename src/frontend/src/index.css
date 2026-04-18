@@ -106,7 +106,10 @@
   .dark {
     /* Backgrounds */
     --background: 0.065 0.008 250;
-    --foreground: 0.95 0.005 250;
+    --foreground: 0.97 0.005 250;
+
+    /* Top Performance card background — must NOT fall back to white */
+    --top-perf-bg: oklch(0.11 0.01 250);
 
     /* Cards #111827 */
     --card: 0.11 0.01 250;

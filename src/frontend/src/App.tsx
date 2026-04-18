@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { useEffect, useRef, useState } from "react";
+import { ChatBot } from "./components/ChatBot";
 import { FirstTimeUserWelcomePopup } from "./components/FirstTimeUserWelcomePopup";
 import { PWAInstallModal } from "./components/PWAInstallModal";
 import { MemoSidebar as Sidebar } from "./components/Sidebar";
@@ -394,6 +395,7 @@ function AppContent() {
       <Toaster position="bottom-right" richColors />
       <PWAInstallModal />
       <FirstTimeUserWelcomePopup />
+      <ChatBot />
     </div>
   );
 }

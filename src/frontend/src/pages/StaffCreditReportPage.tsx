@@ -154,43 +154,49 @@ export function StaffCreditReportPage() {
 
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card className="border-blue-200 bg-blue-50">
+          <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800/40">
             <CardContent className="p-3">
               <div className="flex items-center gap-1.5 mb-1">
-                <Users size={14} className="text-blue-600" />
-                <span className="text-xs text-blue-600 font-medium">
+                <Users size={14} className="text-blue-600 dark:text-blue-400" />
+                <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
                   Total Staff
                 </span>
               </div>
-              <div className="text-2xl font-bold text-blue-800">
+              <div className="text-2xl font-bold text-blue-800 dark:text-blue-200">
                 {totalStaff}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-green-200 bg-green-50">
+          <Card className="border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800/40">
             <CardContent className="p-3">
               <div className="flex items-center gap-1.5 mb-1">
-                <CreditCard size={14} className="text-green-600" />
-                <span className="text-xs text-green-600 font-medium">
+                <CreditCard
+                  size={14}
+                  className="text-green-600 dark:text-green-400"
+                />
+                <span className="text-xs text-green-600 dark:text-green-400 font-medium">
                   Total Sales
                 </span>
               </div>
-              <div className="text-lg font-bold text-green-800">
+              <div className="text-lg font-bold text-green-800 dark:text-green-200">
                 ₹{totalSalesAll.toLocaleString("en-IN")}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-red-200 bg-red-50">
+          <Card className="border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800/40">
             <CardContent className="p-3">
               <div className="flex items-center gap-1.5 mb-1">
-                <AlertTriangle size={14} className="text-red-600" />
-                <span className="text-xs text-red-600 font-medium">
+                <AlertTriangle
+                  size={14}
+                  className="text-red-600 dark:text-red-400"
+                />
+                <span className="text-xs text-red-600 dark:text-red-400 font-medium">
                   Total Credit
                 </span>
               </div>
-              <div className="text-lg font-bold text-red-800">
+              <div className="text-lg font-bold text-red-800 dark:text-red-200">
                 ₹{totalCreditAll.toLocaleString("en-IN")}
               </div>
             </CardContent>
@@ -220,7 +226,9 @@ export function StaffCreditReportPage() {
               </div>
               <div
                 className={`text-2xl font-bold ${
-                  overallCreditPct > 50 ? "text-red-800" : "text-emerald-800"
+                  overallCreditPct > 50
+                    ? "text-red-800 dark:text-red-200"
+                    : "text-emerald-800 dark:text-emerald-200"
                 }`}
               >
                 {overallCreditPct.toFixed(1)}%

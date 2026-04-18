@@ -25,7 +25,10 @@ import {
   CheckCircle,
   CreditCard,
   IndianRupee,
+  MapPin,
   MessageCircle,
+  Pencil,
+  Plus,
   Receipt,
   Search,
   Send,
@@ -36,7 +39,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { type CustomerLedger, useStore } from "../context/StoreContext";
-import type { AppUser } from "../types/store";
+import type { AppUser, Customer } from "../types/store";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -717,6 +720,114 @@ function InvoicesDialog({
   );
 }
 
+// ── Add / Edit Customer Dialog ─────────────────────────────────────────────────────────────────
+function AddEditCustomerDialog({
+  open,
+  onClose,
+  existing,
+}: {
+  open: boolean;
+  onClose: () => void;
+  existing?: Customer;
+}) {
+  const { addCustomer, updateCustomer } = useStore();
+  const [name, setName] = useState(existing?.name ?? "");
+  const [mobile, setMobile] = useState(existing?.mobile ?? "");
+  const [address, setAddress] = useState(existing?.address ?? "");
+
+  const isEdit = !!existing;
+
+  function handleSubmit() {
+    if (!name.trim()) {
+      toast.error("Customer name is required");
+      return;
+    }
+    if (isEdit && existing) {
+      updateCustomer(existing.id, {
+        name: name.trim(),
+        mobile: mobile.trim(),
+        address: address.trim() || undefined,
+      });
+      toast.success("Customer updated ✓");
+    } else {
+      addCustomer({
+        name: name.trim(),
+        mobile: mobile.trim(),
+        creditBalance: 0,
+        address: address.trim() || undefined,
+      });
+      toast.success("Customer added ✓");
+    }
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm" data-ocid="customers.add_edit.dialog">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <User size={16} className="text-primary" />
+            {isEdit ? "Edit Customer" : "Add Customer"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-1">
+          <div className="space-y-1.5">
+            <Label className="text-sm">Name *</Label>
+            <Input
+              data-ocid="customers.add_edit.name.input"
+              placeholder="e.g. Ramesh Kumar"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Mobile Number</Label>
+            <Input
+              data-ocid="customers.add_edit.mobile.input"
+              placeholder="10-digit mobile"
+              value={mobile}
+              onChange={(e) => setMobile(e.target.value)}
+              maxLength={10}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">
+              Address{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              data-ocid="customers.add_edit.address.input"
+              placeholder="e.g. 12 Main Market, Indore"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            data-ocid="customers.add_edit.cancel_button"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            data-ocid="customers.add_edit.save_button"
+          >
+            {isEdit ? "Save Changes" : "Add Customer"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Customer Ledger Card ──────────────────────────────────────────────────────────────────────────────────────
 function CustomerCard({
   ledger,
@@ -729,10 +840,21 @@ function CustomerCard({
   shopName: string;
   currentUser: AppUser;
 }) {
+  const { customers } = useStore();
   const [showPayment, setShowPayment] = useState(false);
   const [showInvoices, setShowInvoices] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const isPaid = ledger.totalDue === 0;
   const dueBadge = getDueBadge(ledger.totalDue);
+
+  // Resolve Customer record for editing
+  const mobile = ledger.customerMobile?.replace(/\D/g, "");
+  const custRecord = customers.find((c) =>
+    mobile
+      ? c.mobile.replace(/\D/g, "") === mobile
+      : c.name.trim().toLowerCase() ===
+        ledger.customerName.trim().toLowerCase(),
+  );
 
   // Latest bill info from most recent invoice
   const latestInvoice =
@@ -752,6 +874,9 @@ function CustomerCard({
     : null;
   const lastTransactionAmount = latestInvoice?.totalAmount ?? null;
 
+  // Resolved address: customer record first, then invoice
+  const displayAddress = custRecord?.address || ledger.customerAddress;
+
   return (
     <>
       <Card
@@ -766,7 +891,7 @@ function CustomerCard({
       >
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
-            {/* Left: Name + mobile + badge */}
+            {/* Left: Name + mobile + address + badge */}
             <div className="flex items-center gap-3 min-w-0">
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -787,6 +912,15 @@ function CustomerCard({
                     {ledger.customerMobile}
                   </div>
                 )}
+                {displayAddress && (
+                  <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <MapPin
+                      size={10}
+                      className="flex-shrink-0 text-muted-foreground/70"
+                    />
+                    <span className="truncate">{displayAddress}</span>
+                  </div>
+                )}
                 <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                   {isPaid ? (
                     <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px]">
@@ -801,6 +935,18 @@ function CustomerCard({
 
             {/* Right: Actions */}
             <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+              {/* Edit button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs px-2 text-muted-foreground hover:bg-muted"
+                onClick={() => setShowEdit(true)}
+                data-ocid={`customers.edit_button.${index + 1}`}
+                title="Edit customer details"
+              >
+                <Pencil size={12} className="mr-1" />
+                Edit
+              </Button>
               {/* Role-based Reminder button */}
               {!isPaid && (
                 <ReminderButton
@@ -889,6 +1035,13 @@ function CustomerCard({
         </CardContent>
       </Card>
 
+      {showEdit && (
+        <AddEditCustomerDialog
+          open={showEdit}
+          onClose={() => setShowEdit(false)}
+          existing={custRecord}
+        />
+      )}
       {showPayment && (
         <ReceivePaymentDialog
           ledger={ledger}
@@ -922,6 +1075,7 @@ export function CustomersPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<LedgerFilter>("all");
   const [bulkReminderOpen, setBulkReminderOpen] = useState(false);
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
 
   // Derive ledgers from invoices (re-derived each render to stay in sync)
   // Already sorted by highest due first from getAllCustomerLedgers
@@ -981,6 +1135,16 @@ export function CustomersPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Add Customer Button */}
+            <Button
+              size="sm"
+              className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
+              onClick={() => setShowAddCustomer(true)}
+              data-ocid="customers.add_customer.button"
+            >
+              <Plus size={13} className="mr-1" />
+              Add Customer
+            </Button>
             {/* Bulk Reminder Button */}
             <div className="flex flex-col items-end gap-0.5">
               <Button
@@ -1260,6 +1424,14 @@ export function CustomersPage() {
           );
         }}
       />
+
+      {/* Add Customer Dialog */}
+      {showAddCustomer && (
+        <AddEditCustomerDialog
+          open={showAddCustomer}
+          onClose={() => setShowAddCustomer(false)}
+        />
+      )}
     </div>
   );
 }

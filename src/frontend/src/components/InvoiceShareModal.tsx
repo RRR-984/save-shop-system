@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Download, MessageCircle, Printer, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { Invoice } from "../types/store";
 
@@ -10,6 +11,14 @@ function buildInvoiceHTML(
   dateStr: string,
 ): string {
   const due = invoice.dueAmount ?? invoice.totalAmount - invoice.paidAmount;
+  const subtotal = invoice.items.reduce(
+    (s, item) => s + item.quantity * item.sellingRate,
+    0,
+  );
+  const hasCharges =
+    (invoice.transportCharge ?? 0) > 0 ||
+    (invoice.labourCharge ?? 0) > 0 ||
+    (invoice.otherCharges ?? 0) > 0;
 
   const itemRows = invoice.items
     .map(
@@ -22,6 +31,28 @@ function buildInvoiceHTML(
       </tr>`,
     )
     .join("");
+
+  const chargeRows = hasCharges
+    ? `
+    <hr style="border:none;border-top:1px dashed #000;margin:4px 0;" />
+    ${
+      (invoice.transportCharge ?? 0) > 0
+        ? `<div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span>Transportation</span><span>Rs.${invoice.transportCharge}</span></div>`
+        : ""
+    }
+    ${
+      (invoice.labourCharge ?? 0) > 0
+        ? `<div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span>Labour</span><span>Rs.${invoice.labourCharge}</span></div>`
+        : ""
+    }
+    ${
+      (invoice.otherCharges ?? 0) > 0
+        ? `<div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span>Other Charges</span><span>Rs.${invoice.otherCharges}</span></div>`
+        : ""
+    }
+    <div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span>Subtotal (items)</span><span>Rs.${subtotal}</span></div>
+    `
+    : "";
 
   const dueRow =
     due > 0
@@ -91,8 +122,9 @@ function buildInvoiceHTML(
     <tbody>${itemRows}</tbody>
   </table>
   <hr class="divider" />
+  ${chargeRows}
   <div class="totals">
-    <div class="total-main"><span>TOTAL</span><span>Rs.${invoice.totalAmount}</span></div>
+    <div class="total-main"><span>GRAND TOTAL</span><span>Rs.${invoice.totalAmount}</span></div>
     <div class="total-row"><span>Paid</span><span>Rs.${invoice.paidAmount}</span></div>
     ${dueRow}
   </div>
@@ -130,11 +162,24 @@ export function InvoiceShareModal({
   onClose,
 }: InvoiceShareModalProps) {
   const { appConfig } = useStore();
-  const shopName = appConfig.shopName ?? "Save Shop System";
+  const { currentShop, session } = useAuth();
+  const shopName =
+    appConfig.shopName ??
+    currentShop?.name ??
+    session?.shopName ??
+    "Save Shop System";
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const due = invoice.dueAmount ?? invoice.totalAmount - invoice.paidAmount;
   const dateStr = formatDate(invoice.date);
+  const subtotal = invoice.items.reduce(
+    (s, item) => s + item.quantity * item.sellingRate,
+    0,
+  );
+  const hasCharges =
+    (invoice.transportCharge ?? 0) > 0 ||
+    (invoice.labourCharge ?? 0) > 0 ||
+    (invoice.otherCharges ?? 0) > 0;
 
   // Close on Escape key
   useEffect(() => {
@@ -158,6 +203,14 @@ export function InvoiceShareModal({
       )
       .join("\n");
 
+    const chargeLines: string[] = [];
+    if ((invoice.transportCharge ?? 0) > 0)
+      chargeLines.push(`  🚛 Transportation: ₹${invoice.transportCharge}`);
+    if ((invoice.labourCharge ?? 0) > 0)
+      chargeLines.push(`  👷 Labour: ₹${invoice.labourCharge}`);
+    if ((invoice.otherCharges ?? 0) > 0)
+      chargeLines.push(`  📦 Other: ₹${invoice.otherCharges}`);
+
     const lines = [
       `🧾 *Invoice #${invoice.invoiceNumber}*`,
       `📅 Date: ${dateStr}`,
@@ -165,8 +218,16 @@ export function InvoiceShareModal({
       "",
       "📦 *Items:*",
       itemLines,
+      ...(chargeLines.length > 0
+        ? ["", "➕ *Extra Charges:*", ...chargeLines]
+        : []),
       "",
-      `💰 *Total: ₹${invoice.totalAmount}*`,
+      ...(hasCharges
+        ? [
+            `📋 Subtotal: ₹${subtotal}`,
+            `💰 *Grand Total: ₹${invoice.totalAmount}*`,
+          ]
+        : [`💰 *Total: ₹${invoice.totalAmount}*`]),
       `✅ Paid: ₹${invoice.paidAmount}`,
       ...(due > 0 ? [`⚠️ Due: ₹${due}`] : []),
       "",
@@ -300,8 +361,44 @@ export function InvoiceShareModal({
 
             {/* Totals */}
             <div className="space-y-1.5 pt-1">
+              {hasCharges && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="font-medium text-foreground">
+                    ₹{subtotal}
+                  </span>
+                </div>
+              )}
+              {(invoice.transportCharge ?? 0) > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    🚛 Transportation
+                  </span>
+                  <span className="text-purple-700">
+                    +₹{invoice.transportCharge}
+                  </span>
+                </div>
+              )}
+              {(invoice.labourCharge ?? 0) > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">👷 Labour</span>
+                  <span className="text-purple-700">
+                    +₹{invoice.labourCharge}
+                  </span>
+                </div>
+              )}
+              {(invoice.otherCharges ?? 0) > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    📦 Other Charges
+                  </span>
+                  <span className="text-purple-700">
+                    +₹{invoice.otherCharges}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-base text-foreground">
-                <span>Total</span>
+                <span>{hasCharges ? "Grand Total" : "Total"}</span>
                 <span>₹{invoice.totalAmount}</span>
               </div>
               <div className="flex justify-between text-sm">

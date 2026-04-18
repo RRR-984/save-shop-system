@@ -182,16 +182,19 @@ const NAV_ITEMS: NavItem[] = [
   { id: "referral-page", label: "Refer & Earn", icon: Gift },
 ];
 
-// ─── Mode-based nav visibility ────────────────────────────────────────────────
-const MODE_1_PAGES = new Set<NavPage>([
+// ─── Auto Mode page sets ──────────────────────────────────────────────────────
+// Simple: clean minimal UI — just the basics a beginner needs
+const SIMPLE_PAGES = new Set<NavPage>([
   "dashboard",
   "owner-dashboard",
   "stock",
   "billing",
+  "customers",
   "settings",
 ]);
 
-const MODE_2_PAGES = new Set<NavPage>([
+// Smart: balanced — adds inventory, basic reports, credit tracking
+const SMART_PAGES = new Set<NavPage>([
   "dashboard",
   "owner-dashboard",
   "inventory",
@@ -201,15 +204,12 @@ const MODE_2_PAGES = new Set<NavPage>([
   "customers",
   "vendors",
   "reports",
-  "purchase-orders",
+  "returns",
   "settings",
 ]);
 
-function filterByMode(items: NavItem[], mode: 1 | 2 | 3): NavItem[] {
-  if (mode === 3) return items;
-  const allowed = mode === 1 ? MODE_1_PAGES : MODE_2_PAGES;
-  return items.filter((item) => allowed.has(item.id));
-}
+// Pro: all features (same as featureMode 4 / Super)
+// — uses full NAV_ITEMS list, no filtering needed
 
 interface SidebarProps {
   currentPage: NavPage;
@@ -222,9 +222,32 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const { t } = useLanguage();
   const { appConfig } = useStore();
 
-  const featureMode = (appConfig.featureMode ?? 3) as 1 | 2 | 3;
+  const featureMode = (appConfig.featureMode ?? 1) as 1 | 2 | 3 | 4;
   const role = currentUser?.role ?? "staff";
   const multiShopOwner = role === "owner" && allShops.length >= 2;
+
+  // Filter nav items:
+  // 1. By role/multi-shop condition
+  // 2. By auto mode (autoMode drives featureMode, but we also apply the
+  //    auto-mode page sets directly for accurate Simple/Smart filtering)
+  const autoModeFromCtx = appConfig.autoMode ?? "simple";
+
+  const roleFiltered = NAV_ITEMS.filter((item) => {
+    if (item.roles && !item.roles.includes(role)) return false;
+    if (item.multiShopOnly && !multiShopOwner) return false;
+    return true;
+  });
+
+  let visibleItems: NavItem[];
+  if (autoModeFromCtx === "pro" || featureMode === 4) {
+    // Pro / Super — all nav items
+    visibleItems = roleFiltered;
+  } else if (autoModeFromCtx === "smart") {
+    visibleItems = roleFiltered.filter((item) => SMART_PAGES.has(item.id));
+  } else {
+    // simple
+    visibleItems = roleFiltered.filter((item) => SIMPLE_PAGES.has(item.id));
+  }
 
   const handleNav = (page: NavPage) => {
     onNavigate(page);
@@ -235,16 +258,6 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     setMobileOpen(false);
     logout();
   };
-
-  // Filter nav items by role, then by mode, then by multi-shop condition
-  const visibleItems = filterByMode(
-    NAV_ITEMS.filter((item) => {
-      if (item.roles && !item.roles.includes(role)) return false;
-      if (item.multiShopOnly && !multiShopOwner) return false;
-      return true;
-    }),
-    featureMode,
-  );
 
   function SidebarContent() {
     return (

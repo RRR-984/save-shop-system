@@ -37,6 +37,7 @@ import {
   Receipt,
   ShieldAlert,
   Trash2,
+  Truck,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -66,6 +67,8 @@ function fmt(n: number) {
 }
 
 type PaymentMode = "cash" | "upi" | "online" | "credit";
+type CustomerType = "regular" | "retailer" | "wholesaler";
+type PriceMode = "standard" | "retailer" | "wholesaler";
 
 interface CartItem {
   productId: string;
@@ -75,6 +78,7 @@ interface CartItem {
   unit: string;
   selectedBatchId?: string;
   basePrice: number;
+  priceMode?: PriceMode;
 }
 
 const AUTO_DRAFT_KEY = "billing_auto_draft";
@@ -83,8 +87,16 @@ const RESUME_DRAFT_KEY = "billing_resume_draft";
 interface AutoDraft {
   customerName: string;
   customerMobile: string;
+  customerAddress?: string;
   cartItems: CartItem[];
   savedAt: string;
+  chargesEnabled?: boolean;
+  transportEnabled?: boolean;
+  transportAmt?: number;
+  labourEnabled?: boolean;
+  labourAmt?: number;
+  otherEnabled?: boolean;
+  otherAmt?: number;
 }
 
 // ─── Smart Pricing Helpers ────────────────────────────────────────────────────
@@ -109,6 +121,26 @@ function calcExtraProfit(
 
 function calcStaffBonus(extraProfit: number): number {
   return extraProfit * 0.5;
+}
+
+/** Returns the price for a given mode; falls back to standard if mode price not set */
+function getPriceForMode(
+  product: {
+    sellingPrice: number;
+    retailerPrice?: number;
+    wholesalerPrice?: number;
+  },
+  mode: PriceMode,
+): number {
+  if (mode === "retailer" && product.retailerPrice && product.retailerPrice > 0)
+    return product.retailerPrice;
+  if (
+    mode === "wholesaler" &&
+    product.wholesalerPrice &&
+    product.wholesalerPrice > 0
+  )
+    return product.wholesalerPrice;
+  return product.sellingPrice;
 }
 
 // ─── Low Price Alert Modal ────────────────────────────────────────────────────
@@ -440,6 +472,8 @@ export function BillingPage({
 
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [customerType, setCustomerType] = useState<CustomerType>("regular");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({});
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
@@ -455,6 +489,15 @@ export function BillingPage({
   );
   const [showInvoice, setShowInvoice] = useState(false);
   const [showNewSaleConfirm, setShowNewSaleConfirm] = useState(false);
+
+  // ── Extra Charges state ───────────────────────────────────────────────────
+  const [chargesEnabled, setChargesEnabled] = useState(false);
+  const [transportEnabled, setTransportEnabled] = useState(false);
+  const [transportAmt, setTransportAmt] = useState("");
+  const [labourEnabled, setLabourEnabled] = useState(false);
+  const [labourAmt, setLabourAmt] = useState("");
+  const [otherEnabled, setOtherEnabled] = useState(false);
+  const [otherAmt, setOtherAmt] = useState("");
 
   // Low Price Alert Modal state
   const [showLowPriceModal, setShowLowPriceModal] = useState(false);
@@ -493,6 +536,7 @@ export function BillingPage({
         if (auto.cartItems && auto.cartItems.length > 0) {
           setCustomerName(auto.customerName);
           setCustomerMobile(auto.customerMobile);
+          if (auto.customerAddress) setCustomerAddress(auto.customerAddress);
           setCart(auto.cartItems);
           const inputs: Record<string, string> = {};
           for (const item of auto.cartItems) {
@@ -501,6 +545,16 @@ export function BillingPage({
             );
           }
           setQtyInputs(inputs);
+          // Restore charges
+          if (auto.chargesEnabled) {
+            setChargesEnabled(true);
+            setTransportEnabled(!!auto.transportEnabled);
+            setTransportAmt(auto.transportAmt ? String(auto.transportAmt) : "");
+            setLabourEnabled(!!auto.labourEnabled);
+            setLabourAmt(auto.labourAmt ? String(auto.labourAmt) : "");
+            setOtherEnabled(!!auto.otherEnabled);
+            setOtherAmt(auto.otherAmt ? String(auto.otherAmt) : "");
+          }
           setAutoDraftActive(true);
           toast.info("Previous sale restored — continue or discard", {
             description: `${auto.cartItems.length} item(s) from ${new Date(auto.savedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`,
@@ -518,11 +572,19 @@ export function BillingPage({
     const interval = setInterval(() => {
       if (cart.length === 0) return;
       try {
-        const autoDraft = {
+        const autoDraft: AutoDraft = {
           customerName,
           customerMobile,
+          customerAddress: customerAddress || undefined,
           cartItems: cart,
           savedAt: new Date().toISOString(),
+          chargesEnabled,
+          transportEnabled,
+          transportAmt: Number(transportAmt) || 0,
+          labourEnabled,
+          labourAmt: Number(labourAmt) || 0,
+          otherEnabled,
+          otherAmt: Number(otherAmt) || 0,
         };
         sessionStorage.setItem(AUTO_DRAFT_KEY, JSON.stringify(autoDraft));
         const now = new Date();
@@ -534,7 +596,19 @@ export function BillingPage({
       }
     }, 30000);
     return () => clearInterval(interval);
-  }, [cart, customerName, customerMobile]);
+  }, [
+    cart,
+    customerName,
+    customerMobile,
+    customerAddress,
+    chargesEnabled,
+    transportEnabled,
+    transportAmt,
+    labourEnabled,
+    labourAmt,
+    otherEnabled,
+    otherAmt,
+  ]);
 
   function restoreFromDraft(draft: DraftSale) {
     setCustomerName(draft.customerName);
@@ -563,8 +637,16 @@ export function BillingPage({
       const autoDraft: AutoDraft = {
         customerName,
         customerMobile,
+        customerAddress: customerAddress || undefined,
         cartItems: cart,
         savedAt: new Date().toISOString(),
+        chargesEnabled,
+        transportEnabled,
+        transportAmt: Number(transportAmt) || 0,
+        labourEnabled,
+        labourAmt: Number(labourAmt) || 0,
+        otherEnabled,
+        otherAmt: Number(otherAmt) || 0,
       };
       sessionStorage.setItem(AUTO_DRAFT_KEY, JSON.stringify(autoDraft));
     } catch {
@@ -607,7 +689,7 @@ export function BillingPage({
       cartItems: cartDraftItems,
       createdAt: now,
       updatedAt: now,
-      totalAmount: cart.reduce((s, i) => s + i.quantity * i.sellingRate, 0),
+      totalAmount: total,
       status: "draft",
     };
   }
@@ -648,6 +730,8 @@ export function BillingPage({
   function clearForm() {
     setCustomerName("");
     setCustomerMobile("");
+    setCustomerAddress("");
+    setCustomerType("regular");
     setCart([]);
     setQtyInputs({});
     setItemErrors({});
@@ -660,6 +744,14 @@ export function BillingPage({
     setAddQty("1");
     setEditingDraftId(null);
     setAutoDraftActive(false);
+    // Reset charges
+    setChargesEnabled(false);
+    setTransportEnabled(false);
+    setTransportAmt("");
+    setLabourEnabled(false);
+    setLabourAmt("");
+    setOtherEnabled(false);
+    setOtherAmt("");
   }
 
   // ── Handle New Sale button ────────────────────────────────────────────────
@@ -725,10 +817,18 @@ export function BillingPage({
     );
   };
 
-  const total = cart.reduce(
+  const itemsSubtotal = cart.reduce(
     (s, item) => s + item.quantity * item.sellingRate,
     0,
   );
+  const activeTransport =
+    chargesEnabled && transportEnabled ? Number(transportAmt) || 0 : 0;
+  const activeLabour =
+    chargesEnabled && labourEnabled ? Number(labourAmt) || 0 : 0;
+  const activeOther =
+    chargesEnabled && otherEnabled ? Number(otherAmt) || 0 : 0;
+  const totalCharges = activeTransport + activeLabour + activeOther;
+  const total = itemsSubtotal + totalCharges;
 
   const computedPaid = (() => {
     if (paymentMode === "credit") return 0;
@@ -839,15 +939,27 @@ export function BillingPage({
       }));
     } else {
       const cartKey = resolvedBatchId ?? selectedProductId;
+      const initialMode: PriceMode =
+        customerType === "retailer" &&
+        product.retailerPrice &&
+        product.retailerPrice > 0
+          ? "retailer"
+          : customerType === "wholesaler" &&
+              product.wholesalerPrice &&
+              product.wholesalerPrice > 0
+            ? "wholesaler"
+            : "standard";
+      const initialRate = getPriceForMode(product, initialMode);
       setCart((prev) => [
         ...prev,
         {
           productId: selectedProductId,
           productName: product.name,
           quantity: qty,
-          sellingRate: product.sellingPrice,
+          sellingRate: initialRate,
           unit: product.unit,
           basePrice: product.sellingPrice,
+          priceMode: initialMode,
           ...(resolvedBatchId ? { selectedBatchId: resolvedBatchId } : {}),
         },
       ]);
@@ -949,6 +1061,56 @@ export function BillingPage({
     setQtyInputs((prev) => ({ ...prev, [cartKey]: String(newQty) }));
   };
 
+  /** Change price mode for a single cart item */
+  const handleItemPriceModeChange = (
+    productId: string,
+    batchId: string | undefined,
+    mode: PriceMode,
+  ) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    const newRate = getPriceForMode(product, mode);
+    setCart((prev) =>
+      prev.map((i) =>
+        i.productId === productId &&
+        (i.selectedBatchId ?? "") === (batchId ?? "")
+          ? { ...i, priceMode: mode, sellingRate: newRate }
+          : i,
+      ),
+    );
+    // Clear any pricing error for this item since mode auto-sets a valid price
+    setItemErrors((prev) => {
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  };
+
+  /** Apply a customer type to ALL cart items, changing price mode where applicable */
+  const applyCustomerTypeToCart = (type: CustomerType) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        const product = products.find((p) => p.id === item.productId);
+        if (!product) return item;
+        const mode: PriceMode =
+          type === "retailer" &&
+          product.retailerPrice &&
+          product.retailerPrice > 0
+            ? "retailer"
+            : type === "wholesaler" &&
+                product.wholesalerPrice &&
+                product.wholesalerPrice > 0
+              ? "wholesaler"
+              : "standard";
+        return {
+          ...item,
+          priceMode: mode,
+          sellingRate: getPriceForMode(product, mode),
+        };
+      }),
+    );
+  };
+
   const handleRateChange = (productId: string, rate: number) => {
     setCart((prev) =>
       prev.map((i) =>
@@ -1044,6 +1206,7 @@ export function BillingPage({
         totalProfit,
         isOverSell,
         availableStockAtSale: available,
+        priceModeUsed: item.priceMode ?? "standard",
         ...(item.selectedBatchId
           ? { selectedBatchId: item.selectedBatchId }
           : {}),
@@ -1086,6 +1249,7 @@ export function BillingPage({
       customerId: null,
       customerName: customerName.trim() || "Walk-in Customer",
       customerMobile: customerMobile.trim(),
+      customerAddress: customerAddress.trim() || undefined,
       items: invoiceItems,
       totalAmount: total,
       paidAmount: computedPaid,
@@ -1105,6 +1269,9 @@ export function BillingPage({
             )?.shopId ?? "owner")
           : "owner"),
       soldByName: currentUser?.name ?? "Owner",
+      ...(activeTransport > 0 ? { transportCharge: activeTransport } : {}),
+      ...(activeLabour > 0 ? { labourCharge: activeLabour } : {}),
+      ...(activeOther > 0 ? { otherCharges: activeOther } : {}),
     };
 
     if (lowPriceItems.length > 0) {
@@ -1505,6 +1672,88 @@ export function BillingPage({
                       </p>
                     )}
                 </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-sm">
+                    Address{" "}
+                    <span className="text-muted-foreground font-normal text-xs">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    data-ocid="billing.customer_address.input"
+                    placeholder="e.g. 12 Main Market, Indore"
+                    value={customerAddress}
+                    onChange={(e) => setCustomerAddress(e.target.value)}
+                  />
+                </div>
+
+                {/* Customer Type / Price Mode selector */}
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-sm flex items-center gap-1.5">
+                    Customer Type{" "}
+                    <span className="text-muted-foreground font-normal text-xs">
+                      (sets price mode)
+                    </span>
+                  </Label>
+                  <div
+                    data-ocid="billing.customer_type.toggle"
+                    className="flex gap-1.5 flex-wrap"
+                  >
+                    {(
+                      [
+                        {
+                          key: "regular" as CustomerType,
+                          label: "Regular",
+                          hint: "Standard price",
+                          cls: "border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
+                          activeCls:
+                            "ring-2 ring-blue-500 ring-offset-1 font-semibold",
+                        },
+                        {
+                          key: "retailer" as CustomerType,
+                          label: "Retailer",
+                          hint: "दुकानदार",
+                          cls: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300",
+                          activeCls:
+                            "ring-2 ring-green-500 ring-offset-1 font-semibold",
+                        },
+                        {
+                          key: "wholesaler" as CustomerType,
+                          label: "Wholesaler",
+                          hint: "थोक",
+                          cls: "border-purple-400 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300",
+                          activeCls:
+                            "ring-2 ring-purple-500 ring-offset-1 font-semibold",
+                        },
+                      ] as const
+                    ).map(({ key, label, hint, cls, activeCls }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        data-ocid={`billing.customer_type.${key}`}
+                        onClick={() => {
+                          setCustomerType(key);
+                          applyCustomerTypeToCart(key);
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs border transition-all ${cls} ${
+                          customerType === key
+                            ? activeCls
+                            : "opacity-60 hover:opacity-90"
+                        }`}
+                      >
+                        {label}{" "}
+                        <span className="opacity-70 font-normal">({hint})</span>
+                      </button>
+                    ))}
+                  </div>
+                  {customerType !== "regular" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {customerType === "retailer"
+                        ? "Retailer price auto-applied to items that have it set"
+                        : "Wholesaler price auto-applied to items that have it set"}
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -1707,7 +1956,7 @@ export function BillingPage({
                               }
                             >
                               <TableCell className="text-sm font-medium">
-                                <div className="flex flex-col gap-0.5">
+                                <div className="flex flex-col gap-1">
                                   {item.productName}
                                   {batchInfo && (
                                     <span className="inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 w-fit">
@@ -1724,6 +1973,94 @@ export function BillingPage({
                                       Over Sell — {available} available
                                     </span>
                                   )}
+                                  {/* Price mode pills */}
+                                  {(() => {
+                                    const prod = products.find(
+                                      (p) => p.id === item.productId,
+                                    );
+                                    if (!prod) return null;
+                                    const hasRetailer =
+                                      prod.retailerPrice &&
+                                      prod.retailerPrice > 0;
+                                    const hasWholesaler =
+                                      prod.wholesalerPrice &&
+                                      prod.wholesalerPrice > 0;
+                                    if (!hasRetailer && !hasWholesaler)
+                                      return null;
+                                    const currentMode =
+                                      item.priceMode ?? "standard";
+                                    return (
+                                      <div
+                                        data-ocid={`billing.cart.price_mode.${idx + 1}`}
+                                        className="flex gap-1 flex-wrap mt-0.5"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleItemPriceModeChange(
+                                              item.productId,
+                                              item.selectedBatchId,
+                                              "standard",
+                                            )
+                                          }
+                                          className={`px-1.5 py-0.5 rounded text-[10px] border transition-all ${
+                                            currentMode === "standard"
+                                              ? "bg-blue-100 border-blue-400 text-blue-700 font-semibold ring-1 ring-blue-400"
+                                              : "bg-muted border-border text-muted-foreground hover:border-blue-300"
+                                          }`}
+                                        >
+                                          Std ₹
+                                          {prod.sellingPrice.toLocaleString(
+                                            "en-IN",
+                                          )}
+                                        </button>
+                                        {hasRetailer && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleItemPriceModeChange(
+                                                item.productId,
+                                                item.selectedBatchId,
+                                                "retailer",
+                                              )
+                                            }
+                                            className={`px-1.5 py-0.5 rounded text-[10px] border transition-all ${
+                                              currentMode === "retailer"
+                                                ? "bg-green-100 border-green-400 text-green-700 font-semibold ring-1 ring-green-400"
+                                                : "bg-muted border-border text-muted-foreground hover:border-green-300"
+                                            }`}
+                                          >
+                                            Ret ₹
+                                            {prod.retailerPrice!.toLocaleString(
+                                              "en-IN",
+                                            )}
+                                          </button>
+                                        )}
+                                        {hasWholesaler && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleItemPriceModeChange(
+                                                item.productId,
+                                                item.selectedBatchId,
+                                                "wholesaler",
+                                              )
+                                            }
+                                            className={`px-1.5 py-0.5 rounded text-[10px] border transition-all ${
+                                              currentMode === "wholesaler"
+                                                ? "bg-purple-100 border-purple-400 text-purple-700 font-semibold ring-1 ring-purple-400"
+                                                : "bg-muted border-border text-muted-foreground hover:border-purple-300"
+                                            }`}
+                                          >
+                                            Whl ₹
+                                            {prod.wholesalerPrice!.toLocaleString(
+                                              "en-IN",
+                                            )}
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               </TableCell>
                               <TableCell>
@@ -1919,6 +2256,181 @@ export function BillingPage({
                 )}
               </CardContent>
             </Card>
+
+            {/* ── Extra Charges ─────────────────────────────────────────── */}
+            <Card className="shadow-card border-2 border-purple-200 dark:border-purple-900 bg-purple-50/20 dark:bg-purple-950/10">
+              <CardHeader className="pb-2 border-b border-purple-200 dark:border-purple-900">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2 text-purple-800 dark:text-purple-300">
+                    <Truck size={16} />
+                    Extra Charges
+                  </CardTitle>
+                  {/* Master toggle */}
+                  <button
+                    type="button"
+                    data-ocid="billing.extra_charges.toggle"
+                    aria-label="Toggle extra charges"
+                    onClick={() => setChargesEnabled((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                      chargesEnabled
+                        ? "bg-purple-600"
+                        : "bg-muted-foreground/30"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        chargesEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+                {!chargesEnabled && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Toggle ON to add transportation, labour, or other charges
+                  </p>
+                )}
+              </CardHeader>
+
+              {chargesEnabled && (
+                <CardContent className="pt-3 space-y-3">
+                  {/* Transportation */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      data-ocid="billing.transport_charge.toggle"
+                      aria-label="Toggle transportation charge"
+                      onClick={() => setTransportEnabled((v) => !v)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                        transportEnabled
+                          ? "bg-purple-500"
+                          : "bg-muted-foreground/30"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          transportEnabled ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                    <span className="text-sm text-foreground flex-1 font-medium">
+                      🚛 Transportation Charge
+                    </span>
+                    {transportEnabled && (
+                      <Input
+                        data-ocid="billing.transport_charge.input"
+                        type="number"
+                        placeholder="₹ Amount"
+                        value={transportAmt}
+                        onChange={(e) =>
+                          setTransportAmt(clearLeadingZeros(e.target.value))
+                        }
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
+                        className="w-28 h-8 text-sm"
+                        min="0"
+                      />
+                    )}
+                    {!transportEnabled && (
+                      <span className="text-xs text-muted-foreground">OFF</span>
+                    )}
+                  </div>
+
+                  {/* Labour */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      data-ocid="billing.labour_charge.toggle"
+                      aria-label="Toggle labour charge"
+                      onClick={() => setLabourEnabled((v) => !v)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                        labourEnabled
+                          ? "bg-purple-500"
+                          : "bg-muted-foreground/30"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          labourEnabled ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                    <span className="text-sm text-foreground flex-1 font-medium">
+                      👷 Labour Charge
+                    </span>
+                    {labourEnabled && (
+                      <Input
+                        data-ocid="billing.labour_charge.input"
+                        type="number"
+                        placeholder="₹ Amount"
+                        value={labourAmt}
+                        onChange={(e) =>
+                          setLabourAmt(clearLeadingZeros(e.target.value))
+                        }
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
+                        className="w-28 h-8 text-sm"
+                        min="0"
+                      />
+                    )}
+                    {!labourEnabled && (
+                      <span className="text-xs text-muted-foreground">OFF</span>
+                    )}
+                  </div>
+
+                  {/* Other */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      data-ocid="billing.other_charges.toggle"
+                      aria-label="Toggle other charges"
+                      onClick={() => setOtherEnabled((v) => !v)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                        otherEnabled
+                          ? "bg-purple-500"
+                          : "bg-muted-foreground/30"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          otherEnabled ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                    <span className="text-sm text-foreground flex-1 font-medium">
+                      📦 Other Charges
+                    </span>
+                    {otherEnabled && (
+                      <Input
+                        data-ocid="billing.other_charges.input"
+                        type="number"
+                        placeholder="₹ Amount"
+                        value={otherAmt}
+                        onChange={(e) =>
+                          setOtherAmt(clearLeadingZeros(e.target.value))
+                        }
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
+                        className="w-28 h-8 text-sm"
+                        min="0"
+                      />
+                    )}
+                    {!otherEnabled && (
+                      <span className="text-xs text-muted-foreground">OFF</span>
+                    )}
+                  </div>
+
+                  {totalCharges > 0 && (
+                    <div className="flex justify-between items-center pt-2 border-t border-purple-200 dark:border-purple-800 text-sm font-medium text-purple-700 dark:text-purple-300">
+                      <span>Total Extra Charges</span>
+                      <span>{fmt(totalCharges)}</span>
+                    </div>
+                  )}
+                </CardContent>
+              )}
+            </Card>
           </div>
 
           {/* Payment Summary */}
@@ -1942,8 +2454,45 @@ export function BillingPage({
                     </div>
                   )}
                   <Separator />
+                  {/* Subtotal */}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>{fmt(itemsSubtotal)}</span>
+                  </div>
+                  {/* Charge lines (only when active) */}
+                  {activeTransport > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        🚛 Transport
+                      </span>
+                      <span className="text-purple-700">
+                        +{fmt(activeTransport)}
+                      </span>
+                    </div>
+                  )}
+                  {activeLabour > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        👷 Labour
+                      </span>
+                      <span className="text-purple-700">
+                        +{fmt(activeLabour)}
+                      </span>
+                    </div>
+                  )}
+                  {activeOther > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        📦 Other
+                      </span>
+                      <span className="text-purple-700">
+                        +{fmt(activeOther)}
+                      </span>
+                    </div>
+                  )}
+                  {totalCharges > 0 && <Separator />}
                   <div className="flex justify-between font-bold text-lg">
-                    <span>Total</span>
+                    <span>Grand Total</span>
                     <span className="text-brand-blue">{fmt(total)}</span>
                   </div>
                 </div>
@@ -2071,8 +2620,36 @@ export function BillingPage({
                       </span>
                     </div>
                   )}
+                  {activeTransport > 0 && (
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/60 text-xs">
+                      <span className="text-muted-foreground">
+                        🚛 Transport
+                      </span>
+                      <span className="text-purple-700">
+                        +{fmt(activeTransport)}
+                      </span>
+                    </div>
+                  )}
+                  {activeLabour > 0 && (
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/60 text-xs">
+                      <span className="text-muted-foreground">👷 Labour</span>
+                      <span className="text-purple-700">
+                        +{fmt(activeLabour)}
+                      </span>
+                    </div>
+                  )}
+                  {activeOther > 0 && (
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/60 text-xs">
+                      <span className="text-muted-foreground">📦 Other</span>
+                      <span className="text-purple-700">
+                        +{fmt(activeOther)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
-                    <span className="font-semibold text-foreground">Total</span>
+                    <span className="font-semibold text-foreground">
+                      Grand Total
+                    </span>
                     <span className="font-bold text-foreground">
                       {fmt(total)}
                     </span>

@@ -162,45 +162,45 @@ export function StaffPerformancePage() {
 
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card className="border-blue-200 bg-blue-50">
+          <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800/40">
             <CardContent className="p-3">
-              <div className="text-xs text-blue-600 font-medium">
+              <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
                 💰 Total Sales
               </div>
-              <div className="text-lg font-bold text-blue-800">
+              <div className="text-lg font-bold text-blue-800 dark:text-blue-200">
                 ₹{totalSalesAll.toLocaleString("en-IN")}
               </div>
-              <div className="text-xs text-blue-500 mt-0.5">
+              <div className="text-xs text-blue-500 dark:text-blue-400 mt-0.5">
                 {totalInvoicesAll} invoices
               </div>
             </CardContent>
           </Card>
-          <Card className="border-green-200 bg-green-50">
+          <Card className="border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800/40">
             <CardContent className="p-3">
-              <div className="text-xs text-green-600 font-medium">
+              <div className="text-xs text-green-600 dark:text-green-400 font-medium">
                 📈 Total Profit
               </div>
-              <div className="text-lg font-bold text-green-800">
+              <div className="text-lg font-bold text-green-800 dark:text-green-200">
                 ₹{totalProfitAll.toLocaleString("en-IN")}
               </div>
             </CardContent>
           </Card>
-          <Card className="border-purple-200 bg-purple-50">
+          <Card className="border-purple-200 bg-purple-50 dark:bg-purple-950/20 dark:border-purple-800/40">
             <CardContent className="p-3">
-              <div className="text-xs text-purple-600 font-medium">
+              <div className="text-xs text-purple-600 dark:text-purple-400 font-medium">
                 🎁 Staff Bonus
               </div>
-              <div className="text-lg font-bold text-purple-800">
+              <div className="text-lg font-bold text-purple-800 dark:text-purple-200">
                 ₹{totalBonusAll.toLocaleString("en-IN")}
               </div>
             </CardContent>
           </Card>
-          <Card className="border-orange-200 bg-orange-50">
+          <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800/40">
             <CardContent className="p-3">
-              <div className="text-xs text-orange-600 font-medium">
+              <div className="text-xs text-orange-600 dark:text-orange-400 font-medium">
                 👥 Active Staff
               </div>
-              <div className="text-lg font-bold text-orange-800">
+              <div className="text-lg font-bold text-orange-800 dark:text-orange-200">
                 {staffStats.length}
               </div>
             </CardContent>

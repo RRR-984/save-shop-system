@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Gift,
   KeyRound,
+  MapPin,
   MessageSquare,
   Phone,
   RefreshCw,
@@ -516,12 +517,55 @@ function OtpLoginFlow({
 
 // ─── PIN Login flow ───────────────────────────────────────────────────────────
 
+// Minimal shape we need from the stored shop record
+interface StoredShop {
+  id: string;
+  name?: string;
+  address?: string;
+  city?: string;
+}
+
+/** Look up shop info for the given mobile from localStorage store_shops + auth_users_cache */
+function resolveShopForMobile(
+  mobile: string,
+): { name?: string; address?: string; city?: string } | null {
+  try {
+    const users: Array<{
+      mobile?: string;
+      shopId?: string;
+      active?: boolean;
+      deleted?: boolean;
+    }> = JSON.parse(localStorage.getItem("auth_users_cache") ?? "[]");
+    const cleaned = mobile.replace(/\D/g, "");
+    const matched = users.find(
+      (u) =>
+        u.mobile?.replace(/\D/g, "") === cleaned &&
+        u.active !== false &&
+        !u.deleted,
+    );
+    if (!matched?.shopId) return null;
+    const shops: StoredShop[] = JSON.parse(
+      localStorage.getItem("store_shops") ?? "[]",
+    );
+    const shop = shops.find((s) => s.id === matched.shopId);
+    if (!shop) return null;
+    return { name: shop.name, address: shop.address, city: shop.city };
+  } catch {
+    return null;
+  }
+}
+
 function PinLoginFlow({ onBack }: { onBack: () => void }) {
   const { loginWithPin } = useAuth();
   const [step, setStep] = useState<PinStep>("mobile");
 
   const [mobile, setMobile] = useState("");
   const [mobileError, setMobileError] = useState("");
+  const [shopInfo, setShopInfo] = useState<{
+    name?: string;
+    address?: string;
+    city?: string;
+  } | null>(null);
 
   // PIN state: array of 6 chars
   const [pins, setPins] = useState<string[]>(["", "", "", "", "", ""]);
@@ -547,6 +591,7 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
     setMobileError("");
     setPins(["", "", "", "", "", ""]);
     setPinError("");
+    setShopInfo(resolveShopForMobile(cleaned));
     setStep("pin");
   };
 
@@ -600,7 +645,10 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
         setPinError("This account is inactive. Please contact the owner.");
       } else if (
         msg.toLowerCase().includes("deleted") ||
-        msg.toLowerCase().includes("nahi mila")
+        msg.toLowerCase().includes("nahi mila") ||
+        msg.toLowerCase().includes("not found") ||
+        msg.toLowerCase().includes("no account") ||
+        msg.toLowerCase().includes("account not found")
       ) {
         setPinError("Account not found.");
       } else {
@@ -747,6 +795,26 @@ function PinLoginFlow({ onBack }: { onBack: () => void }) {
               <p className="text-xs text-muted-foreground">
                 Enter your 6-digit PIN
               </p>
+              {shopInfo?.name && (
+                <div className="mt-2 space-y-0.5">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {shopInfo.name}
+                  </p>
+                  {(shopInfo.address || shopInfo.city) && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                      <MapPin
+                        size={11}
+                        className="flex-shrink-0 text-muted-foreground/70"
+                      />
+                      <span className="truncate">
+                        {[shopInfo.address, shopInfo.city]
+                          .filter(Boolean)
+                          .join(", ")}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
             </CardHeader>
             <CardContent className="px-5 pb-5">
               <form onSubmit={handlePinSubmit} className="space-y-5">

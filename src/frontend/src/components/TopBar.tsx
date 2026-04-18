@@ -27,7 +27,7 @@ import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import { useTheme } from "../context/ThemeContext";
 import usePWA from "../hooks/usePWA";
-import type { ShopMeta } from "../types/store";
+import type { AutoModeType, ShopMeta } from "../types/store";
 
 interface TopBarProps {
   title: string;
@@ -37,44 +37,90 @@ interface TopBarProps {
   isHome?: boolean;
 }
 
-// ─── Mode Switcher Pill ───────────────────────────────────────────────────────
-const MODE_LABELS: Record<1 | 2 | 3, string> = {
-  1: "Normal",
-  2: "Advance",
-  3: "Super",
-};
+// ─── Auto Mode Switcher (Simple | Smart | Pro) ────────────────────────────────
+const AUTO_MODE_OPTIONS: {
+  value: AutoModeType;
+  label: string;
+  shortLabel: string;
+  emoji: string;
+  desc: string;
+  color: string;
+  activeClass: string;
+}[] = [
+  {
+    value: "simple",
+    label: "Simple",
+    shortLabel: "S",
+    emoji: "🟢",
+    desc: "Stock, Billing, Payment",
+    color: "green",
+    activeClass:
+      "bg-green-500 text-white border-green-500 shadow-sm shadow-green-200 dark:shadow-green-900/30",
+  },
+  {
+    value: "smart",
+    label: "Smart",
+    shortLabel: "M",
+    emoji: "🟡",
+    desc: "Inventory, Reports, Credit",
+    color: "amber",
+    activeClass:
+      "bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-200 dark:shadow-amber-900/30",
+  },
+  {
+    value: "pro",
+    label: "Pro",
+    shortLabel: "P",
+    emoji: "🔴",
+    desc: "All features",
+    color: "red",
+    activeClass:
+      "bg-red-500 text-white border-red-500 shadow-sm shadow-red-200 dark:shadow-red-900/30",
+  },
+];
 
-function ModeSwitcher({
+function AutoModeSwitcher({
   mode,
   onChange,
 }: {
-  mode: 1 | 2 | 3;
-  onChange: (m: 1 | 2 | 3) => void;
+  mode: AutoModeType;
+  onChange: (m: AutoModeType) => void;
 }) {
   return (
     <div
-      className="flex items-center gap-0.5 rounded-lg bg-secondary border border-border p-0.5 h-8"
-      aria-label="Feature mode switcher"
-      title="Switch app mode: 1=Normal, 2=Advance, 3=Super"
+      className="flex items-center rounded-lg border border-border bg-secondary p-0.5 gap-0.5 flex-shrink-0"
+      data-ocid="topbar.auto_mode_switcher"
+      role="toolbar"
+      aria-label="UI Mode switcher"
     >
-      {([1, 2, 3] as const).map((m) => (
-        <button
-          key={m}
-          type="button"
-          data-ocid={`topbar.mode_${m}_button`}
-          onClick={() => onChange(m)}
-          title={`Mode ${m}: ${MODE_LABELS[m]}`}
-          aria-pressed={mode === m}
-          aria-label={`Mode ${m}: ${MODE_LABELS[m]}`}
-          className={`w-6 h-6 rounded-md text-[11px] font-bold leading-none flex items-center justify-center transition-all duration-150 ${
-            mode === m
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
-          }`}
-        >
-          {m}
-        </button>
-      ))}
+      {AUTO_MODE_OPTIONS.map((opt) => {
+        const isActive = mode === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            data-ocid={`topbar.auto_mode.${opt.value}`}
+            onClick={() => onChange(opt.value)}
+            title={`${opt.emoji} ${opt.label} Mode — ${opt.desc}`}
+            aria-pressed={isActive}
+            className={`
+              flex items-center gap-1 h-7 px-2 rounded-md text-xs font-semibold
+              transition-all duration-200 focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-primary whitespace-nowrap select-none
+              ${
+                isActive
+                  ? opt.activeClass
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              }
+            `}
+          >
+            <span className="text-[10px] leading-none">{opt.emoji}</span>
+            {/* Full label on sm+, short on xs */}
+            <span className="hidden sm:inline leading-none">{opt.label}</span>
+            <span className="sm:hidden leading-none">{opt.shortLabel}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -213,9 +259,10 @@ function ShopModal({
 interface ShopChipsProps {
   /** Extra class on the scroll container */
   className?: string;
+  language?: "en" | "hi";
 }
 
-function ShopChips({ className = "" }: ShopChipsProps) {
+function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
   const {
     allShops,
     switchShop,
@@ -331,74 +378,109 @@ function ShopChips({ className = "" }: ShopChipsProps) {
 
   return (
     <>
-      {/* Chips scroll row */}
+      {/* Chips row: scrollable shop chips + sticky "+ Add" button always visible */}
       <div
-        className={`flex items-center gap-1.5 overflow-x-auto scrollbar-hide flex-nowrap ${className}`}
+        className={`flex items-center gap-1.5 min-w-0 ${className}`}
         data-ocid="topbar.shop_chips_row"
-        style={{ WebkitOverflowScrolling: "touch" }}
       >
-        {allShops.map((shop, idx) => {
-          const isActive = shop.id === activeId;
-          const isLoading = switching === shop.id;
-          const isLongPressed = longPressShop?.id === shop.id;
+        {/* Scrollable chips area — overflow-x:auto so chips scroll, not clip */}
+        <div
+          className="flex items-center gap-1.5 overflow-x-auto flex-nowrap min-w-0 flex-1"
+          style={
+            {
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+              WebkitOverflowScrolling: "touch",
+            } as React.CSSProperties
+          }
+        >
+          {allShops.map((shop, idx) => {
+            const isActive = shop.id === activeId;
+            const isLoading = switching === shop.id;
+            const isLongPressed = longPressShop?.id === shop.id;
 
-          return (
-            <div key={shop.id} className="relative flex-shrink-0 group">
-              <button
-                type="button"
-                data-ocid={`topbar.shop_chip.${idx + 1}`}
-                disabled={isLoading}
-                onClick={() => handleSwitch(shop.id)}
-                onMouseDown={() => {
-                  pressTimer.current = setTimeout(
-                    () => setLongPressShop(shop),
-                    600,
-                  );
-                }}
-                onMouseUp={() => {
-                  if (pressTimer.current) clearTimeout(pressTimer.current);
-                }}
-                onMouseLeave={() => {
-                  if (pressTimer.current) clearTimeout(pressTimer.current);
-                }}
-                onTouchStart={() => {
-                  pressTimer.current = setTimeout(
-                    () => setLongPressShop(shop),
-                    600,
-                  );
-                }}
-                onTouchEnd={() => {
-                  if (pressTimer.current) clearTimeout(pressTimer.current);
-                }}
-                title={shop.name + (shop.city ? ` · ${shop.city}` : "")}
-                aria-pressed={isActive}
-                className={`
-                  flex items-center gap-1 h-7 px-2.5 rounded-full text-xs font-semibold
-                  transition-all duration-150 whitespace-nowrap select-none
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
-                  ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-sm border border-blue-600"
-                      : "bg-transparent border border-border text-foreground hover:border-blue-400 hover:text-blue-600 dark:border-border dark:text-foreground dark:hover:border-blue-400 dark:hover:text-blue-400"
-                  }
-                  ${isLoading ? "opacity-60" : ""}
-                `}
-              >
-                {isLoading && (
-                  <Loader2 size={10} className="animate-spin flex-shrink-0" />
-                )}
-                {truncName(shop.name)}
-              </button>
-
-              {/* Edit/delete mini-actions — visible on hover (desktop) or long-press (mobile) */}
-              {(isLongPressed || false) && (
-                <div
-                  className="absolute top-8 left-0 z-50 flex items-center gap-1 bg-card border border-border rounded-lg shadow-lg p-1"
-                  onMouseLeave={() => setLongPressShop(null)}
+            return (
+              <div key={shop.id} className="relative flex-shrink-0 group">
+                <button
+                  type="button"
+                  data-ocid={`topbar.shop_chip.${idx + 1}`}
+                  disabled={isLoading}
+                  onClick={() => handleSwitch(shop.id)}
+                  onMouseDown={() => {
+                    pressTimer.current = setTimeout(
+                      () => setLongPressShop(shop),
+                      600,
+                    );
+                  }}
+                  onMouseUp={() => {
+                    if (pressTimer.current) clearTimeout(pressTimer.current);
+                  }}
+                  onMouseLeave={() => {
+                    if (pressTimer.current) clearTimeout(pressTimer.current);
+                  }}
+                  onTouchStart={() => {
+                    pressTimer.current = setTimeout(
+                      () => setLongPressShop(shop),
+                      600,
+                    );
+                  }}
+                  onTouchEnd={() => {
+                    if (pressTimer.current) clearTimeout(pressTimer.current);
+                  }}
+                  title={shop.name + (shop.city ? ` · ${shop.city}` : "")}
+                  aria-pressed={isActive}
+                  className={`
+                    flex items-center gap-1 h-7 px-2.5 rounded-full text-xs font-semibold
+                    transition-all duration-150 whitespace-nowrap select-none
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
+                    ${
+                      isActive
+                        ? "bg-blue-600 text-white shadow-sm border border-blue-600"
+                        : "bg-transparent border border-border text-foreground hover:border-blue-400 hover:text-blue-600 dark:border-border dark:text-foreground dark:hover:border-blue-400 dark:hover:text-blue-400"
+                    }
+                    ${isLoading ? "opacity-60" : ""}
+                  `}
                 >
+                  {isLoading && (
+                    <Loader2 size={10} className="animate-spin flex-shrink-0" />
+                  )}
+                  {truncName(shop.name)}
+                </button>
+
+                {/* Edit/delete mini-actions — long-press (mobile) */}
+                {isLongPressed && (
+                  <div
+                    className="absolute top-8 left-0 z-50 flex items-center gap-1 bg-card border border-border rounded-lg shadow-lg p-1"
+                    onMouseLeave={() => setLongPressShop(null)}
+                  >
+                    <button
+                      type="button"
+                      data-ocid={`topbar.shop_chip_edit.${idx + 1}`}
+                      onClick={(e) => openEdit(shop, e)}
+                      className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title="Edit shop"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    {!isActive && (
+                      <button
+                        type="button"
+                        data-ocid={`topbar.shop_chip_delete.${idx + 1}`}
+                        onClick={(e) => openDelete(shop, e)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Archive shop"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Desktop hover edit/delete — opacity transition (no DOM reflow, no flicker) */}
+                <div className="absolute top-8 left-0 z-50 flex items-center gap-1 bg-card border border-border rounded-lg shadow-lg p-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150">
                   <button
                     type="button"
-                    data-ocid={`topbar.shop_chip_edit.${idx + 1}`}
+                    data-ocid={`topbar.shop_chip_edit_hover.${idx + 1}`}
                     onClick={(e) => openEdit(shop, e)}
                     className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                     title="Edit shop"
@@ -408,7 +490,7 @@ function ShopChips({ className = "" }: ShopChipsProps) {
                   {!isActive && (
                     <button
                       type="button"
-                      data-ocid={`topbar.shop_chip_delete.${idx + 1}`}
+                      data-ocid={`topbar.shop_chip_delete_hover.${idx + 1}`}
                       onClick={(e) => openDelete(shop, e)}
                       className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                       title="Archive shop"
@@ -417,45 +499,24 @@ function ShopChips({ className = "" }: ShopChipsProps) {
                     </button>
                   )}
                 </div>
-              )}
-
-              {/* Desktop hover edit/delete — opacity transition (no DOM reflow, no flicker) */}
-              <div className="absolute top-8 left-0 z-50 flex items-center gap-1 bg-card border border-border rounded-lg shadow-lg p-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150">
-                <button
-                  type="button"
-                  data-ocid={`topbar.shop_chip_edit_hover.${idx + 1}`}
-                  onClick={(e) => openEdit(shop, e)}
-                  className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title="Edit shop"
-                >
-                  <Pencil size={12} />
-                </button>
-                {!isActive && (
-                  <button
-                    type="button"
-                    data-ocid={`topbar.shop_chip_delete_hover.${idx + 1}`}
-                    onClick={(e) => openDelete(shop, e)}
-                    className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                    title="Archive shop"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                )}
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
 
-        {/* "+" chip — add new shop */}
+        {/* "+ Add" pill — always visible, outside scroll container, flex-shrink-0 */}
         <button
           type="button"
           data-ocid="topbar.new_shop_chip"
           onClick={openNew}
-          title="Add new shop"
-          className="flex items-center justify-center h-7 w-7 rounded-full border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary transition-colors flex-shrink-0"
-          aria-label="Add new shop"
+          title={language === "hi" ? "नई शॉप जोड़ें" : "Add new shop"}
+          aria-label={language === "hi" ? "नई शॉप जोड़ें" : "Add new shop"}
+          className="flex items-center gap-1 h-7 pl-2 pr-2.5 rounded-full border border-dashed border-primary/50 text-primary hover:bg-primary/8 hover:border-primary transition-colors flex-shrink-0 text-xs font-semibold whitespace-nowrap"
         >
-          <Plus size={13} />
+          <Plus size={12} />
+          <span className="hidden sm:inline">
+            {language === "hi" ? "जोड़ें" : "Add"}
+          </span>
         </button>
       </div>
 
@@ -557,8 +618,8 @@ function TopBarInner({
     getAllCustomerLedgers,
     diamondRewards,
     isSyncing,
-    appConfig,
-    setFeatureMode,
+    autoMode,
+    setAutoMode,
   } = useStore();
   const { currentUser, session, currentShop, allShops } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
@@ -572,7 +633,6 @@ function TopBarInner({
 
   const totalNotifCount = isStaff ? lowStockCount : lowStockCount + dueCount;
   const totalDiamonds = diamondRewards.reduce((s, r) => s + r.diamondCount, 0);
-  const featureMode = (appConfig.featureMode ?? 3) as 1 | 2 | 3;
 
   const initials = (() => {
     const name = currentUser?.name?.trim();
@@ -644,8 +704,8 @@ function TopBarInner({
               flexShrink: 0,
             }}
           />
-          <div className="flex flex-col leading-tight min-w-0 hidden sm:flex">
-            <span className="text-base font-bold text-foreground truncate max-w-[120px]">
+          <div className="flex flex-col leading-tight min-w-0 flex">
+            <span className="text-base font-bold text-foreground truncate max-w-[80px] sm:max-w-[120px]">
               {shopName}
             </span>
             {title !== shopName && (
@@ -659,9 +719,9 @@ function TopBarInner({
         {/* Shop chips — inline on tablet/desktop, or inline on mobile when ≤2 shops */}
         {showShopChips && (
           <div
-            className={`flex-shrink-0 ${manyShops ? "hidden sm:block" : "block"}`}
+            className={`flex-shrink-0 min-w-0 ${manyShops ? "hidden sm:flex sm:max-w-[280px] lg:max-w-[400px]" : "flex max-w-[200px] sm:max-w-[320px]"}`}
           >
-            <ShopChips />
+            <ShopChips language={language} />
           </div>
         )}
 
@@ -698,8 +758,8 @@ function TopBarInner({
             }`}
           />
 
-          {/* Mode Switcher: 1 | 2 | 3 */}
-          <ModeSwitcher mode={featureMode} onChange={setFeatureMode} />
+          {/* Mode Switcher: Simple | Smart | Pro */}
+          <AutoModeSwitcher mode={autoMode} onChange={setAutoMode} />
 
           {/* Language toggle */}
           <button
@@ -860,7 +920,7 @@ function TopBarInner({
           className="sm:hidden bg-card border-b border-border px-3 py-1.5"
           data-ocid="topbar.shop_chips_subbar"
         >
-          <ShopChips className="gap-1.5" />
+          <ShopChips className="gap-1.5" language={language} />
         </div>
       )}
     </div>

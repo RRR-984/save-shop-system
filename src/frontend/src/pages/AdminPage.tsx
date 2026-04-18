@@ -510,6 +510,8 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
   const [labourCharge, setLabourCharge] = useState("");
   const [otherCharge, setOtherCharge] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
+  const [retailerPrice, setRetailerPrice] = useState("");
+  const [wholesalerPrice, setWholesalerPrice] = useState("");
 
   // ── Mix Unit Mode ──
   const [unitMode, setUnitMode] = useState<"single" | "mixed">("single");
@@ -540,6 +542,8 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
     setLabourCharge("");
     setOtherCharge("");
     setExpiryDate("");
+    setRetailerPrice("");
+    setWholesalerPrice("");
     setUnitMode("single");
     setLengthUnit("");
     setWeightUnit("");
@@ -579,6 +583,10 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
     setTransportCharge("");
     setLabourCharge("");
     setExpiryDate(p.expiryDate ?? "");
+    setRetailerPrice(p.retailerPrice != null ? String(p.retailerPrice) : "");
+    setWholesalerPrice(
+      p.wholesalerPrice != null ? String(p.wholesalerPrice) : "",
+    );
     setUnitMode(p.unitMode ?? "single");
     setLengthUnit(p.lengthUnit ?? "");
     setWeightUnit(p.weightUnit ?? "");
@@ -628,6 +636,8 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
       details: details.trim() || undefined,
       expiryDate: expiryDate.trim() || undefined,
       unitMode,
+      retailerPrice: retailerPrice ? Number(retailerPrice) : undefined,
+      wholesalerPrice: wholesalerPrice ? Number(wholesalerPrice) : undefined,
       ...(unitMode === "mixed"
         ? {
             lengthUnit: lengthUnit.trim(),
@@ -1489,6 +1499,58 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                   />
                   <p className="text-[10px] text-muted-foreground">
                     Staff cannot sell below this minimum profit threshold
+                  </p>
+                </div>
+              </div>
+
+              {/* Retailer & Wholesaler prices */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Retailer Price (₹){" "}
+                    <span className="normal-case text-muted-foreground">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    data-ocid="admin.products.retailer_price.input"
+                    type="number"
+                    value={retailerPrice}
+                    onChange={(e) =>
+                      setRetailerPrice(clearLeadingZeros(e.target.value))
+                    }
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
+                    placeholder="e.g. 95"
+                    className="h-9"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Retailer (दुकानदार) ke liye price
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Wholesaler Price (₹){" "}
+                    <span className="normal-case text-muted-foreground">
+                      (optional)
+                    </span>
+                  </Label>
+                  <Input
+                    data-ocid="admin.products.wholesaler_price.input"
+                    type="number"
+                    value={wholesalerPrice}
+                    onChange={(e) =>
+                      setWholesalerPrice(clearLeadingZeros(e.target.value))
+                    }
+                    onFocus={(e) => {
+                      if (e.target.value === "0") e.target.select();
+                    }}
+                    placeholder="e.g. 88"
+                    className="h-9"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Wholesaler (थोक) ke liye price
                   </p>
                 </div>
               </div>

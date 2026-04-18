@@ -1,3 +1,5 @@
+import type { AutoModeType, DraftSale } from "../types/store";
+
 // ─── Storage Keys ─────────────────────────────────────────────────────────────
 // All keys use "saveshop_" prefix to avoid collision with
 // existing keys: shopSettings_*, appConfig_*, last_shop_id
@@ -49,10 +51,31 @@ export function clearShopData(): void {
   }
 }
 
+// ─── Auto Mode helpers ────────────────────────────────────────────────────────
+// Scoped per-shop. Key: `auto_mode_{shopId}`. Default: 'simple'.
+
+/** Persist the selected auto mode for a given shop. */
+export function saveAutoMode(shopId: string, mode: AutoModeType): void {
+  try {
+    localStorage.setItem(`auto_mode_${shopId}`, mode);
+  } catch (e) {
+    console.warn("saveAutoMode failed", e);
+  }
+}
+
+/** Load the saved auto mode for a given shop. Defaults to 'simple'. */
+export function loadAutoMode(shopId: string): AutoModeType {
+  try {
+    const val = localStorage.getItem(`auto_mode_${shopId}`);
+    if (val === "simple" || val === "smart" || val === "pro") return val;
+  } catch (_) {
+    // ignore
+  }
+  return "simple";
+}
+
 // ─── Draft Sale Helpers ───────────────────────────────────────────────────────
 // These helpers scope drafts by shopId so different shops never share drafts.
-
-import type { DraftSale } from "../types/store";
 
 /** Persist the full drafts array for a given shop to localStorage. */
 export function saveDrafts(drafts: DraftSale[], shopId: string): void {

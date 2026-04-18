@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -73,6 +74,7 @@ export function StockPage({
     getProductStock,
     getProductBatches,
     addProduct,
+    updateProduct,
     addCategory,
     categories,
     shopId,
@@ -105,9 +107,15 @@ export function StockPage({
   // Stock In: sell price / profit %
   const [inSellPrice, setInSellPrice] = useState("");
   const [inProfitPercent, setInProfitPercent] = useState("");
+  // Stock In: retailer / wholesaler price
+  const [inRetailerPrice, setInRetailerPrice] = useState("");
+  const [inWholesalerPrice, setInWholesalerPrice] = useState("");
   // Mixed Unit: dual qty
   const [inLengthQty, setInLengthQty] = useState("");
   const [inWeightQty, setInWeightQty] = useState("");
+
+  // Extra details toggle — OFF by default
+  const [showExtraDetails, setShowExtraDetails] = useState(false);
 
   // ── Load form draft on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -305,6 +313,22 @@ export function StockPage({
         weightQtyVal,
         inOtherCharges ? Number(inOtherCharges) : undefined,
       );
+      // Sync sell/retailer/wholesaler price back to product record
+      if (inProduct) {
+        const priceUpdates: Record<string, number> = {};
+        if (inSellPrice && Number(inSellPrice) > 0) {
+          priceUpdates.sellingPrice = Number(inSellPrice);
+        }
+        if (inRetailerPrice && Number(inRetailerPrice) > 0) {
+          priceUpdates.retailerPrice = Number(inRetailerPrice);
+        }
+        if (inWholesalerPrice && Number(inWholesalerPrice) > 0) {
+          priceUpdates.wholesalerPrice = Number(inWholesalerPrice);
+        }
+        if (Object.keys(priceUpdates).length > 0) {
+          updateProduct(inProduct, priceUpdates);
+        }
+      }
       // Clear draft on success
       try {
         localStorage.removeItem(`${STOCK_FORM_DRAFT_KEY}_${shopId}`);
@@ -324,6 +348,8 @@ export function StockPage({
       setInExpiryDate("");
       setInSellPrice("");
       setInProfitPercent("");
+      setInRetailerPrice("");
+      setInWholesalerPrice("");
       setInLengthQty("");
       setInWeightQty("");
       // Navigate to inventory so user sees updated stock
@@ -657,6 +683,7 @@ export function StockPage({
                   />
                 </div>
 
+                {/* ── Expiry Date — always visible ─────────────────────── */}
                 <div className="space-y-1.5">
                   <Label className="text-sm">Expiry Date</Label>
                   <Input
@@ -667,178 +694,19 @@ export function StockPage({
                   />
                 </div>
 
-                {/* Divider */}
-                <div className="border-t border-border pt-1">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-3">
-                    Purchase Details (Optional)
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Invoice No</Label>
-                    <Input
-                      data-ocid="stock.in.invoice_no.input"
-                      placeholder="e.g. INV-001"
-                      value={inInvoiceNo}
-                      onChange={(e) => setInInvoiceNo(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Bill No</Label>
-                    <Input
-                      data-ocid="stock.in.bill_no.input"
-                      placeholder="e.g. BILL-2024-01"
-                      value={inBillNo}
-                      onChange={(e) => setInBillNo(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Transport Charge (₹)</Label>
-                    <Input
-                      data-ocid="stock.in.transport.input"
-                      type="number"
-                      placeholder="0"
-                      value={inTransport}
-                      onFocus={(e) => {
-                        if (e.target.value === "0") e.target.select();
-                      }}
-                      onChange={(e) => {
-                        const tc = clearLeadingZeros(e.target.value);
-                        setInTransport(tc);
-                        if (!isMixedIn) {
-                          const qty = effectiveQty;
-                          const totalCost =
-                            Number(inRate || 0) * qty +
-                            Number(tc) +
-                            Number(inLabour || 0) +
-                            Number(inOtherCharges || 0);
-                          if (
-                            inProfitPercent !== "" &&
-                            totalCost > 0 &&
-                            qty > 0
-                          ) {
-                            const totalSell =
-                              totalCost +
-                              (totalCost * Number(inProfitPercent)) / 100;
-                            setInSellPrice((totalSell / qty).toFixed(2));
-                          } else if (
-                            inSellPrice !== "" &&
-                            totalCost > 0 &&
-                            qty > 0
-                          ) {
-                            const totalSell = Number(inSellPrice) * qty;
-                            const pct =
-                              ((totalSell - totalCost) / totalCost) * 100;
-                            setInProfitPercent(pct.toFixed(2));
-                          }
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">Labour Charge (₹)</Label>
-                    <Input
-                      data-ocid="stock.in.labour.input"
-                      type="number"
-                      placeholder="0"
-                      value={inLabour}
-                      onFocus={(e) => {
-                        if (e.target.value === "0") e.target.select();
-                      }}
-                      onChange={(e) => {
-                        const lc = clearLeadingZeros(e.target.value);
-                        setInLabour(lc);
-                        if (!isMixedIn) {
-                          const qty = effectiveQty;
-                          const totalCost =
-                            Number(inRate || 0) * qty +
-                            Number(inTransport || 0) +
-                            Number(lc) +
-                            Number(inOtherCharges || 0);
-                          if (
-                            inProfitPercent !== "" &&
-                            totalCost > 0 &&
-                            qty > 0
-                          ) {
-                            const totalSell =
-                              totalCost +
-                              (totalCost * Number(inProfitPercent)) / 100;
-                            setInSellPrice((totalSell / qty).toFixed(2));
-                          } else if (
-                            inSellPrice !== "" &&
-                            totalCost > 0 &&
-                            qty > 0
-                          ) {
-                            const totalSell = Number(inSellPrice) * qty;
-                            const pct =
-                              ((totalSell - totalCost) / totalCost) * 100;
-                            setInProfitPercent(pct.toFixed(2));
-                          }
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Other Charges (₹)</Label>
-                  <Input
-                    data-ocid="stock.in.other_charges.input"
-                    type="number"
-                    placeholder="0"
-                    value={inOtherCharges}
-                    onFocus={(e) => {
-                      if (e.target.value === "0") e.target.select();
-                    }}
-                    onChange={(e) => {
-                      const oc = clearLeadingZeros(e.target.value);
-                      setInOtherCharges(oc);
-                      if (!isMixedIn) {
-                        const qty = effectiveQty;
-                        const totalCost =
-                          Number(inRate || 0) * qty +
-                          Number(inTransport || 0) +
-                          Number(inLabour || 0) +
-                          Number(oc);
-                        if (
-                          inProfitPercent !== "" &&
-                          totalCost > 0 &&
-                          qty > 0
-                        ) {
-                          const totalSell =
-                            totalCost +
-                            (totalCost * Number(inProfitPercent)) / 100;
-                          setInSellPrice((totalSell / qty).toFixed(2));
-                        } else if (
-                          inSellPrice !== "" &&
-                          totalCost > 0 &&
-                          qty > 0
-                        ) {
-                          const totalSell = Number(inSellPrice) * qty;
-                          const pct =
-                            ((totalSell - totalCost) / totalCost) * 100;
-                          setInProfitPercent(pct.toFixed(2));
-                        }
-                      }
-                    }}
-                  />
-                </div>
-
-                {/* Sell Price + Profit % (only for single unit products) */}
+                {/* ── Sell Price, Profit % — always visible ─────────────── */}
                 {!isMixedIn && (
                   <>
                     <div className="border-t border-border pt-1">
                       <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-3">
-                        Selling Info (Optional)
+                        Selling Prices
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <Label className="text-sm">Sell Price (₹)</Label>
+                        <Label className="text-sm">
+                          Regular Sell Price (₹)
+                        </Label>
                         <Input
                           data-ocid="stock.in.sell_price.input"
                           type="number"
@@ -898,20 +766,52 @@ export function StockPage({
                         />
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">Retailer Price (₹)</Label>
+                        <Input
+                          data-ocid="stock.in.retailer_price.input"
+                          type="number"
+                          placeholder="e.g. 110"
+                          value={inRetailerPrice}
+                          onFocus={(e) => {
+                            if (e.target.value === "0") e.target.select();
+                          }}
+                          onChange={(e) =>
+                            setInRetailerPrice(
+                              clearLeadingZeros(e.target.value),
+                            )
+                          }
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          दुकानदार price
+                        </p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">Wholesaler Price (₹)</Label>
+                        <Input
+                          data-ocid="stock.in.wholesaler_price.input"
+                          type="number"
+                          placeholder="e.g. 100"
+                          value={inWholesalerPrice}
+                          onFocus={(e) => {
+                            if (e.target.value === "0") e.target.select();
+                          }}
+                          onChange={(e) =>
+                            setInWholesalerPrice(
+                              clearLeadingZeros(e.target.value),
+                            )
+                          }
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          थोक price
+                        </p>
+                      </div>
+                    </div>
                   </>
                 )}
 
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Note</Label>
-                  <Input
-                    data-ocid="stock.in.note.input"
-                    placeholder="e.g. Purchased from supplier"
-                    value={inNote}
-                    onChange={(e) => setInNote(e.target.value)}
-                  />
-                </div>
-
-                {/* Cost & Profit Summary Box */}
+                {/* ── Cost & Profit Summary — always visible ────────────── */}
                 {(effectiveQty > 0 || Number(inRate) > 0) && (
                   <div className="bg-secondary/50 rounded-lg p-3 text-sm space-y-1.5">
                     <p className="font-semibold text-foreground flex items-center gap-1">
@@ -977,6 +877,200 @@ export function StockPage({
                     </div>
                   </div>
                 )}
+
+                {/* ── Extra Details Toggle ─────────────────────────────── */}
+                <div className="flex items-center gap-2.5 py-1">
+                  <Switch
+                    id="extra-details-toggle"
+                    data-ocid="stock.in.extra_details.toggle"
+                    checked={showExtraDetails}
+                    onCheckedChange={setShowExtraDetails}
+                  />
+                  <label
+                    htmlFor="extra-details-toggle"
+                    className="text-sm font-medium text-indigo-600 cursor-pointer select-none"
+                  >
+                    + Extra Details (Invoice, Charges, Notes)
+                  </label>
+                </div>
+
+                {/* ── Extra Fields (hidden when toggle is OFF) ─────────── */}
+                <div style={{ display: showExtraDetails ? "block" : "none" }}>
+                  <div className="space-y-4">
+                    {/* Divider */}
+                    <div className="border-t border-border pt-1">
+                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-3">
+                        Purchase Details (Optional)
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">Invoice No</Label>
+                        <Input
+                          data-ocid="stock.in.invoice_no.input"
+                          placeholder="e.g. INV-001"
+                          value={inInvoiceNo}
+                          onChange={(e) => setInInvoiceNo(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">Bill No</Label>
+                        <Input
+                          data-ocid="stock.in.bill_no.input"
+                          placeholder="e.g. BILL-2024-01"
+                          value={inBillNo}
+                          onChange={(e) => setInBillNo(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">Transport Charge (₹)</Label>
+                        <Input
+                          data-ocid="stock.in.transport.input"
+                          type="number"
+                          placeholder="0"
+                          value={inTransport}
+                          onFocus={(e) => {
+                            if (e.target.value === "0") e.target.select();
+                          }}
+                          onChange={(e) => {
+                            const tc = clearLeadingZeros(e.target.value);
+                            setInTransport(tc);
+                            if (!isMixedIn) {
+                              const qty = effectiveQty;
+                              const totalCost =
+                                Number(inRate || 0) * qty +
+                                Number(tc) +
+                                Number(inLabour || 0) +
+                                Number(inOtherCharges || 0);
+                              if (
+                                inProfitPercent !== "" &&
+                                totalCost > 0 &&
+                                qty > 0
+                              ) {
+                                const totalSell =
+                                  totalCost +
+                                  (totalCost * Number(inProfitPercent)) / 100;
+                                setInSellPrice((totalSell / qty).toFixed(2));
+                              } else if (
+                                inSellPrice !== "" &&
+                                totalCost > 0 &&
+                                qty > 0
+                              ) {
+                                const totalSell = Number(inSellPrice) * qty;
+                                const pct =
+                                  ((totalSell - totalCost) / totalCost) * 100;
+                                setInProfitPercent(pct.toFixed(2));
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-sm">Labour Charge (₹)</Label>
+                        <Input
+                          data-ocid="stock.in.labour.input"
+                          type="number"
+                          placeholder="0"
+                          value={inLabour}
+                          onFocus={(e) => {
+                            if (e.target.value === "0") e.target.select();
+                          }}
+                          onChange={(e) => {
+                            const lc = clearLeadingZeros(e.target.value);
+                            setInLabour(lc);
+                            if (!isMixedIn) {
+                              const qty = effectiveQty;
+                              const totalCost =
+                                Number(inRate || 0) * qty +
+                                Number(inTransport || 0) +
+                                Number(lc) +
+                                Number(inOtherCharges || 0);
+                              if (
+                                inProfitPercent !== "" &&
+                                totalCost > 0 &&
+                                qty > 0
+                              ) {
+                                const totalSell =
+                                  totalCost +
+                                  (totalCost * Number(inProfitPercent)) / 100;
+                                setInSellPrice((totalSell / qty).toFixed(2));
+                              } else if (
+                                inSellPrice !== "" &&
+                                totalCost > 0 &&
+                                qty > 0
+                              ) {
+                                const totalSell = Number(inSellPrice) * qty;
+                                const pct =
+                                  ((totalSell - totalCost) / totalCost) * 100;
+                                setInProfitPercent(pct.toFixed(2));
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Other Charges (₹)</Label>
+                      <Input
+                        data-ocid="stock.in.other_charges.input"
+                        type="number"
+                        placeholder="0"
+                        value={inOtherCharges}
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
+                        onChange={(e) => {
+                          const oc = clearLeadingZeros(e.target.value);
+                          setInOtherCharges(oc);
+                          if (!isMixedIn) {
+                            const qty = effectiveQty;
+                            const totalCost =
+                              Number(inRate || 0) * qty +
+                              Number(inTransport || 0) +
+                              Number(inLabour || 0) +
+                              Number(oc);
+                            if (
+                              inProfitPercent !== "" &&
+                              totalCost > 0 &&
+                              qty > 0
+                            ) {
+                              const totalSell =
+                                totalCost +
+                                (totalCost * Number(inProfitPercent)) / 100;
+                              setInSellPrice((totalSell / qty).toFixed(2));
+                            } else if (
+                              inSellPrice !== "" &&
+                              totalCost > 0 &&
+                              qty > 0
+                            ) {
+                              const totalSell = Number(inSellPrice) * qty;
+                              const pct =
+                                ((totalSell - totalCost) / totalCost) * 100;
+                              setInProfitPercent(pct.toFixed(2));
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Note</Label>
+                      <Input
+                        data-ocid="stock.in.note.input"
+                        placeholder="e.g. Purchased from supplier"
+                        value={inNote}
+                        onChange={(e) => setInNote(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {/* end space-y-4 */}
+                </div>
+                {/* end extra fields wrapper */}
 
                 {/* Resume draft banner */}
                 {showResumeBanner && (

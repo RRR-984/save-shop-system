@@ -52,6 +52,17 @@ export interface DashboardSectionConfig {
   sponsoredAd?: boolean;
 }
 
+// ─── Auto Mode System ─────────────────────────────────────────────────────────
+/**
+ * Auto Mode: a simplified 3-mode abstraction over the existing featureMode (1-4).
+ * 'simple' → featureMode 1 (minimal: Stock, Billing, basic Dashboard)
+ * 'smart'  → featureMode 3 (balanced: + Inventory, Reports, Customers, Credit)
+ * 'pro'    → featureMode 4 (everything unlocked)
+ * Saved per-shop in localStorage as `auto_mode_{shopId}`.
+ * Default for new users: 'simple'.
+ */
+export type AutoModeType = "simple" | "smart" | "pro";
+
 export interface AppConfig {
   featureFlags: FeatureFlags;
   shopName?: string;
@@ -60,6 +71,8 @@ export interface AppConfig {
   deadStockCustomDays?: number;
   version: number;
   ownerPin?: string;
+  /** Auto mode for the new 3-mode system. Drives featureMode automatically. */
+  autoMode?: AutoModeType;
   /** true = Warning mode (allow with warning), false = Lock mode (block unless PIN/admin) */
   allowLowPriceSelling?: boolean;
   /** Whether staff are allowed to send/request reminders */
@@ -72,12 +85,14 @@ export interface AppConfig {
   dashboardSections?: DashboardSectionConfig;
   /**
    * Feature mode: controls sidebar nav and dashboard section complexity.
-   * 1 = Simple (minimal nav + minimal dashboard)
-   * 2 = Advanced (common nav + standard dashboard)
-   * 3 = All System (full nav + full dashboard — current default behavior)
+   * 1 = Basic    (minimal nav: Dashboard, Stock, Billing, Settings)
+   * 2 = Normal   (Basic + Inventory, Customers, Vendors, Drafts)
+   * 3 = Advance  (Normal + Reports, Purchase Orders, Staff, Live Board)
+   * 4 = Super    (everything — full nav + full dashboard)
    * Saved per-shop in localStorage as `feature_mode_{shopId}`.
+   * Default for new users: 1 (Basic).
    */
-  featureMode?: 1 | 2 | 3;
+  featureMode?: 1 | 2 | 3 | 4;
 }
 
 export interface Product {
@@ -97,6 +112,10 @@ export interface Product {
   lengthUnit?: string;
   meterToKgRatio?: number;
   minProfitPct?: number;
+  /** Optional retailer price — used when Customer Type = Retailer */
+  retailerPrice?: number;
+  /** Optional wholesaler price — used when Customer Type = Wholesaler */
+  wholesalerPrice?: number;
 }
 
 export interface StockBatch {
@@ -132,6 +151,8 @@ export interface Customer {
   name: string;
   mobile: string;
   creditBalance: number;
+  /** Optional address — backward compatible, may be absent on older records */
+  address?: string;
 }
 
 export interface InvoiceItem {
@@ -149,6 +170,8 @@ export interface InvoiceItem {
   discountPct?: number;
   extraProfit?: number;
   staffBonus?: number;
+  /** Price mode used for this item — for audit trail */
+  priceModeUsed?: "standard" | "retailer" | "wholesaler";
 }
 
 export interface Invoice {
@@ -157,6 +180,8 @@ export interface Invoice {
   customerId: string | null;
   customerName: string;
   customerMobile: string;
+  /** Optional address captured at sale time */
+  customerAddress?: string;
   items: InvoiceItem[];
   totalAmount: number;
   paidAmount: number;
@@ -168,6 +193,10 @@ export interface Invoice {
   totalStaffBonus?: number;
   soldByUserId?: string;
   soldByName?: string;
+  /** Extra charges added at sale time */
+  transportCharge?: number;
+  labourCharge?: number;
+  otherCharges?: number;
 }
 
 export interface PaymentRecord {
