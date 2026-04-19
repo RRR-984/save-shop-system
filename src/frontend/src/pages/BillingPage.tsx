@@ -89,6 +89,8 @@ interface CartItem {
   unit: string;
   selectedBatchId?: string;
   basePrice: number;
+  /** Actual purchase/batch cost per unit — used for correct profit display in cart */
+  costPrice?: number;
   priceMode?: PriceMode;
 }
 
@@ -1046,6 +1048,21 @@ export function BillingPage({
             ? "wholesaler"
             : "standard";
       const initialRate = getPriceForMode(product, initialMode);
+      // Determine cost price: prefer the selected batch's purchaseRate in manual mode,
+      // otherwise fall back to the latest batch cost via getProductCostPrice.
+      let itemCostPrice: number;
+      if (manualBatchMode && selectedBatchId) {
+        const batch = getProductBatches(selectedProductId).find(
+          (b) => b.id === selectedBatchId,
+        );
+        itemCostPrice = batch
+          ? batch.finalPurchaseCost != null && batch.quantity > 0
+            ? batch.finalPurchaseCost / batch.quantity
+            : batch.purchaseRate
+          : getProductCostPrice(selectedProductId);
+      } else {
+        itemCostPrice = getProductCostPrice(selectedProductId);
+      }
       setCart((prev) => [
         ...prev,
         {
@@ -1055,6 +1072,7 @@ export function BillingPage({
           sellingRate: initialRate,
           unit: product.unit,
           basePrice: product.sellingPrice,
+          costPrice: itemCostPrice,
           priceMode: initialMode,
           ...(resolvedBatchId ? { selectedBatchId: resolvedBatchId } : {}),
         },
@@ -2424,15 +2442,13 @@ export function BillingPage({
                                     bp,
                                     item.sellingRate,
                                   );
-                                  const exProfit = calcExtraProfit(
-                                    bp,
-                                    item.sellingRate,
-                                    item.quantity,
-                                  );
-                                  const sBonus = calcStaffBonus(exProfit);
                                   const errMsg = itemErrors[item.productId];
+                                  // Use costPrice stored on CartItem (set at add-to-cart time from batch/FIFO),
+                                  // fall back to live getProductCostPrice for items added before the fix.
                                   const costP = canViewCost
-                                    ? getProductCostPrice(item.productId)
+                                    ? item.costPrice && item.costPrice > 0
+                                      ? item.costPrice
+                                      : getProductCostPrice(item.productId)
                                     : 0;
                                   const minProfitPct = prod?.minProfitPct ?? 0;
                                   const minSellP =
@@ -2442,6 +2458,12 @@ export function BillingPage({
                                   const isBelowMin =
                                     minSellP !== null &&
                                     item.sellingRate < minSellP;
+                                  // Correct profit: (sellPrice - costPrice) * qty
+                                  const profit =
+                                    costP > 0
+                                      ? (item.sellingRate - costP) *
+                                        item.quantity
+                                      : 0;
                                   return (
                                     <div className="flex flex-col gap-0.5">
                                       <Input
@@ -2500,10 +2522,14 @@ export function BillingPage({
                                           Discount: {discPct.toFixed(1)}%
                                         </span>
                                       )}
-                                      {canViewCost && exProfit > 0 && (
-                                        <span className="text-[10px] text-green-600 font-medium">
-                                          +₹{exProfit.toFixed(0)} | 🎁 ₹
-                                          {sBonus.toFixed(0)}
+                                      {canViewCost && costP > 0 && (
+                                        <span
+                                          className={`text-[10px] font-medium ${profit >= 0 ? "text-green-600" : "text-red-600"}`}
+                                        >
+                                          Profit: ₹
+                                          {Math.round(profit).toLocaleString(
+                                            "en-IN",
+                                          )}
                                         </span>
                                       )}
                                       {errMsg && (
