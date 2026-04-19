@@ -15,6 +15,11 @@ export interface AddShopResult {
   'error' : [] | [string],
   'success' : boolean,
 }
+export interface BackupSnapshotMeta {
+  'id' : string,
+  'tag' : string,
+  'timestamp' : bigint,
+}
 export interface DeleteShopResult { 'success' : boolean }
 export interface OwnerStats {
   'totalProducts' : bigint,
@@ -49,8 +54,11 @@ export interface UpdateShopResult {
 export interface UserProfile { 'name' : string }
 export interface _SERVICE {
   'addShop' : ActorMethod<[string, string, string, string], AddShopResult>,
+  'deleteBackupSnapshot' : ActorMethod<[string, string], undefined>,
   'deleteShop' : ActorMethod<[string], DeleteShopResult>,
   'getAuditLogs' : ActorMethod<[string], string>,
+  'getBackupSnapshotData' : ActorMethod<[string, string], [] | [string]>,
+  'getBackupSnapshots' : ActorMethod<[string], Array<BackupSnapshotMeta>>,
   'getBatches' : ActorMethod<[string], string>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCategories' : ActorMethod<[string], string>,
@@ -72,13 +80,19 @@ export interface _SERVICE {
   'getSettings' : ActorMethod<[string], string>,
   'getShop' : ActorMethod<[string], [] | [ShopMeta]>,
   'getShopUnits' : ActorMethod<[string], string>,
+  'getSyncLogs' : ActorMethod<[string], string>,
   'getTransactions' : ActorMethod<[string], string>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUsers' : ActorMethod<[string], string>,
   'getVendorRateHistory' : ActorMethod<[string], string>,
   'getVendors' : ActorMethod<[string], string>,
   'listShopsForOwner' : ActorMethod<[string], Array<ShopMeta>>,
+  'pruneOldBackups' : ActorMethod<[string, bigint], bigint>,
   'saveAuditLogs' : ActorMethod<[string, string], undefined>,
+  'saveBackupSnapshot' : ActorMethod<
+    [string, string, string, string],
+    undefined
+  >,
   'saveBatches' : ActorMethod<[string, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'saveCategories' : ActorMethod<[string, string], undefined>,
@@ -98,6 +112,7 @@ export interface _SERVICE {
   'saveReturns' : ActorMethod<[string, string], undefined>,
   'saveSettings' : ActorMethod<[string, string], undefined>,
   'saveShopUnits' : ActorMethod<[string, string], undefined>,
+  'saveSyncLog' : ActorMethod<[string, string], undefined>,
   'saveTransactions' : ActorMethod<[string, string], undefined>,
   'saveUsers' : ActorMethod<[string, string], undefined>,
   'saveVendorRateHistory' : ActorMethod<[string, string], undefined>,

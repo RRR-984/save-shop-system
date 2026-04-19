@@ -85,7 +85,7 @@ module {
     city : Text,
   ) : Types.UpdateShopResult {
     var found = false;
-    registry.forEach(func(mobile : Text, shops : List.List<Types.ShopMeta>) {
+    registry.forEach(func(_mobile : Text, shops : List.List<Types.ShopMeta>) {
       switch (shops.findIndex(func(s : Types.ShopMeta) : Bool { s.id == shopId })) {
         case (null) {};
         case (?_idx) {
@@ -113,7 +113,7 @@ module {
     shopId : Text,
   ) : Types.DeleteShopResult {
     var found = false;
-    registry.forEach(func(mobile : Text, shops : List.List<Types.ShopMeta>) {
+    registry.forEach(func(_mobile : Text, shops : List.List<Types.ShopMeta>) {
       switch (shops.findIndex(func(s : Types.ShopMeta) : Bool { s.id == shopId })) {
         case (null) {};
         case (?_idx) {
@@ -151,7 +151,7 @@ module {
   /// we return zero counts here — the frontend computes totals from its own data.
   public func getOwnerStats(
     registry : Registry,
-    shopData : Map.Map<Text, Map.Map<Text, Text>>,
+    _shopData : Map.Map<Text, Map.Map<Text, Text>>,
     mobile : Text,
   ) : Types.OwnerStats {
     let shops : [Types.ShopMeta] = switch (registry.get(mobile)) {

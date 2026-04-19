@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
-import type { AppConfig, Customer, Invoice, Product } from "../types/store";
+import type {
+  AppConfig,
+  AutoModeType,
+  Customer,
+  Invoice,
+  Product,
+} from "../types/store";
 
 interface Message {
   id: string;
@@ -46,6 +52,11 @@ type QueryType =
   | "help_diamonds"
   | "help_backup"
   | "help_settings"
+  // ── Pro customer insight queries ─────────────────────────────────────────
+  | "inactive_customers"
+  | "lost_customers"
+  | "top_customers"
+  | "pending_customers"
   | "unknown";
 
 // Keyword map: each topic has an array of keywords (English + Hinglish).
@@ -458,6 +469,76 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "सेटिंग कैसे",
     ],
   },
+
+  // ── Pro customer insight queries ──────────────────────────────────────────
+  // top_customers — checked before inactive/lost so "top" doesn't match others
+  {
+    type: "top_customers",
+    keywords: [
+      "top customers",
+      "top costumer",
+      "best customers",
+      "best costumer",
+      "sabse zyada customer",
+      "top 5",
+      "vip customer",
+      "high value",
+      "top customer",
+      "best customer",
+      "sabse bada customer",
+    ],
+  },
+
+  // inactive_customers
+  {
+    type: "inactive_customers",
+    keywords: [
+      "inactive customers",
+      "inactive costumer",
+      "customers 180 days",
+      "purane customer",
+      "inactive customer",
+      "purana customer",
+      "show inactive",
+      "180 din",
+      "180 days customer",
+      "180 dino se",
+    ],
+  },
+
+  // lost_customers
+  {
+    type: "lost_customers",
+    keywords: [
+      "lost customers",
+      "lost costumer",
+      "customers 360 days",
+      "lost customer",
+      "show lost",
+      "360 din",
+      "gayab customer",
+      "360 days customer",
+      "360 dino se",
+      "chale gaye customer",
+    ],
+  },
+
+  // pending_customers
+  {
+    type: "pending_customers",
+    keywords: [
+      "who has pending",
+      "pending customers",
+      "due customers",
+      "udhaar wale",
+      "pending balance",
+      "baki hai",
+      "baaki hai",
+      "pending hai",
+      "due wale",
+      "credit wale",
+    ],
+  },
 ];
 
 // Standalone greeting words that must match at word start/boundary to avoid
@@ -496,6 +577,23 @@ function steps(items: string[]): string {
 }
 
 // ── Response generator ──────────────────────────────────────────────────────
+
+/** Days since a date string (ISO). Returns Number.POSITIVE_INFINITY if date is null/undefined. */
+function daysSince(dateStr: string | undefined | null): number {
+  if (!dateStr) return Number.POSITIVE_INFINITY;
+  return Math.floor(
+    (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24),
+  );
+}
+
+/** Customer tier label based on totalPurchase */
+function tierLabel(totalPurchase: number, isHi: boolean): string {
+  if (totalPurchase >= 50000) return isHi ? "👑 VIP" : "👑 VIP";
+  if (totalPurchase >= 20000) return isHi ? "🥇 Gold" : "🥇 Gold";
+  if (totalPurchase >= 5000) return isHi ? "🥈 Silver" : "🥈 Silver";
+  return isHi ? "Normal" : "Normal";
+}
+
 function generateResponse(
   type: QueryType,
   lang: "en" | "hi",
@@ -504,6 +602,7 @@ function generateResponse(
     invoices: Invoice[];
     customers: Customer[];
     appConfig: AppConfig;
+    autoMode: AutoModeType;
     getProductStock: (id: string) => number;
     getTotalStockValue: () => number;
     getLastSoldDate: (id: string) => string | null;
@@ -843,6 +942,129 @@ function generateResponse(
             "Disabling a feature hides it, data is never deleted",
           ])}`;
 
+    // ── Pro customer insight responses ─────────────────────────────────────
+    case "inactive_customers": {
+      const isProMode = store.autoMode === "pro";
+      const trackingOn = store.appConfig.featureFlags?.customerTracking;
+      if (!isProMode || !trackingOn) {
+        return isHi
+          ? "🔒 Yeh feature sirf Pro mode mein available hai.\n\nEnable karne ke liye:\n1. Header mein 🔴 Pro mode select karo\n2. Settings → Customer Tracking toggle ON karo"
+          : "🔒 This feature is only available in Pro mode.\n\nTo enable:\n1. Select 🔴 Pro mode in the header\n2. Go to Settings → turn ON Customer Tracking";
+      }
+      const inactive = store.customers.filter(
+        (c) => daysSince(c.lastVisit) >= 180,
+      );
+      if (!inactive.length) {
+        return isHi
+          ? "✅ Koi inactive customer nahi hai (180+ din se koi nahi aaya waisa)."
+          : "✅ No inactive customers found (180+ days without a visit).";
+      }
+      const preview = inactive
+        .sort((a, b) => daysSince(b.lastVisit) - daysSince(a.lastVisit))
+        .slice(0, 3)
+        .map((c) => {
+          const d = daysSince(c.lastVisit);
+          const NEVER = Number.POSITIVE_INFINITY;
+          return isHi
+            ? `• ${c.name} (${d === NEVER ? "kabhi nahi aaye" : `${d} din pehle`})`
+            : `• ${c.name} (${d === NEVER ? "never visited" : `${d} days ago`})`;
+        })
+        .join("\n");
+      return isHi
+        ? `🔕 ${inactive.length} inactive customer(s) (180+ din se nahi aaye):\n${preview}${inactive.length > 3 ? `\n...aur ${inactive.length - 3} aur` : ""}`
+        : `🔕 ${inactive.length} inactive customer(s) (not visited in 180+ days):\n${preview}${inactive.length > 3 ? `\n...and ${inactive.length - 3} more` : ""}`;
+    }
+
+    case "lost_customers": {
+      const isProMode = store.autoMode === "pro";
+      const trackingOn = store.appConfig.featureFlags?.customerTracking;
+      if (!isProMode || !trackingOn) {
+        return isHi
+          ? "🔒 Yeh feature sirf Pro mode mein available hai.\n\nEnable karne ke liye:\n1. Header mein 🔴 Pro mode select karo\n2. Settings → Customer Tracking toggle ON karo"
+          : "🔒 This feature is only available in Pro mode.\n\nTo enable:\n1. Select 🔴 Pro mode in the header\n2. Go to Settings → turn ON Customer Tracking";
+      }
+      const lost = store.customers.filter((c) => daysSince(c.lastVisit) >= 365);
+      if (!lost.length) {
+        return isHi
+          ? "✅ Koi lost customer nahi hai (365+ din wali category mein koi nahi)."
+          : "✅ No lost customers found (365+ days category is empty).";
+      }
+      const preview = lost
+        .sort((a, b) => daysSince(b.lastVisit) - daysSince(a.lastVisit))
+        .slice(0, 3)
+        .map((c) => {
+          const NEVER = Number.POSITIVE_INFINITY;
+          const d = daysSince(c.lastVisit);
+          return isHi
+            ? `• ${c.name} (${d === NEVER ? "kabhi nahi aaye" : `${d} din pehle`})`
+            : `• ${c.name} (${d === NEVER ? "never visited" : `${d} days ago`})`;
+        })
+        .join("\n");
+      return isHi
+        ? `❌ ${lost.length} lost customer(s) (365+ din se gayab):\n${preview}${lost.length > 3 ? `\n...aur ${lost.length - 3} aur` : ""}`
+        : `❌ ${lost.length} lost customer(s) (missing for 365+ days):\n${preview}${lost.length > 3 ? `\n...and ${lost.length - 3} more` : ""}`;
+    }
+
+    case "top_customers": {
+      const isProMode = store.autoMode === "pro";
+      const trackingOn = store.appConfig.featureFlags?.customerTracking;
+      if (!isProMode || !trackingOn) {
+        return isHi
+          ? "🔒 Yeh feature sirf Pro mode mein available hai.\n\nEnable karne ke liye:\n1. Header mein 🔴 Pro mode select karo\n2. Settings → Customer Tracking toggle ON karo"
+          : "🔒 This feature is only available in Pro mode.\n\nTo enable:\n1. Select 🔴 Pro mode in the header\n2. Go to Settings → turn ON Customer Tracking";
+      }
+      const sorted = [...store.customers]
+        .filter((c) => (c.totalPurchase || 0) > 0)
+        .sort((a, b) => (b.totalPurchase || 0) - (a.totalPurchase || 0))
+        .slice(0, 5);
+      if (!sorted.length) {
+        return isHi
+          ? "📊 Abhi koi customer data nahi hai. Billing ke time mobile number link karo taaki tracking shuru ho."
+          : "📊 No customer purchase data yet. Link mobile numbers during billing to start tracking.";
+      }
+      const list = sorted
+        .map((c, i) => {
+          const tier = tierLabel(c.totalPurchase || 0, isHi);
+          return isHi
+            ? `${i + 1}. ${c.name} — ${tier} — ${formatCurrency(c.totalPurchase || 0)}`
+            : `${i + 1}. ${c.name} — ${tier} — ${formatCurrency(c.totalPurchase || 0)}`;
+        })
+        .join("\n");
+      return isHi
+        ? `⭐ Top ${sorted.length} customers (purchase ke hisaab se):\n${list}`
+        : `⭐ Top ${sorted.length} customers (by total purchase):\n${list}`;
+    }
+
+    case "pending_customers": {
+      const withPending = store.customers
+        .filter((c) => (c.pendingBalance || c.creditBalance || 0) > 0)
+        .sort(
+          (a, b) =>
+            (b.pendingBalance || b.creditBalance || 0) -
+            (a.pendingBalance || a.creditBalance || 0),
+        )
+        .slice(0, 5);
+      if (!withPending.length) {
+        return isHi
+          ? "✅ Kisi bhi customer ka payment pending nahi hai. Sab clear hai!"
+          : "✅ No pending payments from any customer. All clear!";
+      }
+      const list = withPending
+        .map((c) => {
+          const amt = c.pendingBalance || c.creditBalance || 0;
+          const mob = c.mobile ? ` (${c.mobile})` : "";
+          return `• ${c.name}${mob} — ${formatCurrency(amt)}`;
+        })
+        .join("\n");
+      const totalPending = withPending.reduce(
+        (s, c) => s + (c.pendingBalance || c.creditBalance || 0),
+        0,
+      );
+      return isHi
+        ? `💰 ${withPending.length} customer(s) ka payment pending hai:\n${list}\n\nTop 5 total: ${formatCurrency(totalPending)}`
+        : `💰 ${withPending.length} customer(s) have pending payments:\n${list}\n\nTop 5 total: ${formatCurrency(totalPending)}`;
+    }
+
     default: {
       return isHi
         ? `Samajh nahi aaya. 🤔 Ye try karein:\n• "Low stock batao"\n• "Vendor kaise add karein"\n• "Aaj ki sale kitni hai"\n• "Dead stock kya hai"\n• "Billing kaise kare"\n• "Staff kese add kare"\n• "Naya shop kaise banaye"\n• "Payment kaise le"`
@@ -919,6 +1141,7 @@ export function ChatBot() {
         invoices: store.invoices,
         customers: store.customers,
         appConfig: store.appConfig,
+        autoMode: store.autoMode,
         getProductStock: store.getProductStock,
         getTotalStockValue: store.getTotalStockValue,
         getLastSoldDate: store.getLastSoldDate,
@@ -935,6 +1158,7 @@ export function ChatBot() {
       invoices: store.invoices,
       customers: store.customers,
       appConfig: store.appConfig,
+      autoMode: store.autoMode,
       getProductStock: store.getProductStock,
       getTotalStockValue: store.getTotalStockValue,
       getLastSoldDate: store.getLastSoldDate,
@@ -945,6 +1169,7 @@ export function ChatBot() {
       store.invoices,
       store.customers,
       store.appConfig,
+      store.autoMode,
       store.getProductStock,
       store.getTotalStockValue,
       store.getLastSoldDate,
@@ -1208,17 +1433,23 @@ export function ChatBot() {
                   "Low stock batao",
                   "Aaj ki sale",
                   "Dead stock",
+                  "⭐ Top Customers",
+                  "🔕 Inactive",
+                  "❌ Lost Customers",
+                  "💰 Pending",
                   "Vendor kese add kare",
                   "Billing kaise kare",
-                  "Staff kese add kare",
                 ]
               : [
                   "Low stock",
                   "Today sales",
                   "Dead stock",
+                  "⭐ Top Customers",
+                  "🔕 Inactive",
+                  "❌ Lost Customers",
+                  "💰 Pending",
                   "Add vendor",
                   "Billing help",
-                  "Pending due",
                 ]
             ).map((chip) => (
               <button

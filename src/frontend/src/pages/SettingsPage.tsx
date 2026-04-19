@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -15,6 +16,7 @@ import {
   AlertCircle,
   Bell,
   Check,
+  Clock,
   Download,
   Eye,
   EyeOff,
@@ -24,6 +26,7 @@ import {
   Package,
   Pencil,
   Plus,
+  RefreshCw,
   Settings,
   Shield,
   ShieldAlert,
@@ -40,9 +43,18 @@ import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type {
   AppConfig,
+  AutoModeType,
   DashboardSectionConfig,
   FeatureFlags,
 } from "../types/store";
+import {
+  type BackupSnapshot,
+  createBackupSnapshot,
+  deleteBackupSnapshot,
+  listBackupSnapshots,
+  pruneBackups,
+  restoreFromSnapshot,
+} from "../utils/backupManager";
 import { STORAGE_KEYS, saveData } from "../utils/localStorage";
 
 interface FeatureItem {
@@ -50,6 +62,8 @@ interface FeatureItem {
   label: string;
   description: string;
   icon: string;
+  /** If set, this feature is only shown when autoMode matches */
+  requireMode?: AutoModeType;
 }
 
 const FEATURE_LIST: FeatureItem[] = [
@@ -95,6 +109,13 @@ const FEATURE_LIST: FeatureItem[] = [
     description: "Discount rules, min price lock, and staff pricing controls",
     icon: "🏷️",
   },
+  {
+    key: "customerTracking",
+    label: "Customer Tracking",
+    description: "Auto-track customers, rankings, and insights (Pro mode)",
+    icon: "📊",
+    requireMode: "pro",
+  },
 ];
 
 const DEAD_STOCK_OPTIONS = [
@@ -122,6 +143,7 @@ export function SettingsPage() {
     addCategory,
     updateCategory,
     deleteCategory,
+    autoMode,
     // data for export
     products,
     customers,
@@ -136,12 +158,129 @@ export function SettingsPage() {
     shopId,
   } = useStore();
 
+  // Filtered feature list — mode-gated entries only shown in the required mode
+  const visibleFeatures = FEATURE_LIST.filter(
+    (f) => !f.requireMode || f.requireMode === autoMode,
+  );
+
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importConfirming, setImportConfirming] = useState(false);
   const [pendingImport, setPendingImport] = useState<Record<
     string,
     unknown
   > | null>(null);
+
+  // ── Cloud Backup state ───────────────────────────────────────────────────────
+  const [backupList, setBackupList] = useState<BackupSnapshot[]>(() =>
+    listBackupSnapshots(shopId),
+  );
+  const [backupRetention, setBackupRetention] = useState<"30" | "unlimited">(
+    () =>
+      (localStorage.getItem(`saveshop_backup_retention_${shopId}`) as
+        | "30"
+        | "unlimited") ?? "30",
+  );
+  const [creatingBackup, setCreatingBackup] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<BackupSnapshot | null>(
+    null,
+  );
+  const [restoreOptions, setRestoreOptions] = useState({
+    products: true,
+    customers: true,
+    invoices: true,
+    payments: true,
+    vendors: true,
+    batches: true,
+    returns: true,
+  });
+  const [restoreConfirming, setRestoreConfirming] = useState(false);
+
+  const refreshBackupList = () => setBackupList(listBackupSnapshots(shopId));
+
+  const handleCreateBackup = async () => {
+    setCreatingBackup(true);
+    try {
+      createBackupSnapshot(shopId, {
+        products,
+        customers,
+        invoices,
+        vendors,
+        batches,
+        payments,
+        returns,
+      });
+      refreshBackupList();
+      toast.success("Backup created successfully");
+    } catch {
+      toast.error("Failed to create backup");
+    } finally {
+      setCreatingBackup(false);
+    }
+  };
+
+  const handleDeleteBackup = (id: string) => {
+    deleteBackupSnapshot(shopId, id);
+    refreshBackupList();
+    toast.success("Backup deleted");
+  };
+
+  const handleRetentionChange = (val: "30" | "unlimited") => {
+    setBackupRetention(val);
+    localStorage.setItem(`saveshop_backup_retention_${shopId}`, val);
+    if (val === "30") {
+      pruneBackups(shopId, 30);
+      refreshBackupList();
+    }
+    toast.success(
+      val === "30" ? "Keeping backups for 30 days" : "Keeping all backups",
+    );
+  };
+
+  const openRestoreDialog = (snapshot: BackupSnapshot) => {
+    setRestoreTarget(snapshot);
+    setRestoreOptions({
+      products: true,
+      customers: true,
+      invoices: true,
+      payments: true,
+      vendors: true,
+      batches: true,
+      returns: true,
+    });
+    setRestoreConfirming(false);
+  };
+
+  const handleRestoreConfirm = () => {
+    if (!restoreTarget) return;
+    const result = restoreFromSnapshot(
+      shopId,
+      restoreTarget.id,
+      restoreOptions,
+    );
+    if (!result) {
+      toast.error("Backup data not found — snapshot may be expired");
+      setRestoreTarget(null);
+      return;
+    }
+    // Write restored data to localStorage so StoreContext picks it up on reload
+    if (restoreOptions.products)
+      saveData(`${STORAGE_KEYS.products}_${shopId}`, result.products);
+    if (restoreOptions.customers)
+      saveData(`${STORAGE_KEYS.customers}_${shopId}`, result.customers);
+    if (restoreOptions.invoices)
+      saveData(`${STORAGE_KEYS.sales}_${shopId}`, result.invoices);
+    if (restoreOptions.payments)
+      saveData(`${STORAGE_KEYS.payments}_${shopId}`, result.payments);
+    if (restoreOptions.vendors)
+      saveData(`${STORAGE_KEYS.vendors}_${shopId}`, result.vendors);
+    if (restoreOptions.batches)
+      saveData(`${STORAGE_KEYS.batches}_${shopId}`, result.batches);
+    if (restoreOptions.returns)
+      saveData(`${STORAGE_KEYS.returns}_${shopId}`, result.returns);
+    setRestoreTarget(null);
+    toast.success("Restore complete — reloading data...");
+    setTimeout(() => window.location.reload(), 1200);
+  };
 
   // ── Export all data as JSON ──────────────────────────────────────────────────
   function handleExport() {
@@ -512,7 +651,7 @@ export function SettingsPage() {
             </div>
 
             <div className="space-y-2">
-              {FEATURE_LIST.map((feature, idx) => {
+              {visibleFeatures.map((feature, idx) => {
                 const enabled = featureFlags[feature.key];
                 return (
                   <div
@@ -714,6 +853,18 @@ export function SettingsPage() {
                         icon: "📣",
                         label: "Sponsored Ad",
                         description: "Sponsored partner card",
+                      },
+                    ],
+                  },
+                  {
+                    group: "PRO Features",
+                    items: [
+                      {
+                        key: "customerInsights" as const,
+                        icon: "🔮",
+                        label: "Customer Insights",
+                        description:
+                          "Top customers, inactive, lost & high pending (PRO + Customer Tracking required)",
                       },
                     ],
                   },
@@ -1321,6 +1472,335 @@ export function SettingsPage() {
             is never deleted
           </p>
         </div>
+
+        {/* ── Section 8: Data Backup & Restore ── */}
+        <Card data-ocid="settings.data_backup.panel">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                <CardTitle className="text-base">
+                  Data Backup &amp; Restore
+                </CardTitle>
+              </div>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={handleCreateBackup}
+                disabled={creatingBackup}
+                data-ocid="settings.backup.create_button"
+                className="flex items-center gap-1.5 h-8 text-xs"
+              >
+                {creatingBackup ? (
+                  <RefreshCw size={12} className="animate-spin" />
+                ) : (
+                  <Download size={12} />
+                )}
+                {creatingBackup ? "Saving…" : "Backup Now"}
+              </Button>
+            </div>
+            <CardDescription>
+              Create snapshots and restore data to any point in time
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Retention toggle */}
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Backup Retention
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  How long to keep backups
+                </p>
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border border-border bg-secondary p-0.5">
+                <button
+                  type="button"
+                  data-ocid="settings.backup.retention_30"
+                  onClick={() => handleRetentionChange("30")}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    backupRetention === "30"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  30 Days
+                </button>
+                <button
+                  type="button"
+                  data-ocid="settings.backup.retention_unlimited"
+                  onClick={() => handleRetentionChange("unlimited")}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    backupRetention === "unlimited"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Unlimited
+                </button>
+              </div>
+            </div>
+
+            {/* Backup history */}
+            {backupList.length === 0 ? (
+              <div
+                className="flex flex-col items-center gap-2 py-6 text-center"
+                data-ocid="settings.backup.empty_state"
+              >
+                <Clock size={24} className="text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No backups yet</p>
+                <p className="text-xs text-muted-foreground/70">
+                  Click "Backup Now" to create your first snapshot
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2" data-ocid="settings.backup.list">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Backup History ({backupList.length})
+                </p>
+                {backupList.map((snap, idx) => (
+                  <div
+                    key={snap.id}
+                    data-ocid={`settings.backup.item.${idx + 1}`}
+                    className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-foreground">
+                        {new Date(snap.createdAt).toLocaleString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {snap.collections.products} products ·{" "}
+                        {snap.collections.customers} customers ·{" "}
+                        {snap.collections.invoices} sales ·{" "}
+                        {snap.collections.vendors} vendors
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openRestoreDialog(snap)}
+                        data-ocid={`settings.backup.restore_button.${idx + 1}`}
+                        className="h-7 px-2 text-xs"
+                      >
+                        Restore
+                      </Button>
+                      <button
+                        type="button"
+                        data-ocid={`settings.backup.delete_button.${idx + 1}`}
+                        onClick={() => handleDeleteBackup(snap.id)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Delete backup"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Restore Dialog */}
+        {restoreTarget && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            data-ocid="settings.restore.dialog"
+          >
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setRestoreTarget(null)}
+              onKeyDown={(e) => e.key === "Escape" && setRestoreTarget(null)}
+              role="presentation"
+            />
+            <div className="relative bg-card border border-border rounded-2xl shadow-xl p-6 w-full max-w-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-base text-foreground">
+                  Restore Backup
+                </h3>
+                <button
+                  type="button"
+                  data-ocid="settings.restore.close_button"
+                  onClick={() => setRestoreTarget(null)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted text-lg leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                From:{" "}
+                {new Date(restoreTarget.createdAt).toLocaleString("en-IN")}
+              </p>
+
+              {/* Master toggle */}
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border">
+                <Checkbox
+                  id="restore-all"
+                  data-ocid="settings.restore.all_checkbox"
+                  checked={Object.values(restoreOptions).every(Boolean)}
+                  onCheckedChange={(checked) =>
+                    setRestoreOptions({
+                      products: !!checked,
+                      customers: !!checked,
+                      invoices: !!checked,
+                      payments: !!checked,
+                      vendors: !!checked,
+                      batches: !!checked,
+                      returns: !!checked,
+                    })
+                  }
+                />
+                <label
+                  htmlFor="restore-all"
+                  className="text-sm font-semibold text-foreground cursor-pointer"
+                >
+                  Restore All
+                </label>
+              </div>
+
+              {/* Per-collection toggles */}
+              <div className="space-y-2 mb-5">
+                {(
+                  [
+                    {
+                      key: "products",
+                      label: "Products",
+                      count: restoreTarget.collections.products,
+                    },
+                    {
+                      key: "customers",
+                      label: "Customers",
+                      count: restoreTarget.collections.customers,
+                    },
+                    {
+                      key: "invoices",
+                      label: "Sales",
+                      count: restoreTarget.collections.invoices,
+                    },
+                    {
+                      key: "payments",
+                      label: "Payments",
+                      count: restoreTarget.collections.payments,
+                    },
+                    {
+                      key: "vendors",
+                      label: "Vendors",
+                      count: restoreTarget.collections.vendors,
+                    },
+                    {
+                      key: "batches",
+                      label: "Batches",
+                      count: restoreTarget.collections.batches,
+                    },
+                    {
+                      key: "returns",
+                      label: "Returns",
+                      count: restoreTarget.collections.returns,
+                    },
+                  ] as {
+                    key: keyof typeof restoreOptions;
+                    label: string;
+                    count: number;
+                  }[]
+                ).map((opt) => (
+                  <div key={opt.key} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`restore-${opt.key}`}
+                      data-ocid={`settings.restore.${opt.key}_checkbox`}
+                      checked={restoreOptions[opt.key]}
+                      onCheckedChange={(checked) =>
+                        setRestoreOptions((prev) => ({
+                          ...prev,
+                          [opt.key]: !!checked,
+                        }))
+                      }
+                    />
+                    <label
+                      htmlFor={`restore-${opt.key}`}
+                      className="text-sm text-foreground flex-1 cursor-pointer"
+                    >
+                      {opt.label}
+                    </label>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] h-4 px-1.5"
+                    >
+                      {opt.count}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+
+              {/* Warning */}
+              {!restoreConfirming ? (
+                <>
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 mb-4">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      This will overwrite current data for selected collections.
+                      App will reload after restore.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRestoreTarget(null)}
+                      data-ocid="settings.restore.cancel_button"
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setRestoreConfirming(true)}
+                      data-ocid="settings.restore.proceed_button"
+                      className="flex-1"
+                      disabled={!Object.values(restoreOptions).some(Boolean)}
+                    >
+                      Restore Selected
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-destructive mb-3">
+                    Are you sure? This cannot be undone.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRestoreConfirming(false)}
+                      data-ocid="settings.restore.back_button"
+                      className="flex-1"
+                    >
+                      Go Back
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={handleRestoreConfirm}
+                      data-ocid="settings.restore.confirm_button"
+                      className="flex-1"
+                    >
+                      <Check size={12} className="mr-1" /> Confirm Restore
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

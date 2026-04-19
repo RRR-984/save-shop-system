@@ -1,5 +1,7 @@
 import Map "mo:core/Map";
 import List "mo:core/List";
+import Time "mo:core/Time";
+import Int "mo:core/Int";
 import MultiShopTypes "types/multishop";
 import MultiShopLib "lib/multishop";
 import MultiShopMixin "mixins/multishop-api";
@@ -13,6 +15,24 @@ actor {
   let shopRegistry : MultiShopLib.Registry = Map.empty<Text, List.List<MultiShopTypes.ShopMeta>>();
 
   include MultiShopMixin(shopRegistry, shopData);
+
+  // Backup snapshots: shopId -> List<BackupEntry>
+  // Stored separately from shopData to allow structured pruning by timestamp
+  type BackupEntry = {
+    id : Text;
+    timestamp : Int;
+    tag : Text;
+    data : Text;
+  };
+
+  // Lightweight metadata returned without the full data blob
+  type BackupSnapshotMeta = {
+    id : Text;
+    timestamp : Int;
+    tag : Text;
+  };
+
+  let backupSnapshots = Map.empty<Text, List.List<BackupEntry>>();
 
   public type UserProfile = {
     name : Text;
@@ -261,5 +281,96 @@ actor {
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     userProfiles.add(caller, profile);
+  };
+
+  // ── Cloud Backup & Restore ──────────────────────────────────────────────────
+
+  // Save a full JSON backup snapshot for a shop
+  public shared func saveBackupSnapshot(shopId : Text, snapshotId : Text, tag : Text, data : Text) : async () {
+    let entry : BackupEntry = {
+      id = snapshotId;
+      timestamp = Time.now();
+      tag;
+      data;
+    };
+    let snapshots : List.List<BackupEntry> = switch (backupSnapshots.get(shopId)) {
+      case (null) { List.empty<BackupEntry>() };
+      case (?existing) { existing };
+    };
+    snapshots.add(entry);
+    backupSnapshots.add(shopId, snapshots);
+  };
+
+  // Returns snapshot metadata list (no data blobs) for a shop
+  public query func getBackupSnapshots(shopId : Text) : async [BackupSnapshotMeta] {
+    switch (backupSnapshots.get(shopId)) {
+      case (null) { [] };
+      case (?snapshots) {
+        snapshots.map<BackupEntry, BackupSnapshotMeta>(func(e : BackupEntry) : BackupSnapshotMeta {
+          { id = e.id; timestamp = e.timestamp; tag = e.tag }
+        }).toArray()
+      };
+    };
+  };
+
+  // Returns the full data blob for a specific snapshot
+  public query func getBackupSnapshotData(shopId : Text, snapshotId : Text) : async ?Text {
+    switch (backupSnapshots.get(shopId)) {
+      case (null) { null };
+      case (?snapshots) {
+        switch (snapshots.find(func(e : BackupEntry) : Bool { e.id == snapshotId })) {
+          case (null) { null };
+          case (?entry) { ?entry.data };
+        };
+      };
+    };
+  };
+
+  // Removes a specific snapshot by id
+  public shared func deleteBackupSnapshot(shopId : Text, snapshotId : Text) : async () {
+    switch (backupSnapshots.get(shopId)) {
+      case (null) {};
+      case (?snapshots) {
+        let filtered = snapshots.filter(func(e : BackupEntry) : Bool { e.id != snapshotId });
+        backupSnapshots.add(shopId, filtered);
+      };
+    };
+  };
+
+  // Deletes snapshots older than retainDays (0 = keep all). Returns count deleted.
+  public shared func pruneOldBackups(shopId : Text, retainDays : Nat) : async Nat {
+    if (retainDays == 0) { return 0 };
+    switch (backupSnapshots.get(shopId)) {
+      case (null) { 0 };
+      case (?snapshots) {
+        let cutoffNs : Int = Time.now() - (Int.fromNat(retainDays) * 24 * 60 * 60 * 1_000_000_000);
+        let before = snapshots.size();
+        let retained = snapshots.filter(func(e : BackupEntry) : Bool { e.timestamp >= cutoffNs });
+        backupSnapshots.add(shopId, retained);
+        before - retained.size()
+      };
+    };
+  };
+
+  // ── Sync Audit Trail ────────────────────────────────────────────────────────
+
+  // Appends a sync log entry (JSON string) to the shop's syncLogs collection
+  public shared func saveSyncLog(shopId : Text, logEntry : Text) : async () {
+    let existing = getShopCollection(shopId, "syncLogs");
+    // Build a simple JSON array by appending: existing is "" or "[...]"
+    let updated : Text = if (existing == "" or existing == "[]") {
+      "[" # logEntry # "]"
+    } else {
+      // Strip trailing "]", append new entry
+      let trimmed = existing.trimEnd(#char ']');
+      trimmed # "," # logEntry # "]"
+    };
+    saveShopCollection(shopId, "syncLogs", updated);
+  };
+
+  // Returns all sync log entries as a JSON array string
+  public query func getSyncLogs(shopId : Text) : async Text {
+    let data = getShopCollection(shopId, "syncLogs");
+    if (data == "") { "[]" } else { data }
   };
 };

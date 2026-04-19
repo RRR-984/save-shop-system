@@ -638,6 +638,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       staff: true,
       credit: true,
       discount: true,
+      customerTracking: false,
     },
     allowMixedUnits: false,
     deadStockThresholdDays: 90,

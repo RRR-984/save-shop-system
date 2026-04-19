@@ -38,6 +38,7 @@ import {
   ShieldAlert,
   Trash2,
   Truck,
+  User,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -50,11 +51,21 @@ import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import type {
   CartDraftItem,
+  Customer,
   DraftSale,
   Invoice,
   InvoiceItem,
 } from "../types/store";
 import { ROLE_PERMISSIONS } from "../types/store";
+import {
+  ACTIVITY_COLORS,
+  ACTIVITY_LABELS,
+  TIER_COLORS,
+  TIER_EMOJI,
+  TIER_LABELS,
+  getActivityStatus,
+  getCustomerTier,
+} from "../utils/customerTracking";
 import { clearLeadingZeros } from "../utils/numberInput";
 import type { ParsedVoiceCommand } from "../utils/voiceParser";
 
@@ -447,16 +458,25 @@ export function BillingPage({
     getProductBatches,
     getProductCostPrice,
     appConfig,
+    autoMode,
     addLowPriceAlertLog,
     addAuditLog,
     saveDraft,
     deleteDraft,
     markDraftCompleted,
+    customers,
+    updateCustomer,
+    addCustomer,
   } = useStore();
   const { currentUser } = useAuth();
   const { t, language } = useLanguage();
   const userRole = currentUser?.role ?? "staff";
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
+
+  // ── Pro Mode + Customer Tracking feature gate ─────────────────────────────
+  const isProMode = autoMode === "pro";
+  const customerTrackingEnabled =
+    isProMode && (appConfig.featureFlags?.customerTracking ?? false);
 
   // ── Draft / Edit state ────────────────────────────────────────────────────
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
@@ -498,6 +518,12 @@ export function BillingPage({
   const [labourAmt, setLabourAmt] = useState("");
   const [otherEnabled, setOtherEnabled] = useState(false);
   const [otherAmt, setOtherAmt] = useState("");
+
+  // ── Customer Tracking state (Pro mode only) ───────────────────────────────
+  const [linkedCustomerId, setLinkedCustomerId] = useState<string | null>(null);
+  const [mobileSuggestions, setMobileSuggestions] = useState<Customer[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef<HTMLDivElement | null>(null);
 
   // Low Price Alert Modal state
   const [showLowPriceModal, setShowLowPriceModal] = useState(false);
@@ -752,6 +778,76 @@ export function BillingPage({
     setLabourAmt("");
     setOtherEnabled(false);
     setOtherAmt("");
+    // Reset customer tracking
+    setLinkedCustomerId(null);
+    setMobileSuggestions([]);
+    setShowSuggestions(false);
+  }
+
+  // ── Customer Tracking: mobile input change with suggestions ─────────────
+  function handleMobileInputChange(value: string) {
+    setCustomerMobile(value);
+    setLinkedCustomerId(null); // clear link when user edits the number
+    if (!customerTrackingEnabled) return;
+    const trimmed = value.trim().replace(/\D/g, "");
+    if (trimmed.length >= 3) {
+      const matches = customers
+        .filter((c) => c.mobile.replace(/\D/g, "").includes(trimmed))
+        .slice(0, 5);
+      setMobileSuggestions(matches);
+      setShowSuggestions(matches.length > 0);
+    } else {
+      setMobileSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }
+
+  function handleSelectCustomerSuggestion(customer: Customer) {
+    setCustomerMobile(customer.mobile);
+    setCustomerName(customer.name || customerName);
+    if (customer.address) setCustomerAddress(customer.address);
+    setLinkedCustomerId(customer.id);
+    setMobileSuggestions([]);
+    setShowSuggestions(false);
+  }
+
+  /** Update or create customer record after a sale completes */
+  function updateCustomerAfterSale(
+    mobile: string,
+    name: string,
+    address: string | undefined,
+    saleAmount: number,
+    dueAmount: number,
+  ) {
+    if (!customerTrackingEnabled || !mobile.trim()) return;
+    const normMob = mobile.trim().replace(/\D/g, "");
+    const existing = customers.find(
+      (c) => c.mobile.replace(/\D/g, "") === normMob,
+    );
+    if (existing) {
+      updateCustomer(existing.id, {
+        lastVisit: new Date().toISOString(),
+        totalPurchase: (existing.totalPurchase ?? 0) + saleAmount,
+        visitCount: (existing.visitCount ?? 0) + 1,
+        pendingBalance: (existing.pendingBalance ?? 0) + dueAmount,
+        creditBalance: (existing.creditBalance ?? 0) + dueAmount,
+        ...(name.trim() && !existing.name ? { name: name.trim() } : {}),
+        ...(address?.trim() && !existing.address
+          ? { address: address.trim() }
+          : {}),
+      });
+    } else {
+      addCustomer({
+        name: name.trim() || "",
+        mobile: mobile.trim(),
+        address: address?.trim() || undefined,
+        creditBalance: dueAmount,
+        lastVisit: new Date().toISOString(),
+        totalPurchase: saleAmount,
+        visitCount: 1,
+        pendingBalance: dueAmount,
+      });
+    }
   }
 
   // ── Handle New Sale button ────────────────────────────────────────────────
@@ -1358,6 +1454,15 @@ export function BillingPage({
     sessionStorage.removeItem(AUTO_DRAFT_KEY);
     sessionStorage.removeItem(RESUME_DRAFT_KEY);
 
+    // ── Customer Tracking: update or create customer record ───────────────
+    updateCustomerAfterSale(
+      invoiceData.customerMobile ?? "",
+      invoiceData.customerName ?? "",
+      invoiceData.customerAddress,
+      invoice.totalAmount,
+      invoice.dueAmount,
+    );
+
     setGeneratedInvoice(invoice);
     setShowInvoice(true);
     clearForm();
@@ -1623,9 +1728,232 @@ export function BillingPage({
               <CardHeader className="pb-2 border-b border-blue-200 dark:border-blue-900">
                 <CardTitle className="text-base flex items-center gap-2 text-blue-800 dark:text-blue-300">
                   👤 {t("Customer Details")}
+                  {customerTrackingEnabled && (
+                    <Badge className="text-[10px] px-1.5 py-0 bg-purple-100 text-purple-700 border border-purple-300 dark:bg-purple-900/30 dark:text-purple-300">
+                      PRO Tracking ON
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* ── Mobile Number with smart suggest (Pro Tracking only) ─── */}
+                {customerTrackingEnabled ? (
+                  <div className="space-y-1 sm:col-span-2 relative">
+                    <Label className="text-sm flex items-center gap-1.5">
+                      Mobile Number
+                      {(paymentMode === "credit" || computedDue > 0) && (
+                        <span className="text-red-500">*</span>
+                      )}
+                      <span className="text-[10px] text-purple-600 font-medium">
+                        — type to auto-find customer
+                      </span>
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        data-ocid="billing.customer_mobile.input"
+                        placeholder="Enter mobile to find/create customer…"
+                        value={customerMobile}
+                        onChange={(e) =>
+                          handleMobileInputChange(e.target.value)
+                        }
+                        onBlur={() =>
+                          setTimeout(() => setShowSuggestions(false), 180)
+                        }
+                        onFocus={() => {
+                          if (mobileSuggestions.length > 0)
+                            setShowSuggestions(true);
+                        }}
+                        maxLength={10}
+                        className={
+                          (paymentMode === "credit" || computedDue > 0) &&
+                          !customerMobile.trim()
+                            ? "border-amber-400 focus-visible:ring-amber-400"
+                            : linkedCustomerId
+                              ? "border-green-400 focus-visible:ring-green-400"
+                              : ""
+                        }
+                      />
+                      {linkedCustomerId && (
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-green-600 text-xs font-medium flex items-center gap-1">
+                          <User size={11} /> Linked
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Suggestions dropdown */}
+                    {showSuggestions && mobileSuggestions.length > 0 && (
+                      <div
+                        ref={suggestionsRef}
+                        data-ocid="billing.customer_suggestions.popover"
+                        className="absolute z-50 w-full mt-0.5 bg-card border border-border rounded-lg shadow-lg overflow-hidden"
+                      >
+                        {mobileSuggestions.map((c) => {
+                          const tier = getCustomerTier(c.totalPurchase);
+                          const activity = getActivityStatus(c.lastVisit);
+                          const hasPending =
+                            (c.pendingBalance ?? 0) > 0 ||
+                            (c.creditBalance ?? 0) > 0;
+                          const pendingAmt =
+                            c.pendingBalance ?? c.creditBalance ?? 0;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              data-ocid="billing.customer_suggestion.item"
+                              className="w-full text-left px-3 py-2.5 hover:bg-accent transition-colors border-b border-border/50 last:border-b-0 flex items-center justify-between gap-2"
+                              onClick={() => handleSelectCustomerSuggestion(c)}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-sm font-semibold truncate">
+                                    {c.name || "No name"}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground font-mono">
+                                    {c.mobile}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                {hasPending && (
+                                  <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1 py-0.5">
+                                    ₹
+                                    {Math.round(pendingAmt).toLocaleString(
+                                      "en-IN",
+                                    )}{" "}
+                                    pending
+                                  </span>
+                                )}
+                                <span
+                                  className={`text-[10px] border rounded px-1 py-0.5 font-medium ${TIER_COLORS[tier]}`}
+                                >
+                                  {TIER_EMOJI[tier]} {TIER_LABELS[tier]}
+                                </span>
+                                <span
+                                  className={`text-[10px] border rounded px-1 py-0.5 ${ACTIVITY_COLORS[activity]}`}
+                                >
+                                  {ACTIVITY_LABELS[activity]}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {(paymentMode === "credit" || computedDue > 0) &&
+                      !customerMobile.trim() && (
+                        <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-0.5">
+                          ⚠️ Mobile number is required for credit sales
+                        </p>
+                      )}
+
+                    {/* Linked customer info card */}
+                    {linkedCustomerId &&
+                      (() => {
+                        const lc = customers.find(
+                          (c) => c.id === linkedCustomerId,
+                        );
+                        if (!lc) return null;
+                        const tier = getCustomerTier(lc.totalPurchase);
+                        const activity = getActivityStatus(lc.lastVisit);
+                        const pending =
+                          lc.pendingBalance ?? lc.creditBalance ?? 0;
+                        return (
+                          <div
+                            data-ocid="billing.linked_customer.card"
+                            className="mt-2 rounded-lg border border-green-300 bg-green-50/60 dark:border-green-700 dark:bg-green-950/20 p-3 text-xs space-y-1.5"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-sm text-foreground">
+                                {lc.name || "—"}
+                              </span>
+                              <span
+                                className={`border rounded px-1.5 py-0.5 font-medium text-[11px] ${TIER_COLORS[tier]}`}
+                              >
+                                {TIER_EMOJI[tier]} {TIER_LABELS[tier]}
+                              </span>
+                              <span
+                                className={`border rounded px-1.5 py-0.5 text-[11px] ${ACTIVITY_COLORS[activity]}`}
+                              >
+                                {ACTIVITY_LABELS[activity]}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-muted-foreground">
+                              <div>
+                                <div className="text-[10px] uppercase tracking-wide">
+                                  Last Visit
+                                </div>
+                                <div className="font-medium text-foreground">
+                                  {lc.lastVisit
+                                    ? new Date(lc.lastVisit).toLocaleDateString(
+                                        "en-IN",
+                                      )
+                                    : "—"}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] uppercase tracking-wide">
+                                  Total Purchase
+                                </div>
+                                <div className="font-medium text-foreground">
+                                  ₹
+                                  {(lc.totalPurchase ?? 0).toLocaleString(
+                                    "en-IN",
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] uppercase tracking-wide">
+                                  Pending
+                                </div>
+                                <div
+                                  className={`font-semibold ${pending > 0 ? "text-red-600" : "text-green-600"}`}
+                                >
+                                  {pending > 0
+                                    ? `₹${Math.round(pending).toLocaleString("en-IN")}`
+                                    : "Nil"}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <Label className="text-sm">
+                      Mobile Number
+                      {(paymentMode === "credit" || computedDue > 0) && (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
+                      {(paymentMode === "credit" || computedDue > 0) && (
+                        <span className="text-[10px] text-amber-600 ml-2 font-normal">
+                          Required for dues
+                        </span>
+                      )}
+                    </Label>
+                    <Input
+                      data-ocid="billing.customer_mobile.input"
+                      placeholder="10-digit mobile"
+                      value={customerMobile}
+                      onChange={(e) => setCustomerMobile(e.target.value)}
+                      maxLength={10}
+                      className={
+                        (paymentMode === "credit" || computedDue > 0) &&
+                        !customerMobile.trim()
+                          ? "border-amber-400 focus-visible:ring-amber-400"
+                          : ""
+                      }
+                    />
+                    {(paymentMode === "credit" || computedDue > 0) &&
+                      !customerMobile.trim() && (
+                        <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-0.5">
+                          ⚠️ Mobile number is required for credit sales
+                        </p>
+                      )}
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <Label className="text-sm">
                     Customer Name
@@ -1640,38 +1968,7 @@ export function BillingPage({
                     onChange={(e) => setCustomerName(e.target.value)}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-sm">
-                    Mobile Number
-                    {(paymentMode === "credit" || computedDue > 0) && (
-                      <span className="text-red-500 ml-1">*</span>
-                    )}
-                    {(paymentMode === "credit" || computedDue > 0) && (
-                      <span className="text-[10px] text-amber-600 ml-2 font-normal">
-                        Required for dues
-                      </span>
-                    )}
-                  </Label>
-                  <Input
-                    data-ocid="billing.customer_mobile.input"
-                    placeholder="10-digit mobile"
-                    value={customerMobile}
-                    onChange={(e) => setCustomerMobile(e.target.value)}
-                    maxLength={10}
-                    className={
-                      (paymentMode === "credit" || computedDue > 0) &&
-                      !customerMobile.trim()
-                        ? "border-amber-400 focus-visible:ring-amber-400"
-                        : ""
-                    }
-                  />
-                  {(paymentMode === "credit" || computedDue > 0) &&
-                    !customerMobile.trim() && (
-                      <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-0.5">
-                        ⚠️ Mobile number is required for credit sales
-                      </p>
-                    )}
-                </div>
+
                 <div className="space-y-1 sm:col-span-2">
                   <Label className="text-sm">
                     Address{" "}

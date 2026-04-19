@@ -1,29 +1,29 @@
 {
-  "overview": "Save Shop System (FIFO Bridge) is a modern mobile-first shop management platform for Indian small business owners. It supports multi-shop management from one account, batch-wise FIFO inventory, smart billing, advanced analytics, Diamond Rewards gamification, and bilingual (Hindi/English) support.",
+  "overview": "Save Shop System is a modern, mobile-first SaaS platform for Indian shop management with multi-shop support, FIFO inventory, smart billing, customer tracking, staff management, and now full offline-first sync.",
   "features": [
-    "Multi-shop management from one mobile number",
-    "Per-shop data isolation (inventory, sales, customers, staff)",
-    "Shop switcher dropdown in header",
-    "Combined owner dashboard with totals across all shops",
-    "Batch-wise FIFO inventory management",
-    "Smart billing with barcode/QR scanner",
-    "Diamond Rewards gamification",
-    "Animated tutorial guides",
-    "PWA installable app",
-    "Bilingual Hindi/English support",
-    "3-mode UI (Normal/Advance/Super)",
-    "Staff management with roles and attendance"
+    "Offline-first mode with auto sync",
+    "Real-time network status indicator",
+    "Background sync queue (FIFO)",
+    "Cloud backup with 30-day + unlimited history",
+    "Selective restore per collection",
+    "Duplicate prevention",
+    "Multi-shop data isolation",
+    "FIFO batch inventory",
+    "Smart billing & invoicing",
+    "Customer credit tracking",
+    "Staff management & roles",
+    "Diamond rewards gamification"
   ],
   "category": "business",
   "tags": [
     "shop-management",
     "inventory",
     "billing",
+    "offline",
+    "sync",
     "india",
-    "multi-shop",
-    "pwa",
-    "hindi",
-    "small-business"
+    "saas",
+    "pwa"
   ],
-  "last_updated": "2026-04-16T16:44:54.001Z"
+  "last_updated": "2026-04-19T03:20:52.664Z"
 }

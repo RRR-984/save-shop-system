@@ -34,6 +34,12 @@ type OwnerStats =
    totalTransactions: nat;
  };
 type DeleteShopResult = record {success: bool;};
+type BackupSnapshotMeta = 
+ record {
+   id: text;
+   tag: text;
+   timestamp: int;
+ };
 type AddShopResult = 
  record {
    error: opt text;
@@ -43,8 +49,11 @@ type AddShopResult =
 service : {
   addShop: (ownerMobile: text, shopName: text, address: text, city: text) ->
    (AddShopResult);
+  deleteBackupSnapshot: (shopId: text, snapshotId: text) -> ();
   deleteShop: (shopId: text) -> (DeleteShopResult);
   getAuditLogs: (shopId: text) -> (text) query;
+  getBackupSnapshotData: (shopId: text, snapshotId: text) -> (opt text) query;
+  getBackupSnapshots: (shopId: text) -> (vec BackupSnapshotMeta) query;
   getBatches: (shopId: text) -> (text) query;
   getCallerUserProfile: () -> (opt UserProfile) query;
   getCategories: (shopId: text) -> (text) query;
@@ -66,13 +75,17 @@ service : {
   getSettings: (shopId: text) -> (text) query;
   getShop: (shopId: text) -> (opt ShopMeta) query;
   getShopUnits: (shopId: text) -> (text) query;
+  getSyncLogs: (shopId: text) -> (text) query;
   getTransactions: (shopId: text) -> (text) query;
   getUserProfile: (user: principal) -> (opt UserProfile) query;
   getUsers: (shopId: text) -> (text) query;
   getVendorRateHistory: (shopId: text) -> (text) query;
   getVendors: (shopId: text) -> (text) query;
   listShopsForOwner: (mobile: text) -> (vec ShopMeta) query;
+  pruneOldBackups: (shopId: text, retainDays: nat) -> (nat);
   saveAuditLogs: (shopId: text, data: text) -> ();
+  saveBackupSnapshot: (shopId: text, snapshotId: text, tag: text, data:
+   text) -> ();
   saveBatches: (shopId: text, data: text) -> ();
   saveCallerUserProfile: (profile: UserProfile) -> ();
   saveCategories: (shopId: text, data: text) -> ();
@@ -92,6 +105,7 @@ service : {
   saveReturns: (shopId: text, data: text) -> ();
   saveSettings: (shopId: text, data: text) -> ();
   saveShopUnits: (shopId: text, data: text) -> ();
+  saveSyncLog: (shopId: text, logEntry: text) -> ();
   saveTransactions: (shopId: text, data: text) -> ();
   saveUsers: (shopId: text, data: text) -> ();
   saveVendorRateHistory: (shopId: text, data: text) -> ();

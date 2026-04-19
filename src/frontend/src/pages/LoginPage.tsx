@@ -1133,15 +1133,8 @@ export function LoginPage() {
         </AnimatePresence>
 
         <p className="text-center text-xs text-muted-foreground mt-5">
-          &copy; {new Date().getFullYear()}. Built with ♥ using{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            caffeine.ai
-          </a>
+          &copy; {new Date().getFullYear()} Save Shop System | Powered by FIFO
+          Bridge
         </p>
       </div>
     </div>

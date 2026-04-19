@@ -29,6 +29,8 @@ export interface FeatureFlags {
   staff: boolean;
   credit: boolean;
   discount: boolean;
+  /** Customer Tracking: auto-track customers, rankings, and insights (Pro mode only) */
+  customerTracking: boolean;
 }
 
 export interface DashboardSectionConfig {
@@ -50,6 +52,8 @@ export interface DashboardSectionConfig {
   marqueeAlertBar?: boolean;
   tutorialGuide?: boolean;
   sponsoredAd?: boolean;
+  /** PRO: Customer Insights — Top customers, inactive, lost, high pending */
+  customerInsights?: boolean;
 }
 
 // ─── Auto Mode System ─────────────────────────────────────────────────────────
@@ -146,6 +150,9 @@ export interface StockTransaction {
   note: string;
 }
 
+export type ActivityStatus = "active" | "warm" | "cold" | "lost";
+export type CustomerTier = "vip" | "gold" | "silver" | "normal";
+
 export interface Customer {
   id: string;
   name: string;
@@ -153,6 +160,14 @@ export interface Customer {
   creditBalance: number;
   /** Optional address — backward compatible, may be absent on older records */
   address?: string;
+  /** ISO date string of last visit/purchase — used for activity status */
+  lastVisit?: string;
+  /** Cumulative total purchase amount across all invoices */
+  totalPurchase?: number;
+  /** Total number of visits (invoices linked to this customer) */
+  visitCount?: number;
+  /** Running pending balance — mirrors creditBalance but tracked separately for PRO mode */
+  pendingBalance?: number;
 }
 
 export interface InvoiceItem {

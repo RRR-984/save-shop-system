@@ -15,6 +15,11 @@ export interface OwnerStats {
     shopStats: Array<ShopStats>;
     totalTransactions: bigint;
 }
+export interface BackupSnapshotMeta {
+    id: string;
+    tag: string;
+    timestamp: bigint;
+}
 export interface DeleteShopResult {
     success: boolean;
 }
@@ -50,8 +55,11 @@ export interface UserProfile {
 }
 export interface backendInterface {
     addShop(ownerMobile: string, shopName: string, address: string, city: string): Promise<AddShopResult>;
+    deleteBackupSnapshot(shopId: string, snapshotId: string): Promise<void>;
     deleteShop(shopId: string): Promise<DeleteShopResult>;
     getAuditLogs(shopId: string): Promise<string>;
+    getBackupSnapshotData(shopId: string, snapshotId: string): Promise<string | null>;
+    getBackupSnapshots(shopId: string): Promise<Array<BackupSnapshotMeta>>;
     getBatches(shopId: string): Promise<string>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCategories(shopId: string): Promise<string>;
@@ -73,13 +81,16 @@ export interface backendInterface {
     getSettings(shopId: string): Promise<string>;
     getShop(shopId: string): Promise<ShopMeta | null>;
     getShopUnits(shopId: string): Promise<string>;
+    getSyncLogs(shopId: string): Promise<string>;
     getTransactions(shopId: string): Promise<string>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsers(shopId: string): Promise<string>;
     getVendorRateHistory(shopId: string): Promise<string>;
     getVendors(shopId: string): Promise<string>;
     listShopsForOwner(mobile: string): Promise<Array<ShopMeta>>;
+    pruneOldBackups(shopId: string, retainDays: bigint): Promise<bigint>;
     saveAuditLogs(shopId: string, data: string): Promise<void>;
+    saveBackupSnapshot(shopId: string, snapshotId: string, tag: string, data: string): Promise<void>;
     saveBatches(shopId: string, data: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveCategories(shopId: string, data: string): Promise<void>;
@@ -99,6 +110,7 @@ export interface backendInterface {
     saveReturns(shopId: string, data: string): Promise<void>;
     saveSettings(shopId: string, data: string): Promise<void>;
     saveShopUnits(shopId: string, data: string): Promise<void>;
+    saveSyncLog(shopId: string, logEntry: string): Promise<void>;
     saveTransactions(shopId: string, data: string): Promise<void>;
     saveUsers(shopId: string, data: string): Promise<void>;
     saveVendorRateHistory(shopId: string, data: string): Promise<void>;

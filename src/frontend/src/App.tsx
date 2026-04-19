@@ -4,11 +4,13 @@ import { ChatBot } from "./components/ChatBot";
 import { FirstTimeUserWelcomePopup } from "./components/FirstTimeUserWelcomePopup";
 import { PWAInstallModal } from "./components/PWAInstallModal";
 import { MemoSidebar as Sidebar } from "./components/Sidebar";
+import { SyncStatusBanner } from "./components/SyncStatusBanner";
 import { TopBar } from "./components/TopBar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import { StoreProvider, useStore } from "./context/StoreContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { useSyncEngine } from "./hooks/useSyncEngine";
 import { AdminPage } from "./pages/AdminPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { BillingPage } from "./pages/BillingPage";
@@ -100,9 +102,12 @@ function AppContent() {
   const [navHistory, setNavHistory] = useState<NavPage[]>(initial.history);
   const [transitioning, setTransitioning] = useState(false);
   const [pageParams, setPageParams] = useState<Record<string, unknown>>({});
-  const { isLoading, actorError, referralCodes, recordReferralSignup } =
+  const { isLoading, actorError, referralCodes, recordReferralSignup, shopId } =
     useStore();
   const [loadingTooLong, setLoadingTooLong] = useState(false);
+
+  // Global background sync engine — runs silently, never blocks UI
+  const syncEngine = useSyncEngine(shopId);
 
   // Dispatch 'app-ready' once the store finishes loading so main.tsx can hide the splash
   useEffect(() => {
@@ -352,6 +357,7 @@ function AppContent() {
           goHome={handleGoHome}
           isHome={currentPage === "dashboard"}
         />
+        <SyncStatusBanner engine={syncEngine} />
 
         <div
           className={transitioning ? "page-fade-out" : "page-fade-in"}
@@ -362,15 +368,8 @@ function AppContent() {
 
         <footer className="mt-auto px-6 py-3 border-t border-border pb-20 md:pb-3">
           <p className="text-xs text-muted-foreground text-center">
-            &copy; {new Date().getFullYear()}. Built with ♥ using{" "}
-            <a
-              href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              caffeine.ai
-            </a>
+            &copy; {new Date().getFullYear()} Save Shop System | Powered by FIFO
+            Bridge
           </p>
         </footer>
       </main>

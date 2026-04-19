@@ -97,6 +97,11 @@ export interface OwnerStats {
     shopStats: Array<ShopStats>;
     totalTransactions: bigint;
 }
+export interface BackupSnapshotMeta {
+    id: string;
+    tag: string;
+    timestamp: bigint;
+}
 export interface DeleteShopResult {
     success: boolean;
 }
@@ -132,8 +137,11 @@ export interface UserProfile {
 }
 export interface backendInterface {
     addShop(ownerMobile: string, shopName: string, address: string, city: string): Promise<AddShopResult>;
+    deleteBackupSnapshot(shopId: string, snapshotId: string): Promise<void>;
     deleteShop(shopId: string): Promise<DeleteShopResult>;
     getAuditLogs(shopId: string): Promise<string>;
+    getBackupSnapshotData(shopId: string, snapshotId: string): Promise<string | null>;
+    getBackupSnapshots(shopId: string): Promise<Array<BackupSnapshotMeta>>;
     getBatches(shopId: string): Promise<string>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCategories(shopId: string): Promise<string>;
@@ -155,13 +163,16 @@ export interface backendInterface {
     getSettings(shopId: string): Promise<string>;
     getShop(shopId: string): Promise<ShopMeta | null>;
     getShopUnits(shopId: string): Promise<string>;
+    getSyncLogs(shopId: string): Promise<string>;
     getTransactions(shopId: string): Promise<string>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsers(shopId: string): Promise<string>;
     getVendorRateHistory(shopId: string): Promise<string>;
     getVendors(shopId: string): Promise<string>;
     listShopsForOwner(mobile: string): Promise<Array<ShopMeta>>;
+    pruneOldBackups(shopId: string, retainDays: bigint): Promise<bigint>;
     saveAuditLogs(shopId: string, data: string): Promise<void>;
+    saveBackupSnapshot(shopId: string, snapshotId: string, tag: string, data: string): Promise<void>;
     saveBatches(shopId: string, data: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveCategories(shopId: string, data: string): Promise<void>;
@@ -181,6 +192,7 @@ export interface backendInterface {
     saveReturns(shopId: string, data: string): Promise<void>;
     saveSettings(shopId: string, data: string): Promise<void>;
     saveShopUnits(shopId: string, data: string): Promise<void>;
+    saveSyncLog(shopId: string, logEntry: string): Promise<void>;
     saveTransactions(shopId: string, data: string): Promise<void>;
     saveUsers(shopId: string, data: string): Promise<void>;
     saveVendorRateHistory(shopId: string, data: string): Promise<void>;
@@ -202,6 +214,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.addShop(arg0, arg1, arg2, arg3);
             return from_candid_AddShopResult_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async deleteBackupSnapshot(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteBackupSnapshot(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteBackupSnapshot(arg0, arg1);
+            return result;
         }
     }
     async deleteShop(arg0: string): Promise<DeleteShopResult> {
@@ -229,6 +255,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getAuditLogs(arg0);
+            return result;
+        }
+    }
+    async getBackupSnapshotData(arg0: string, arg1: string): Promise<string | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getBackupSnapshotData(arg0, arg1);
+                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getBackupSnapshotData(arg0, arg1);
+            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getBackupSnapshots(arg0: string): Promise<Array<BackupSnapshotMeta>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getBackupSnapshots(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getBackupSnapshots(arg0);
             return result;
         }
     }
@@ -526,6 +580,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getSyncLogs(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSyncLogs(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSyncLogs(arg0);
+            return result;
+        }
+    }
     async getTransactions(arg0: string): Promise<string> {
         if (this.processError) {
             try {
@@ -610,6 +678,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async pruneOldBackups(arg0: string, arg1: bigint): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.pruneOldBackups(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.pruneOldBackups(arg0, arg1);
+            return result;
+        }
+    }
     async saveAuditLogs(arg0: string, arg1: string): Promise<void> {
         if (this.processError) {
             try {
@@ -621,6 +703,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveAuditLogs(arg0, arg1);
+            return result;
+        }
+    }
+    async saveBackupSnapshot(arg0: string, arg1: string, arg2: string, arg3: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveBackupSnapshot(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveBackupSnapshot(arg0, arg1, arg2, arg3);
             return result;
         }
     }
@@ -887,6 +983,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveShopUnits(arg0, arg1);
+            return result;
+        }
+    }
+    async saveSyncLog(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveSyncLog(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveSyncLog(arg0, arg1);
             return result;
         }
     }

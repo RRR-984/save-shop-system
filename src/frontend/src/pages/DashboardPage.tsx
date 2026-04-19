@@ -63,6 +63,15 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import type { AppConfig, AppUser, NavPage, UserRole } from "../types/store";
+import {
+  ACTIVITY_COLORS,
+  ACTIVITY_LABELS,
+  TIER_COLORS,
+  TIER_EMOJI,
+  TIER_LABELS,
+  getActivityStatus,
+  getCustomerTier,
+} from "../utils/customerTracking";
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 function fmt(n: number) {
@@ -900,6 +909,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     getLastSoldDate,
     lowPriceAlertLogs,
     appConfig,
+    autoMode,
     getPendingReminderRequests,
     approveReminderRequest,
     rejectReminderRequest,
@@ -1826,6 +1836,46 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     (co) => co.status === "pending",
   ).length;
 
+  // ── Customer Insights (PRO mode + customerTracking only) ──────────────────
+  const isProWithTracking =
+    autoMode === "pro" && appConfig.featureFlags?.customerTracking === true;
+
+  const customerInsightsData = useMemo(() => {
+    if (!isProWithTracking) return null;
+    const nowMs = Date.now();
+
+    // Top 5 by totalPurchase
+    const top5 = [...customers]
+      .sort((a, b) => (b.totalPurchase ?? 0) - (a.totalPurchase ?? 0))
+      .slice(0, 5);
+
+    // Inactive: lastVisit 180+ days ago OR undefined
+    const inactive = customers.filter((c) => {
+      if (!c.lastVisit) return true;
+      const days = (nowMs - new Date(c.lastVisit).getTime()) / 86400000;
+      return days >= 180;
+    });
+
+    // Lost: lastVisit 365+ days ago OR undefined
+    const lost = customers.filter((c) => {
+      if (!c.lastVisit) return true;
+      const days = (nowMs - new Date(c.lastVisit).getTime()) / 86400000;
+      return days >= 365;
+    });
+
+    // High pending: pendingBalance > 0, top 10
+    const highPending = [...customers]
+      .filter((c) => (c.pendingBalance ?? c.creditBalance ?? 0) > 0)
+      .sort(
+        (a, b) =>
+          (b.pendingBalance ?? b.creditBalance ?? 0) -
+          (a.pendingBalance ?? a.creditBalance ?? 0),
+      )
+      .slice(0, 10);
+
+    return { top5, inactive, lost, highPending };
+  }, [isProWithTracking, customers]);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // STAFF-ONLY DASHBOARD
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2710,6 +2760,306 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            CUSTOMER INSIGHTS — PRO mode + customerTracking only
+        ══════════════════════════════════════════════════════════════════ */}
+        {!isStaff &&
+          isProWithTracking &&
+          isDashSectionVisible("customerInsights") &&
+          customerInsightsData && (
+            <div
+              className="flex flex-col gap-3"
+              data-ocid="dashboard.customer_insights.section"
+            >
+              {/* Section header */}
+              <div className="flex items-center justify-between px-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    🔮 Customer Insights
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 text-white">
+                    PRO
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate("customers")}
+                  className="text-[11px] text-primary font-semibold hover:underline"
+                >
+                  View All →
+                </button>
+              </div>
+
+              {/* Card 1 — Top Customers ⭐ */}
+              <div
+                className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
+                data-ocid="dashboard.customer_insights.top_customers.card"
+                style={{
+                  borderTop: "2px solid #F59E0B",
+                }}
+              >
+                <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
+                  <span className="text-sm font-bold text-foreground dark:text-white">
+                    ⭐ Top Customers
+                  </span>
+                  <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
+                    Top 5
+                  </span>
+                </div>
+                <div className="divide-y divide-border/40">
+                  {customerInsightsData.top5.length === 0 ? (
+                    <div
+                      data-ocid="dashboard.customer_insights.top_customers.empty_state"
+                      className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-sm"
+                    >
+                      <Users size={22} className="text-muted-foreground/30" />
+                      <p className="text-xs">No customers yet</p>
+                    </div>
+                  ) : (
+                    customerInsightsData.top5.map((c, idx) => {
+                      const tier = getCustomerTier(c.totalPurchase);
+                      return (
+                        <div
+                          key={c.id}
+                          data-ocid={`dashboard.customer_insights.top_customers.item.${idx + 1}`}
+                          className="flex items-center gap-3 px-4 py-2.5"
+                        >
+                          <span className="w-5 text-[11px] font-bold text-muted-foreground flex-shrink-0">
+                            #{idx + 1}
+                          </span>
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/30 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                              {c.name.slice(0, 1).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground dark:text-white truncate">
+                              {c.name}
+                            </p>
+                            <span
+                              className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${TIER_COLORS[tier]}`}
+                            >
+                              {TIER_EMOJI[tier]} {TIER_LABELS[tier]}
+                            </span>
+                          </div>
+                          <span className="text-sm font-bold text-amber-600 dark:text-amber-400 flex-shrink-0">
+                            {fmt(c.totalPurchase ?? 0)}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Card 2 — Inactive Customers (180+ days) 🔕 */}
+              <div
+                className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
+                data-ocid="dashboard.customer_insights.inactive.card"
+                style={{ borderTop: "2px solid #6366F1" }}
+              >
+                <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
+                  <span className="text-sm font-bold text-foreground dark:text-white">
+                    🔕 Inactive Customers
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40">
+                    {customerInsightsData.inactive.length} Inactive
+                  </span>
+                </div>
+                <div className="divide-y divide-border/40">
+                  {customerInsightsData.inactive.length === 0 ? (
+                    <div
+                      data-ocid="dashboard.customer_insights.inactive.empty_state"
+                      className="flex items-center gap-2 justify-center py-5 text-green-600 dark:text-green-400 text-sm font-medium"
+                    >
+                      <CheckCircle size={16} /> All customers active ✅
+                    </div>
+                  ) : (
+                    customerInsightsData.inactive.slice(0, 5).map((c, idx) => {
+                      const status = getActivityStatus(c.lastVisit);
+                      const daysSince = c.lastVisit
+                        ? Math.floor(
+                            (Date.now() - new Date(c.lastVisit).getTime()) /
+                              86400000,
+                          )
+                        : null;
+                      return (
+                        <div
+                          key={c.id}
+                          data-ocid={`dashboard.customer_insights.inactive.item.${idx + 1}`}
+                          className="flex items-center gap-3 px-4 py-2.5"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-muted-foreground">
+                              {c.name.slice(0, 1).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground dark:text-white truncate">
+                              {c.name}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {c.mobile}
+                              {daysSince !== null && (
+                                <span className="ml-1">· {daysSince}d ago</span>
+                              )}
+                              {daysSince === null && " · Never visited"}
+                            </p>
+                          </div>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${ACTIVITY_COLORS[status]}`}
+                          >
+                            {ACTIVITY_LABELS[status]}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                  {customerInsightsData.inactive.length > 5 && (
+                    <div className="px-4 py-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate("customers")}
+                        className="text-xs text-primary font-semibold hover:underline"
+                      >
+                        +{customerInsightsData.inactive.length - 5} more →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Card 3 — Lost Customers (365+ days) ❌ */}
+              <div
+                className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
+                data-ocid="dashboard.customer_insights.lost.card"
+                style={{ borderTop: "2px solid #EF4444" }}
+              >
+                <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
+                  <span className="text-sm font-bold text-foreground dark:text-white">
+                    ❌ Lost Customers
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/40">
+                    {customerInsightsData.lost.length} Lost
+                  </span>
+                </div>
+                <div className="divide-y divide-border/40">
+                  {customerInsightsData.lost.length === 0 ? (
+                    <div
+                      data-ocid="dashboard.customer_insights.lost.empty_state"
+                      className="flex items-center gap-2 justify-center py-5 text-green-600 dark:text-green-400 text-sm font-medium"
+                    >
+                      <CheckCircle size={16} /> No lost customers ✅
+                    </div>
+                  ) : (
+                    customerInsightsData.lost.slice(0, 5).map((c, idx) => {
+                      const daysSince = c.lastVisit
+                        ? Math.floor(
+                            (Date.now() - new Date(c.lastVisit).getTime()) /
+                              86400000,
+                          )
+                        : null;
+                      return (
+                        <div
+                          key={c.id}
+                          data-ocid={`dashboard.customer_insights.lost.item.${idx + 1}`}
+                          className="flex items-center gap-3 px-4 py-2.5"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-950/30 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-red-500 dark:text-red-400">
+                              {c.name.slice(0, 1).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground dark:text-white truncate">
+                              {c.name}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {c.mobile}
+                            </p>
+                          </div>
+                          <span className="text-[10px] font-semibold text-red-600 dark:text-red-400 flex-shrink-0">
+                            {daysSince !== null
+                              ? `⚠ ${daysSince}d no visit`
+                              : "⚠ No visit"}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                  {customerInsightsData.lost.length > 5 && (
+                    <div className="px-4 py-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate("customers")}
+                        className="text-xs text-primary font-semibold hover:underline"
+                      >
+                        +{customerInsightsData.lost.length - 5} more →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Card 4 — High Pending Payments 💰 */}
+              <div
+                className="bg-card rounded-2xl border border-border shadow-card overflow-hidden"
+                data-ocid="dashboard.customer_insights.pending.card"
+                style={{ borderTop: "2px solid #10B981" }}
+              >
+                <div className="px-4 pt-3 pb-2.5 border-b border-border/60 flex items-center justify-between">
+                  <span className="text-sm font-bold text-foreground dark:text-white">
+                    💰 Pending Payments
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
+                    {customerInsightsData.highPending.length} customers
+                  </span>
+                </div>
+                <div className="divide-y divide-border/40">
+                  {customerInsightsData.highPending.length === 0 ? (
+                    <div
+                      data-ocid="dashboard.customer_insights.pending.empty_state"
+                      className="flex items-center gap-2 justify-center py-5 text-green-600 dark:text-green-400 text-sm font-medium"
+                    >
+                      <CheckCircle size={16} /> No pending payments ✅
+                    </div>
+                  ) : (
+                    customerInsightsData.highPending.map((c, idx) => {
+                      const balance = c.pendingBalance ?? c.creditBalance ?? 0;
+                      return (
+                        <div
+                          key={c.id}
+                          data-ocid={`dashboard.customer_insights.pending.item.${idx + 1}`}
+                          className="flex items-center gap-3 px-4 py-2.5"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                              {c.name.slice(0, 1).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground dark:text-white truncate">
+                              {c.name}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {c.mobile}
+                            </p>
+                          </div>
+                          <span className="text-sm font-bold text-red-600 dark:text-red-400 flex-shrink-0">
+                            ₹{Math.round(balance).toLocaleString("en-IN")}{" "}
+                            <span className="text-[9px] font-normal">
+                              pending
+                            </span>
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

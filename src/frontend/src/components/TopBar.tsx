@@ -19,6 +19,7 @@ import {
   Search,
   Sun,
   Trash2,
+  WifiOff,
 } from "lucide-react";
 import React, { useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import { useTheme } from "../context/ThemeContext";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
 import usePWA from "../hooks/usePWA";
 import type { AutoModeType, ShopMeta } from "../types/store";
 
@@ -625,6 +627,7 @@ function TopBarInner({
   const { isDarkMode, toggleTheme } = useTheme();
   const { language, toggleLanguage } = useLanguage();
   const { isInstallable, isInstalled, showInstallPrompt } = usePWA();
+  const { isOnline, syncStatus } = useNetworkStatus();
 
   const lowStockCount = getLowStockProducts().length;
   const dueCount = getAllCustomerLedgers().filter((l) => l.totalDue > 0).length;
@@ -749,14 +752,41 @@ function TopBarInner({
 
         {/* RIGHT: Sync dot + Mode Switcher + Language + Theme + Install + Bell + Profile */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* ICP Sync indicator dot */}
-          <span
-            data-ocid="topbar.sync_indicator"
-            title={isSyncing ? "Saving to cloud..." : "All data synced"}
-            className={`w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-500 ${
-              isSyncing ? "bg-amber-400 animate-pulse" : "bg-green-400"
-            }`}
-          />
+          {/* Network/Sync status indicator */}
+          {!isOnline ? (
+            <span
+              data-ocid="topbar.sync_indicator"
+              title="Offline — data saved locally"
+              className="flex items-center gap-1 text-[10px] font-medium text-red-500 flex-shrink-0"
+            >
+              <WifiOff size={11} />
+              <span className="hidden sm:inline">Offline</span>
+            </span>
+          ) : syncStatus === "syncing" || isSyncing ? (
+            <span
+              data-ocid="topbar.sync_indicator"
+              title="Syncing to cloud..."
+              className="flex items-center gap-1 text-[10px] font-medium text-amber-500 flex-shrink-0"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+              <span className="hidden sm:inline">Syncing</span>
+            </span>
+          ) : syncStatus === "sync_pending" ? (
+            <span
+              data-ocid="topbar.sync_indicator"
+              title="Sync pending"
+              className="flex items-center gap-1 text-[10px] font-medium text-yellow-500 flex-shrink-0"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
+              <span className="hidden sm:inline">Pending</span>
+            </span>
+          ) : (
+            <span
+              data-ocid="topbar.sync_indicator"
+              title="All data synced"
+              className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0 transition-colors duration-500"
+            />
+          )}
 
           {/* Mode Switcher: Simple | Smart | Pro */}
           <AutoModeSwitcher mode={autoMode} onChange={setAutoMode} />

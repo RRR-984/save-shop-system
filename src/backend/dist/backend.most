@@ -1,4 +1,6 @@
 // Version: 1.0.0
+type BackupEntry__821971064 =
+  {data : Text; id : Text; tag : Text; timestamp : Int};
 type Data__791452850<K, V> =
   {var count : Nat__490723111; kvs : [var ?(K, V)]};
 type Internal__8484328<K, V> =
@@ -31,6 +33,11 @@ type ShopMeta__216240044 =
   };
 type UserProfile__491224006 = {name : Text};
 actor {
+  stable backupSnapshots :
+    {
+      var root : Node__46230540<Text, List__415060402<BackupEntry__821971064>>;
+      var size : Nat__490723111
+    };
   stable shopData :
     {
       var root : Node__46230540<Text, Map__605269027<Text, Text>>;

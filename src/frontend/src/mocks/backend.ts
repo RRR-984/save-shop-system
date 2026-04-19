@@ -220,4 +220,11 @@ export const mockBackend: backendInterface = {
   saveVendorRateHistory: async () => undefined,
   saveVendors: async () => undefined,
   updateShop: async () => ({ success: true }),
+  saveBackupSnapshot: async () => undefined,
+  getBackupSnapshots: async () => [],
+  getBackupSnapshotData: async () => null,
+  deleteBackupSnapshot: async () => undefined,
+  pruneOldBackups: async () => BigInt(0),
+  saveSyncLog: async () => undefined,
+  getSyncLogs: async () => JSON.stringify([]),
 };

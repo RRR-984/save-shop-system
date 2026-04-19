@@ -14,6 +14,11 @@ export const AddShopResult = IDL.Record({
   'success' : IDL.Bool,
 });
 export const DeleteShopResult = IDL.Record({ 'success' : IDL.Bool });
+export const BackupSnapshotMeta = IDL.Record({
+  'id' : IDL.Text,
+  'tag' : IDL.Text,
+  'timestamp' : IDL.Int,
+});
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
 export const ShopStats = IDL.Record({
   'shopId' : IDL.Text,
@@ -52,8 +57,19 @@ export const idlService = IDL.Service({
       [AddShopResult],
       [],
     ),
+  'deleteBackupSnapshot' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'deleteShop' : IDL.Func([IDL.Text], [DeleteShopResult], []),
   'getAuditLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getBackupSnapshotData' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Opt(IDL.Text)],
+      ['query'],
+    ),
+  'getBackupSnapshots' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(BackupSnapshotMeta)],
+      ['query'],
+    ),
   'getBatches' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCategories' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
@@ -75,6 +91,7 @@ export const idlService = IDL.Service({
   'getSettings' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getShop' : IDL.Func([IDL.Text], [IDL.Opt(ShopMeta)], ['query']),
   'getShopUnits' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getSyncLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getTransactions' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
@@ -85,7 +102,13 @@ export const idlService = IDL.Service({
   'getVendorRateHistory' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getVendors' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'listShopsForOwner' : IDL.Func([IDL.Text], [IDL.Vec(ShopMeta)], ['query']),
+  'pruneOldBackups' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Nat], []),
   'saveAuditLogs' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'saveBackupSnapshot' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [],
+      [],
+    ),
   'saveBatches' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'saveCategories' : IDL.Func([IDL.Text, IDL.Text], [], []),
@@ -105,6 +128,7 @@ export const idlService = IDL.Service({
   'saveReturns' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveSettings' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveShopUnits' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'saveSyncLog' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveTransactions' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveUsers' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveVendorRateHistory' : IDL.Func([IDL.Text, IDL.Text], [], []),
@@ -125,6 +149,11 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Bool,
   });
   const DeleteShopResult = IDL.Record({ 'success' : IDL.Bool });
+  const BackupSnapshotMeta = IDL.Record({
+    'id' : IDL.Text,
+    'tag' : IDL.Text,
+    'timestamp' : IDL.Int,
+  });
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
   const ShopStats = IDL.Record({
     'shopId' : IDL.Text,
@@ -163,8 +192,19 @@ export const idlFactory = ({ IDL }) => {
         [AddShopResult],
         [],
       ),
+    'deleteBackupSnapshot' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'deleteShop' : IDL.Func([IDL.Text], [DeleteShopResult], []),
     'getAuditLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getBackupSnapshotData' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
+    'getBackupSnapshots' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(BackupSnapshotMeta)],
+        ['query'],
+      ),
     'getBatches' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCategories' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
@@ -186,6 +226,7 @@ export const idlFactory = ({ IDL }) => {
     'getSettings' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getShop' : IDL.Func([IDL.Text], [IDL.Opt(ShopMeta)], ['query']),
     'getShopUnits' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getSyncLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getTransactions' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
@@ -196,7 +237,13 @@ export const idlFactory = ({ IDL }) => {
     'getVendorRateHistory' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getVendors' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'listShopsForOwner' : IDL.Func([IDL.Text], [IDL.Vec(ShopMeta)], ['query']),
+    'pruneOldBackups' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Nat], []),
     'saveAuditLogs' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'saveBackupSnapshot' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
     'saveBatches' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'saveCategories' : IDL.Func([IDL.Text, IDL.Text], [], []),
@@ -216,6 +263,7 @@ export const idlFactory = ({ IDL }) => {
     'saveReturns' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveSettings' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveShopUnits' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'saveSyncLog' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveTransactions' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveUsers' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveVendorRateHistory' : IDL.Func([IDL.Text, IDL.Text], [], []),

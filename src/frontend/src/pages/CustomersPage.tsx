@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Bell,
+  Calendar,
   CheckCircle,
   CreditCard,
   IndianRupee,
@@ -32,6 +33,8 @@ import {
   Receipt,
   Search,
   Send,
+  ShoppingBag,
+  TrendingUp,
   User,
   Users,
 } from "lucide-react";
@@ -39,7 +42,21 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { type CustomerLedger, useStore } from "../context/StoreContext";
-import type { AppUser, Customer } from "../types/store";
+import type {
+  ActivityStatus,
+  AppUser,
+  Customer,
+  CustomerTier,
+} from "../types/store";
+import {
+  ACTIVITY_COLORS,
+  ACTIVITY_LABELS,
+  TIER_COLORS,
+  TIER_EMOJI,
+  TIER_LABELS,
+  getActivityStatus,
+  getCustomerTier,
+} from "../utils/customerTracking";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -50,8 +67,10 @@ function fmt(n: number) {
 }
 
 type LedgerFilter = "all" | "due" | "paid";
+type ActivityFilter = "all" | ActivityStatus;
+type TierFilter = "all" | CustomerTier;
 
-// ── Due Badge helper ───────────────────────────────────────────────────────────────────────────
+// ── Due Badge helper ────────────────────────────────────────────────────────────
 function getDueBadge(due: number) {
   if (due <= 0) return null;
   const base =
@@ -79,7 +98,26 @@ function getDueBadge(due: number) {
   );
 }
 
-// ── Reminder Confirmation Dialog ───────────────────────────────────────────────────────────────
+// ── Activity Status Badge ───────────────────────────────────────────────────────
+function ActivityBadge({ status }: { status: ActivityStatus }) {
+  return (
+    <Badge className={`text-[10px] px-1.5 border ${ACTIVITY_COLORS[status]}`}>
+      {ACTIVITY_LABELS[status]}
+    </Badge>
+  );
+}
+
+// ── Tier Badge ─────────────────────────────────────────────────────────────────
+function TierBadge({ tier }: { tier: CustomerTier }) {
+  if (tier === "normal") return null;
+  return (
+    <Badge className={`text-[10px] px-1.5 border ${TIER_COLORS[tier]}`}>
+      {TIER_EMOJI[tier]} {TIER_LABELS[tier]}
+    </Badge>
+  );
+}
+
+// ── Reminder Confirmation Dialog ────────────────────────────────────────────────
 function ReminderConfirmDialog({
   ledger,
   mode,
@@ -173,7 +211,7 @@ function ReminderConfirmDialog({
   );
 }
 
-// ── Role-based reminder button ─────────────────────────────────────────────────────────────────
+// ── Role-based reminder button ──────────────────────────────────────────────────
 function ReminderButton({
   ledger,
   currentUser,
@@ -212,7 +250,6 @@ function ReminderButton({
     );
   }
 
-  // Owner / Manager — direct send
   if (role === "owner" || role === "manager") {
     return (
       <>
@@ -244,7 +281,6 @@ function ReminderButton({
     );
   }
 
-  // Staff role
   if (!appConfig.allowStaffReminders) {
     return (
       <Button
@@ -306,7 +342,6 @@ function ReminderButton({
     );
   }
 
-  // Approval mode (default for staff)
   return (
     <>
       <Button
@@ -339,7 +374,7 @@ function ReminderButton({
   );
 }
 
-// ── Bulk Reminder Dialog ───────────────────────────────────────────────────────────────────────
+// ── Bulk Reminder Dialog ────────────────────────────────────────────────────────
 function BulkReminderDialog({
   dueCount,
   dueCustomers: dueLedgers,
@@ -428,22 +463,32 @@ function BulkReminderDialog({
   );
 }
 
-// ── Receive Payment Dialog ───────────────────────────────────────────────────────────────────────────
+// ── Receive Payment Dialog ──────────────────────────────────────────────────────
 type PayMode = "cash" | "upi" | "online";
 
 function ReceivePaymentDialog({
   ledger,
   open,
   onClose,
+  customerRecord,
+  onPaymentReceived,
 }: {
   ledger: CustomerLedger;
   open: boolean;
   onClose: () => void;
+  customerRecord?: Customer;
+  onPaymentReceived?: (amount: number) => void;
 }) {
-  const { receivePayment } = useStore();
+  const { receivePayment, updateCustomer } = useStore();
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [payMode, setPayMode] = useState<PayMode>("cash");
+
+  // Effective pending: use pendingBalance from customer record if available, else totalDue
+  const effectiveDue =
+    customerRecord?.pendingBalance != null
+      ? customerRecord.pendingBalance
+      : ledger.totalDue;
 
   const handleSubmit = () => {
     const amt = Number(amount);
@@ -463,6 +508,21 @@ function ReceivePaymentDialog({
       note,
       payMode,
     );
+
+    // Update customer PRO tracking fields
+    if (customerRecord) {
+      const newPending = Math.max(
+        0,
+        (customerRecord.pendingBalance ?? customerRecord.creditBalance) - amt,
+      );
+      updateCustomer(customerRecord.id, {
+        pendingBalance: newPending,
+        lastVisit: new Date().toISOString(),
+      });
+    }
+
+    onPaymentReceived?.(amt);
+
     const newDue = ledger.totalDue - amt;
     if (newDue <= 0) {
       toast.success(
@@ -530,7 +590,7 @@ function ReceivePaymentDialog({
             <div className="flex justify-between mt-2 pt-2 border-t border-border">
               <span className="text-muted-foreground">Total Due:</span>
               <span className="font-bold text-red-600">
-                {fmt(ledger.totalDue)}
+                {fmt(effectiveDue)}
               </span>
             </div>
           </div>
@@ -599,7 +659,7 @@ function ReceivePaymentDialog({
   );
 }
 
-// ── Invoice History Dialog ──────────────────────────────────────────────────────────────────────────
+// ── Invoice History Dialog ──────────────────────────────────────────────────────
 function InvoicesDialog({
   ledger,
   open,
@@ -720,20 +780,31 @@ function InvoicesDialog({
   );
 }
 
-// ── Add / Edit Customer Dialog ─────────────────────────────────────────────────────────────────
+// ── Add / Edit Customer Dialog ──────────────────────────────────────────────────
 function AddEditCustomerDialog({
   open,
   onClose,
   existing,
+  isProMode,
 }: {
   open: boolean;
   onClose: () => void;
   existing?: Customer;
+  isProMode?: boolean;
 }) {
   const { addCustomer, updateCustomer } = useStore();
   const [name, setName] = useState(existing?.name ?? "");
   const [mobile, setMobile] = useState(existing?.mobile ?? "");
   const [address, setAddress] = useState(existing?.address ?? "");
+  const [lastVisit, setLastVisit] = useState(
+    existing?.lastVisit ? existing.lastVisit.slice(0, 10) : "",
+  );
+  const [totalPurchase, setTotalPurchase] = useState(
+    existing?.totalPurchase != null ? String(existing.totalPurchase) : "",
+  );
+  const [visitCount, setVisitCount] = useState(
+    existing?.visitCount != null ? String(existing.visitCount) : "",
+  );
 
   const isEdit = !!existing;
 
@@ -742,19 +813,33 @@ function AddEditCustomerDialog({
       toast.error("Customer name is required");
       return;
     }
+    const extra: Partial<Customer> = {
+      name: name.trim(),
+      mobile: mobile.trim(),
+      address: address.trim() || undefined,
+    };
+    if (isProMode) {
+      if (lastVisit) extra.lastVisit = new Date(lastVisit).toISOString();
+      if (totalPurchase !== "") extra.totalPurchase = Number(totalPurchase);
+      if (visitCount !== "") extra.visitCount = Number(visitCount);
+    }
+
     if (isEdit && existing) {
-      updateCustomer(existing.id, {
-        name: name.trim(),
-        mobile: mobile.trim(),
-        address: address.trim() || undefined,
-      });
+      updateCustomer(existing.id, extra);
       toast.success("Customer updated ✓");
     } else {
       addCustomer({
-        name: name.trim(),
-        mobile: mobile.trim(),
+        name: extra.name!,
+        mobile: extra.mobile!,
         creditBalance: 0,
-        address: address.trim() || undefined,
+        address: extra.address,
+        ...(isProMode && lastVisit ? { lastVisit: extra.lastVisit } : {}),
+        ...(isProMode && totalPurchase !== ""
+          ? { totalPurchase: Number(totalPurchase) }
+          : {}),
+        ...(isProMode && visitCount !== ""
+          ? { visitCount: Number(visitCount) }
+          : {}),
       });
       toast.success("Customer added ✓");
     }
@@ -805,6 +890,60 @@ function AddEditCustomerDialog({
               onChange={(e) => setAddress(e.target.value)}
             />
           </div>
+
+          {/* PRO mode extra fields */}
+          {isProMode && (
+            <>
+              <Separator />
+              <p className="text-[10px] text-primary font-semibold uppercase tracking-wider">
+                PRO Tracking Fields
+              </p>
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  Last Visit Date{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  data-ocid="customers.add_edit.last_visit.input"
+                  type="date"
+                  value={lastVisit}
+                  onChange={(e) => setLastVisit(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  Total Purchase (₹){" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  data-ocid="customers.add_edit.total_purchase.input"
+                  type="number"
+                  placeholder="e.g. 25000"
+                  value={totalPurchase}
+                  onChange={(e) => setTotalPurchase(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  Visit Count{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  data-ocid="customers.add_edit.visit_count.input"
+                  type="number"
+                  placeholder="e.g. 8"
+                  value={visitCount}
+                  onChange={(e) => setVisitCount(e.target.value)}
+                />
+              </div>
+            </>
+          )}
         </div>
         <DialogFooter className="gap-2">
           <Button
@@ -828,17 +967,19 @@ function AddEditCustomerDialog({
   );
 }
 
-// ── Customer Ledger Card ──────────────────────────────────────────────────────────────────────────────────────
+// ── Customer Ledger Card ────────────────────────────────────────────────────────
 function CustomerCard({
   ledger,
   index,
   shopName,
   currentUser,
+  isProMode,
 }: {
   ledger: CustomerLedger;
   index: number;
   shopName: string;
   currentUser: AppUser;
+  isProMode: boolean;
 }) {
   const { customers } = useStore();
   const [showPayment, setShowPayment] = useState(false);
@@ -847,7 +988,7 @@ function CustomerCard({
   const isPaid = ledger.totalDue === 0;
   const dueBadge = getDueBadge(ledger.totalDue);
 
-  // Resolve Customer record for editing
+  // Resolve Customer record for editing and PRO data
   const mobile = ledger.customerMobile?.replace(/\D/g, "");
   const custRecord = customers.find((c) =>
     mobile
@@ -874,8 +1015,18 @@ function CustomerCard({
     : null;
   const lastTransactionAmount = latestInvoice?.totalAmount ?? null;
 
-  // Resolved address: customer record first, then invoice
+  // Resolved address
   const displayAddress = custRecord?.address || ledger.customerAddress;
+
+  // Always compute activity and tier — badges are always visible regardless of PRO mode gate
+  const activityStatus = getActivityStatus(custRecord?.lastVisit);
+  const tier = getCustomerTier(
+    custRecord?.totalPurchase ?? ledger.totalPurchase,
+  );
+  const pendingAmt =
+    custRecord?.pendingBalance != null
+      ? custRecord.pendingBalance
+      : ledger.totalDue;
 
   return (
     <>
@@ -891,10 +1042,10 @@ function CustomerCard({
       >
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
-            {/* Left: Name + mobile + address + badge */}
+            {/* Left: Name + mobile + address + badges */}
             <div className="flex items-center gap-3 min-w-0">
               <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 relative ${
                   isPaid ? "bg-green-100" : "bg-red-100"
                 }`}
               >
@@ -902,6 +1053,20 @@ function CustomerCard({
                   size={18}
                   className={isPaid ? "text-green-700" : "text-red-700"}
                 />
+                {/* Tier glow ring — always visible */}
+                {tier && tier !== "normal" && (
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 text-[10px] leading-none ${
+                      tier === "vip"
+                        ? "text-purple-600"
+                        : tier === "gold"
+                          ? "text-yellow-600"
+                          : "text-slate-500"
+                    }`}
+                  >
+                    {TIER_EMOJI[tier]}
+                  </span>
+                )}
               </div>
               <div className="min-w-0">
                 <div className="font-semibold text-sm truncate">
@@ -921,6 +1086,26 @@ function CustomerCard({
                     <span className="truncate">{displayAddress}</span>
                   </div>
                 )}
+
+                {/* Last Visit row — always visible when data exists */}
+                {custRecord?.lastVisit && (
+                  <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <Calendar size={9} className="flex-shrink-0" />
+                    <span>
+                      Last visit:{" "}
+                      {new Date(custRecord.lastVisit).toLocaleDateString(
+                        "en-IN",
+                        {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        },
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {/* Badges row */}
                 <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                   {isPaid ? (
                     <Badge className="bg-green-100 text-green-700 border-green-300 text-[10px]">
@@ -929,13 +1114,14 @@ function CustomerCard({
                   ) : (
                     dueBadge
                   )}
+                  {activityStatus && <ActivityBadge status={activityStatus} />}
+                  {tier && <TierBadge tier={tier} />}
                 </div>
               </div>
             </div>
 
             {/* Right: Actions */}
             <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-              {/* Edit button */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -947,7 +1133,6 @@ function CustomerCard({
                 <Pencil size={12} className="mr-1" />
                 Edit
               </Button>
-              {/* Role-based Reminder button */}
               {!isPaid && (
                 <ReminderButton
                   ledger={ledger}
@@ -1004,34 +1189,75 @@ function CustomerCard({
 
           {/* Stats row */}
           <Separator className="my-3" />
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <div className="text-xs text-muted-foreground">
-                Total Purchase
+          {isProMode ? (
+            /* PRO stats: 4-col with Visit Count + Pending Balance */
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div>
+                <div className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                  <ShoppingBag size={10} />
+                  Total Purchase
+                </div>
+                <div className="text-sm font-semibold">
+                  {fmt(custRecord?.totalPurchase ?? ledger.totalPurchase)}
+                </div>
               </div>
-              <div className="text-sm font-semibold">
-                {fmt(ledger.totalPurchase)}
+              <div>
+                <div className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                  <TrendingUp size={10} />
+                  Visits
+                </div>
+                <div className="text-sm font-semibold">
+                  {custRecord?.visitCount ?? ledger.invoices.length}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Paid</div>
+                <div className="text-sm font-semibold text-green-600">
+                  {fmt(ledger.totalPaid)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Pending</div>
+                <div
+                  className={`text-sm font-bold ${
+                    pendingAmt > 0 ? "text-red-600" : "text-green-600"
+                  }`}
+                >
+                  {fmt(pendingAmt)}
+                </div>
               </div>
             </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Paid</div>
-              <div className="text-sm font-semibold text-green-600">
-                {fmt(ledger.totalPaid)}
+          ) : (
+            /* Simple / Smart stats: 3-col */
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-xs text-muted-foreground">
+                  Total Purchase
+                </div>
+                <div className="text-sm font-semibold">
+                  {fmt(ledger.totalPurchase)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Paid</div>
+                <div className="text-sm font-semibold text-green-600">
+                  {fmt(ledger.totalPaid)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">
+                  Outstanding Due
+                </div>
+                <div
+                  className={`text-sm font-bold ${
+                    ledger.totalDue > 0 ? "text-red-600" : "text-green-600"
+                  }`}
+                >
+                  {fmt(ledger.totalDue)}
+                </div>
               </div>
             </div>
-            <div>
-              <div className="text-xs text-muted-foreground">
-                Outstanding Due
-              </div>
-              <div
-                className={`text-sm font-bold ${
-                  ledger.totalDue > 0 ? "text-red-600" : "text-green-600"
-                }`}
-              >
-                {fmt(ledger.totalDue)}
-              </div>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1040,6 +1266,7 @@ function CustomerCard({
           open={showEdit}
           onClose={() => setShowEdit(false)}
           existing={custRecord}
+          isProMode={isProMode}
         />
       )}
       {showPayment && (
@@ -1047,6 +1274,7 @@ function CustomerCard({
           ledger={ledger}
           open={showPayment}
           onClose={() => setShowPayment(false)}
+          customerRecord={custRecord}
         />
       )}
       {showInvoices && (
@@ -1060,7 +1288,99 @@ function CustomerCard({
   );
 }
 
-// ── Main Customers Page ─────────────────────────────────────────────────────────────────────────────────────
+// ── PRO Filter Bar ──────────────────────────────────────────────────────────────
+function ProFilterBar({
+  activityFilter,
+  setActivityFilter,
+  tierFilter,
+  setTierFilter,
+}: {
+  activityFilter: ActivityFilter;
+  setActivityFilter: (v: ActivityFilter) => void;
+  tierFilter: TierFilter;
+  setTierFilter: (v: TierFilter) => void;
+}) {
+  const activityOptions: {
+    value: ActivityFilter;
+    label: string;
+    color: string;
+  }[] = [
+    {
+      value: "all",
+      label: "All Status",
+      color: "border-border text-foreground",
+    },
+    { value: "active", label: "🟢 Active", color: ACTIVITY_COLORS.active },
+    { value: "warm", label: "🟡 Warm", color: ACTIVITY_COLORS.warm },
+    { value: "cold", label: "🔵 Cold", color: ACTIVITY_COLORS.cold },
+    { value: "lost", label: "🔴 Lost", color: ACTIVITY_COLORS.lost },
+  ];
+
+  const tierOptions: { value: TierFilter; label: string }[] = [
+    { value: "all", label: "All Tiers" },
+    { value: "vip", label: "👑 VIP" },
+    { value: "gold", label: "🥇 Gold" },
+    { value: "silver", label: "🥈 Silver" },
+    { value: "normal", label: "👤 Normal" },
+  ];
+
+  return (
+    <div
+      className="rounded-xl border border-border bg-card p-3 space-y-2.5"
+      data-ocid="customers.pro_filter.panel"
+    >
+      <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">
+        PRO Filters
+      </p>
+      {/* Activity filter */}
+      <div className="space-y-1">
+        <p className="text-xs text-muted-foreground">Activity Status</p>
+        <div className="flex flex-wrap gap-1.5">
+          {activityOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${
+                activityFilter === opt.value
+                  ? `${opt.color} ring-1 ring-offset-1 ring-primary/30`
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+              onClick={() => setActivityFilter(opt.value)}
+              data-ocid={`customers.activity_filter.${opt.value}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Tier filter */}
+      <div className="space-y-1">
+        <p className="text-xs text-muted-foreground">Customer Tier</p>
+        <div className="flex flex-wrap gap-1.5">
+          {tierOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${
+                tierFilter === opt.value
+                  ? opt.value === "all"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : `${TIER_COLORS[opt.value as CustomerTier]} ring-1 ring-offset-1 ring-primary/30`
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+              onClick={() => setTierFilter(opt.value)}
+              data-ocid={`customers.tier_filter.${opt.value}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Customers Page ─────────────────────────────────────────────────────────
 export function CustomersPage() {
   const {
     invoices,
@@ -1068,17 +1388,24 @@ export function CustomersPage() {
     mergeDuplicateCustomers,
     sendBulkReminder,
     bulkReminderSentAt,
+    customers,
+    appConfig,
+    autoMode,
   } = useStore();
   const { currentShop, currentUser } = useAuth();
   const shopName = currentShop?.name ?? "Save Shop System";
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<LedgerFilter>("all");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [tierFilter, setTierFilter] = useState<TierFilter>("all");
   const [bulkReminderOpen, setBulkReminderOpen] = useState(false);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
 
-  // Derive ledgers from invoices (re-derived each render to stay in sync)
-  // Already sorted by highest due first from getAllCustomerLedgers
+  // PRO mode is active only when autoMode === 'pro' AND customerTracking is enabled
+  const isProMode =
+    autoMode === "pro" && (appConfig.featureFlags?.customerTracking ?? false);
+
   const allLedgers = getAllCustomerLedgers();
 
   const filtered = allLedgers
@@ -1093,6 +1420,34 @@ export function CustomersPage() {
       return (
         l.customerName.toLowerCase().includes(s) || l.customerMobile.includes(s)
       );
+    })
+    .filter((l) => {
+      if (!isProMode) return true;
+      // Activity filter
+      if (activityFilter !== "all") {
+        const mobile = l.customerMobile?.replace(/\D/g, "");
+        const rec = customers.find((c) =>
+          mobile
+            ? c.mobile.replace(/\D/g, "") === mobile
+            : c.name.trim().toLowerCase() ===
+              l.customerName.trim().toLowerCase(),
+        );
+        const status = getActivityStatus(rec?.lastVisit);
+        if (status !== activityFilter) return false;
+      }
+      // Tier filter
+      if (tierFilter !== "all") {
+        const mobile = l.customerMobile?.replace(/\D/g, "");
+        const rec = customers.find((c) =>
+          mobile
+            ? c.mobile.replace(/\D/g, "") === mobile
+            : c.name.trim().toLowerCase() ===
+              l.customerName.trim().toLowerCase(),
+        );
+        const tier = getCustomerTier(rec?.totalPurchase ?? l.totalPurchase);
+        if (tier !== tierFilter) return false;
+      }
+      return true;
     });
 
   const totalCreditDue = allLedgers.reduce((s, l) => s + l.totalDue, 0);
@@ -1100,7 +1455,6 @@ export function CustomersPage() {
   const paidCustomers = allLedgers.filter((l) => l.totalDue === 0);
   const highDueCustomers = dueCustomers.filter((l) => l.totalDue > 5000);
 
-  // Anti-spam: disable if last bulk was within 5 minutes
   const lastSentDate = bulkReminderSentAt ? new Date(bulkReminderSentAt) : null;
   const minutesSinceLastSent = lastSentDate
     ? Math.floor((Date.now() - lastSentDate.getTime()) / 60000)
@@ -1129,13 +1483,21 @@ export function CustomersPage() {
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold">Customer Due List</h1>
+            <h1 className="text-xl font-bold">
+              Customer Due List
+              {isProMode && (
+                <Badge className="ml-2 text-[10px] bg-purple-100 text-purple-700 border-purple-300">
+                  👑 PRO
+                </Badge>
+              )}
+            </h1>
             <p className="text-muted-foreground text-sm">
-              Customer ledger — total purchase, paid, and outstanding dues
+              {isProMode
+                ? "Customer ledger with tracking, tiers & activity status"
+                : "Customer ledger — total purchase, paid, and outstanding dues"}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Add Customer Button */}
             <Button
               size="sm"
               className="text-xs bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
@@ -1145,7 +1507,6 @@ export function CustomersPage() {
               <Plus size={13} className="mr-1" />
               Add Customer
             </Button>
-            {/* Bulk Reminder Button */}
             <div className="flex flex-col items-end gap-0.5">
               <Button
                 size="sm"
@@ -1210,15 +1571,11 @@ export function CustomersPage() {
             </CardContent>
           </Card>
           <Card
-            className={`border-border shadow-sm ${
-              totalCreditDue > 0 ? "border-red-300" : "border-green-300"
-            }`}
+            className={`border-border shadow-sm ${totalCreditDue > 0 ? "border-red-300" : "border-green-300"}`}
           >
             <CardContent className="p-3 flex items-center gap-3">
               <div
-                className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                  totalCreditDue > 0 ? "bg-red-50" : "bg-green-50"
-                }`}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center ${totalCreditDue > 0 ? "bg-red-50" : "bg-green-50"}`}
               >
                 <CreditCard
                   size={16}
@@ -1232,9 +1589,7 @@ export function CustomersPage() {
                   Total Outstanding
                 </div>
                 <div
-                  className={`text-base font-bold ${
-                    totalCreditDue > 0 ? "text-red-700" : "text-green-600"
-                  }`}
+                  className={`text-base font-bold ${totalCreditDue > 0 ? "text-red-700" : "text-green-600"}`}
                 >
                   {fmt(totalCreditDue)}
                 </div>
@@ -1274,7 +1629,7 @@ export function CustomersPage() {
           </Card>
         </div>
 
-        {/* Payment Reminders with role-based actions */}
+        {/* Payment Reminders */}
         {dueCustomers.length > 0 && (
           <Card className="border-red-300 bg-red-50/40 shadow-sm">
             <CardHeader className="pb-2">
@@ -1285,35 +1640,33 @@ export function CustomersPage() {
             </CardHeader>
             <CardContent className="pb-3">
               <div className="flex flex-col gap-1.5">
-                {dueCustomers.slice(0, 8).map((l, lIdx) => {
-                  return (
-                    <div
-                      key={`${l.customerName}__${l.customerMobile}`}
-                      className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg bg-card border border-red-100 max-w-full"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="font-medium text-foreground truncate text-sm">
-                          {l.customerName}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="flex-shrink-0 whitespace-nowrap">
-                          {getDueBadge(l.totalDue)}
-                        </span>
-                        <span className="text-base font-semibold text-red-600 whitespace-nowrap">
-                          {fmt(l.totalDue)}
-                        </span>
-                        <ReminderButton
-                          ledger={l}
-                          currentUser={user}
-                          shopName={shopName}
-                          index={lIdx}
-                          compact
-                        />
-                      </div>
+                {dueCustomers.slice(0, 8).map((l, lIdx) => (
+                  <div
+                    key={`${l.customerName}__${l.customerMobile}`}
+                    className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-lg bg-card border border-red-100 max-w-full"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="font-medium text-foreground truncate text-sm">
+                        {l.customerName}
+                      </span>
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="flex-shrink-0 whitespace-nowrap">
+                        {getDueBadge(l.totalDue)}
+                      </span>
+                      <span className="text-base font-semibold text-red-600 whitespace-nowrap">
+                        {fmt(l.totalDue)}
+                      </span>
+                      <ReminderButton
+                        ledger={l}
+                        currentUser={user}
+                        shopName={shopName}
+                        index={lIdx}
+                        compact
+                      />
+                    </div>
+                  </div>
+                ))}
                 {dueCustomers.length > 8 && (
                   <p className="text-xs text-muted-foreground mt-1 pl-1">
                     + {dueCustomers.length - 8} more customers have outstanding
@@ -1325,7 +1678,7 @@ export function CustomersPage() {
           </Card>
         )}
 
-        {/* Search + Filter + list */}
+        {/* Search + Filter */}
         <div className="flex flex-col gap-3">
           <div className="relative max-w-xs">
             <Search
@@ -1370,6 +1723,16 @@ export function CustomersPage() {
               </TabsList>
             </Tabs>
           </div>
+
+          {/* PRO mode filter bar */}
+          {isProMode && (
+            <ProFilterBar
+              activityFilter={activityFilter}
+              setActivityFilter={setActivityFilter}
+              tierFilter={tierFilter}
+              setTierFilter={setTierFilter}
+            />
+          )}
         </div>
 
         {/* Customer cards */}
@@ -1382,13 +1745,15 @@ export function CustomersPage() {
               <User size={28} className="text-muted-foreground" />
             </div>
             <p className="text-muted-foreground font-medium">
-              {filter === "due"
-                ? "No outstanding dues ✅"
-                : filter === "paid"
-                  ? "No fully paid customers"
-                  : invoices.length === 0
-                    ? "No invoices created yet"
-                    : "No customers found"}
+              {activityFilter !== "all" || tierFilter !== "all"
+                ? "No customers match this filter"
+                : filter === "due"
+                  ? "No outstanding dues ✅"
+                  : filter === "paid"
+                    ? "No fully paid customers"
+                    : invoices.length === 0
+                      ? "No invoices created yet"
+                      : "No customers found"}
             </p>
             <p className="text-muted-foreground text-sm mt-1">
               {invoices.length === 0
@@ -1405,6 +1770,7 @@ export function CustomersPage() {
                 index={idx}
                 shopName={shopName}
                 currentUser={user}
+                isProMode={isProMode}
               />
             ))}
           </div>
@@ -1430,6 +1796,7 @@ export function CustomersPage() {
         <AddEditCustomerDialog
           open={showAddCustomer}
           onClose={() => setShowAddCustomer(false)}
+          isProMode={isProMode}
         />
       )}
     </div>
