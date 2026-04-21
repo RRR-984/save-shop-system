@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Bell,
+  Cake,
   Calendar,
   CheckCircle,
   CreditCard,
@@ -796,6 +797,7 @@ function AddEditCustomerDialog({
   const [name, setName] = useState(existing?.name ?? "");
   const [mobile, setMobile] = useState(existing?.mobile ?? "");
   const [address, setAddress] = useState(existing?.address ?? "");
+  const [birthday, setBirthday] = useState(existing?.birthday ?? "");
   const [lastVisit, setLastVisit] = useState(
     existing?.lastVisit ? existing.lastVisit.slice(0, 10) : "",
   );
@@ -817,6 +819,7 @@ function AddEditCustomerDialog({
       name: name.trim(),
       mobile: mobile.trim(),
       address: address.trim() || undefined,
+      birthday: birthday.trim() || undefined,
     };
     if (isProMode) {
       if (lastVisit) extra.lastVisit = new Date(lastVisit).toISOString();
@@ -833,6 +836,7 @@ function AddEditCustomerDialog({
         mobile: extra.mobile!,
         creditBalance: 0,
         address: extra.address,
+        birthday: extra.birthday,
         ...(isProMode && lastVisit ? { lastVisit: extra.lastVisit } : {}),
         ...(isProMode && totalPurchase !== ""
           ? { totalPurchase: Number(totalPurchase) }
@@ -888,6 +892,21 @@ function AddEditCustomerDialog({
               placeholder="e.g. 12 Main Market, Indore"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm flex items-center gap-1.5">
+              <Cake size={13} className="text-pink-500" />
+              Birthday / Janmdin{" "}
+              <span className="text-muted-foreground font-normal">
+                (optional)
+              </span>
+            </Label>
+            <Input
+              data-ocid="customers.add_edit.birthday.input"
+              type="date"
+              value={birthday}
+              onChange={(e) => setBirthday(e.target.value)}
             />
           </div>
 
@@ -1101,6 +1120,22 @@ function CustomerCard({
                           year: "numeric",
                         },
                       )}
+                    </span>
+                  </div>
+                )}
+
+                {/* Birthday row */}
+                {custRecord?.birthday && (
+                  <div className="text-[10px] text-pink-500 flex items-center gap-1 mt-0.5">
+                    <Cake size={9} className="flex-shrink-0" />
+                    <span>
+                      Birthday:{" "}
+                      {new Date(
+                        `${custRecord.birthday}T00:00:00`,
+                      ).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                      })}
                     </span>
                   </div>
                 )}

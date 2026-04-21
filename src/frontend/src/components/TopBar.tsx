@@ -618,7 +618,6 @@ function TopBarInner({
   const {
     getLowStockProducts,
     getAllCustomerLedgers,
-    diamondRewards,
     isSyncing,
     autoMode,
     setAutoMode,
@@ -635,7 +634,6 @@ function TopBarInner({
   const isStaff = role === "staff";
 
   const totalNotifCount = isStaff ? lowStockCount : lowStockCount + dueCount;
-  const totalDiamonds = diamondRewards.reduce((s, r) => s + r.diamondCount, 0);
 
   const initials = (() => {
     const name = currentUser?.name?.trim();
@@ -920,15 +918,7 @@ function TopBarInner({
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              {totalDiamonds > 0 && (
-                <span
-                  data-ocid="topbar.diamond_badge"
-                  className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-violet-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 border-2 border-card shadow-sm"
-                  title={`${totalDiamonds} Diamonds`}
-                >
-                  💎
-                </span>
-              )}
+              {/* Diamond badge removed — count is shown in the Diamond Rewards card on the dashboard */}
             </div>
             <div className="hidden sm:flex flex-col leading-tight">
               <span className="text-xs font-semibold text-foreground truncate max-w-[100px]">

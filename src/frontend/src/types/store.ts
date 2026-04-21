@@ -168,6 +168,8 @@ export interface Customer {
   visitCount?: number;
   /** Running pending balance — mirrors creditBalance but tracked separately for PRO mode */
   pendingBalance?: number;
+  /** Birthday in YYYY-MM-DD format (optional) — used for birthday reminders */
+  birthday?: string;
 }
 
 export interface InvoiceItem {
@@ -487,7 +489,8 @@ export type NavPage =
   | "feedback-page"
   | "referral-page"
   | "drafts"
-  | "attendance";
+  | "attendance"
+  | "super-admin";
 
 // ─── Vendor & Order System ────────────────────────────────────────────────────
 

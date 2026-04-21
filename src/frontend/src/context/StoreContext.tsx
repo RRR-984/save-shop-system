@@ -49,6 +49,8 @@ import type {
 } from "../types/store";
 import {
   STORAGE_KEYS,
+  clearShopScopedData,
+  getShopKey,
   loadAutoMode,
   loadData,
   loadDrafts,
@@ -138,6 +140,9 @@ export interface CreateInvoiceResult {
 }
 
 interface StoreContextValue {
+  // Reset
+  resetShopData: () => Promise<void>;
+
   // Data
   categories: Category[];
   products: Product[];
@@ -152,6 +157,14 @@ interface StoreContextValue {
 
   // Loading state
   isLoading: boolean;
+  /** Phase 1 in-flight: products, categories, batches, shopUnits, transactions, users */
+  isPhase1Loading: boolean;
+  /** Phase 2 in-flight: invoices, customers, payments, returns, vendors, etc. — silent background */
+  isPhase2Loading: boolean;
+  /** true if some Phase 1 collections failed — dashboard shows partial data badge */
+  phase1HasPartialError: boolean;
+  /** true if any Phase 2 collection (invoices, customers, payments, vendors) failed */
+  phase2HasPartialError: boolean;
 
   // Actor connection error (null = no error)
   actorError: string | null;
@@ -451,6 +464,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ── Loading state ─────────────────────────────────────────────────────────────────────
   const [isLoading, setIsLoading] = useState(true);
+  /** Phase 1: essential collections (products, categories, batches, shopUnits, transactions, users) */
+  const [isPhase1Loading, setIsPhase1Loading] = useState(true);
+  /** Phase 2: heavy collections loaded silently in background after Phase 1 */
+  const [isPhase2Loading, setIsPhase2Loading] = useState(false);
+  /** true when at least one Phase 1 collection returned a settled rejection */
+  const [phase1HasPartialError, setPhase1HasPartialError] = useState(false);
+  /** true when at least one Phase 2 collection failed to load */
+  const [phase2HasPartialError, setPhase2HasPartialError] = useState(false);
+
+  // ── Track previous shopId to detect shop switches ─────────────────────────
+  const prevShopIdRef = useRef<string | null>(null);
 
   // ── Refresh counter — incremented after every mutation so consumers can react ─
   const [refreshCounter, setRefreshCounter] = useState(0);
@@ -848,245 +872,450 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!shopId || !actor) return;
 
-    // ── 2b: Pre-populate from localStorage for instant render (ICP will overwrite) ──
-    const cachedProducts = loadData<Product[]>(STORAGE_KEYS.products, []);
-    if (cachedProducts.length > 0) setProducts(cachedProducts);
-    const cachedCustomers = loadData<Customer[]>(STORAGE_KEYS.customers, []);
-    if (cachedCustomers.length > 0) setCustomers(cachedCustomers);
-    const cachedBatches = loadData<StockBatch[]>(STORAGE_KEYS.batches, []);
-    if (cachedBatches.length > 0) {
-      setBatches(cachedBatches);
-      batchesRef.current = cachedBatches;
-    }
-    const cachedInvoices = loadData<Invoice[]>(STORAGE_KEYS.sales, []);
-    if (cachedInvoices.length > 0) {
-      setInvoices(cachedInvoices);
-      invoicesRef.current = cachedInvoices;
-    }
-    const cachedPayments = loadData<PaymentRecord[]>(STORAGE_KEYS.payments, []);
-    if (cachedPayments.length > 0) setPayments(cachedPayments);
-    const cachedReturns = loadData<ReturnEntry[]>(STORAGE_KEYS.returns, []);
-    if (cachedReturns.length > 0) {
-      setReturns(cachedReturns);
-      returnsRef.current = cachedReturns;
-    }
-    const cachedVendors = loadData<Vendor[]>(STORAGE_KEYS.vendors, []);
-    if (cachedVendors.length > 0) {
-      setVendors(cachedVendors);
-      vendorsRef.current = cachedVendors;
-    }
-    const cachedPOs = loadData<PurchaseOrder[]>(
-      STORAGE_KEYS.purchaseOrders,
-      [],
-    );
-    if (cachedPOs.length > 0) {
-      setPurchaseOrders(cachedPOs);
-      purchaseOrdersRef.current = cachedPOs;
-    }
-    const cachedCOs = loadData<CustomerOrder[]>(
-      STORAGE_KEYS.customerOrders,
-      [],
-    );
-    if (cachedCOs.length > 0) {
-      setCustomerOrders(cachedCOs);
-      customerOrdersRef.current = cachedCOs;
-    }
-    const cachedVRH = loadData<VendorRateHistory[]>(
-      STORAGE_KEYS.vendorRateHistory,
-      [],
-    );
-    if (cachedVRH.length > 0) {
-      setVendorRateHistory(cachedVRH);
-      vendorRateHistoryRef.current = cachedVRH;
+    // ── Detect shop switch vs initial load ───────────────────────────────────
+    const isShopSwitch =
+      prevShopIdRef.current !== null && prevShopIdRef.current !== shopId;
+
+    if (isShopSwitch) {
+      console.log(
+        `[StoreContext] === Shop switch detected: ${prevShopIdRef.current} → ${shopId} ===`,
+      );
+      // Clear old shop's scoped localStorage data immediately to prevent stale data
+      clearShopScopedData(prevShopIdRef.current!);
+      // Immediately clear all state arrays — never show previous shop's data
+      setProducts([]);
+      setCategories([]);
+      setBatches([]);
+      batchesRef.current = [];
+      setTransactions([]);
+      setUsers([]);
+      setShopUnits([]);
+      setInvoices([]);
+      invoicesRef.current = [];
+      setCustomers([]);
+      setPayments([]);
+      setReturns([]);
+      returnsRef.current = [];
+      setVendors([]);
+      vendorsRef.current = [];
+      setPurchaseOrders([]);
+      purchaseOrdersRef.current = [];
+      setCustomerOrders([]);
+      customerOrdersRef.current = [];
+      setVendorRateHistory([]);
+      vendorRateHistoryRef.current = [];
+      setLowPriceAlertLogs([]);
+      lowPriceAlertLogsRef.current = [];
+      setAuditLogs([]);
+      auditLogsRef.current = [];
+      setReminderLogs([]);
+      reminderLogsRef.current = [];
+      setReminderRequests([]);
+      reminderRequestsRef.current = [];
+      // Reset error states
+      setPhase1HasPartialError(false);
+      setPhase2HasPartialError(false);
     }
 
-    setIsLoading(true);
-    console.log(
-      `[StoreContext] === Loading shop from ICP backend: ${shopId} ===`,
+    // Update prevShopIdRef to current
+    prevShopIdRef.current = shopId;
+
+    // ── Cache freshness check (5 min threshold) ──────────────────────────────
+    // Skip cache entirely on shop switch — always show fresh skeleton
+    const CACHE_FRESHNESS_MS = 5 * 60 * 1000; // 5 minutes
+    const cacheTimestampKey = `saveshop_cache_ts_${shopId}`;
+    const lastCacheTs = Number.parseInt(
+      localStorage.getItem(cacheTimestampKey) ?? "0",
+      10,
     );
-    Promise.all([
+    const isCacheFresh =
+      !isShopSwitch && Date.now() - lastCacheTs < CACHE_FRESHNESS_MS;
+
+    // ── Pre-populate from localStorage for instant render ───────────────────
+    // Only on non-switch loads. On shop switch we always show skeleton.
+    if (!isShopSwitch) {
+      const cachedProducts = loadData<Product[]>(
+        getShopKey(STORAGE_KEYS.products, shopId),
+        [],
+      );
+      if (cachedProducts.length > 0) setProducts(cachedProducts);
+      const cachedBatches = loadData<StockBatch[]>(
+        getShopKey(STORAGE_KEYS.batches, shopId),
+        [],
+      );
+      if (cachedBatches.length > 0) {
+        setBatches(cachedBatches);
+        batchesRef.current = cachedBatches;
+      }
+      const cachedInvoices = loadData<Invoice[]>(
+        getShopKey(STORAGE_KEYS.sales, shopId),
+        [],
+      );
+      if (cachedInvoices.length > 0) {
+        setInvoices(cachedInvoices);
+        invoicesRef.current = cachedInvoices;
+      }
+      const cachedCustomers = loadData<Customer[]>(
+        getShopKey(STORAGE_KEYS.customers, shopId),
+        [],
+      );
+      if (cachedCustomers.length > 0) setCustomers(cachedCustomers);
+      const cachedPayments = loadData<PaymentRecord[]>(
+        getShopKey(STORAGE_KEYS.payments, shopId),
+        [],
+      );
+      if (cachedPayments.length > 0) setPayments(cachedPayments);
+      const cachedReturns = loadData<ReturnEntry[]>(
+        getShopKey(STORAGE_KEYS.returns, shopId),
+        [],
+      );
+      if (cachedReturns.length > 0) {
+        setReturns(cachedReturns);
+        returnsRef.current = cachedReturns;
+      }
+      const cachedVendors = loadData<Vendor[]>(
+        getShopKey(STORAGE_KEYS.vendors, shopId),
+        [],
+      );
+      if (cachedVendors.length > 0) {
+        setVendors(cachedVendors);
+        vendorsRef.current = cachedVendors;
+      }
+      const cachedPOs = loadData<PurchaseOrder[]>(
+        getShopKey(STORAGE_KEYS.purchaseOrders, shopId),
+        [],
+      );
+      if (cachedPOs.length > 0) {
+        setPurchaseOrders(cachedPOs);
+        purchaseOrdersRef.current = cachedPOs;
+      }
+      const cachedCOs = loadData<CustomerOrder[]>(
+        getShopKey(STORAGE_KEYS.customerOrders, shopId),
+        [],
+      );
+      if (cachedCOs.length > 0) {
+        setCustomerOrders(cachedCOs);
+        customerOrdersRef.current = cachedCOs;
+      }
+      const cachedVRH = loadData<VendorRateHistory[]>(
+        getShopKey(STORAGE_KEYS.vendorRateHistory, shopId),
+        [],
+      );
+      if (cachedVRH.length > 0) {
+        setVendorRateHistory(cachedVRH);
+        vendorRateHistoryRef.current = cachedVRH;
+      }
+    }
+
+    // If cache is fresh enough (and not a shop switch), skip Phase 1 skeleton
+    if (isCacheFresh) {
+      setIsPhase1Loading(false);
+      setIsLoading(false);
+    } else {
+      setIsPhase1Loading(true);
+      setIsLoading(true);
+    }
+
+    console.log(
+      `[StoreContext] === Loading shop from ICP backend: ${shopId} (cacheFresh=${isCacheFresh}, shopSwitch=${isShopSwitch}) ===`,
+    );
+
+    // ── Slow network detection: show notice if Phase 1 takes >5s ────────────
+    const slowNetworkTimer = setTimeout(() => {
+      // Only warn if we're still loading
+      toast("Slow connection, please wait...", {
+        id: "slow-network-warning",
+        duration: 8000,
+        icon: "🌐",
+      });
+    }, 5000);
+
+    // ── PHASE 1: Essential collections ─────────────────────────────────────
+    // products, categories, batches, shopUnits, transactions, users
+    // Uses Promise.allSettled so one failure doesn't block the rest.
+    setIsPhase1Loading(true);
+    setPhase1HasPartialError(false);
+    Promise.allSettled([
       actor.getProducts(shopId),
       actor.getCategories(shopId),
       actor.getBatches(shopId),
       actor.getTransactions(shopId),
-      actor.getCustomers(shopId),
-      actor.getInvoices(shopId),
       actor.getUsers(shopId),
       actor.getShopUnits(shopId),
-      actor.getPayments(shopId),
-      actor.getReturns(shopId),
     ])
       .then(
         ([
-          productsRaw,
-          categoriesRaw,
-          batchesRaw,
-          transactionsRaw,
-          customersRaw,
-          invoicesRaw,
-          usersRaw,
-          shopUnitsRaw,
-          paymentsRaw,
-          returnsRaw,
+          productsRes,
+          categoriesRes,
+          batchesRes,
+          transactionsRes,
+          usersRes,
+          shopUnitsRes,
         ]) => {
-          const loadedProducts = productsRaw
-            ? (JSON.parse(productsRaw) as Product[])
-            : [];
-          console.log(
-            "[StoreContext] products loaded:",
-            loadedProducts.length,
-            loadedProducts,
-          );
-          setProducts(loadedProducts);
-          if (loadedProducts.length > 0)
-            saveData(STORAGE_KEYS.products, loadedProducts);
+          clearTimeout(slowNetworkTimer);
+          // Dismiss slow network toast if it was shown
+          toast.dismiss("slow-network-warning");
 
-          const loadedCategories = categoriesRaw
-            ? (JSON.parse(categoriesRaw) as Category[])
-            : [];
-          setCategories(loadedCategories);
+          let anyFailed = false;
 
-          const loadedBatches = batchesRaw
-            ? (JSON.parse(batchesRaw) as StockBatch[])
-            : [];
-          setBatches(loadedBatches);
-          if (loadedBatches.length > 0)
-            saveData(STORAGE_KEYS.batches, loadedBatches);
+          if (productsRes.status === "fulfilled" && productsRes.value) {
+            const loaded = JSON.parse(productsRes.value) as Product[];
+            setProducts(loaded);
+            if (loaded.length > 0)
+              saveData(getShopKey(STORAGE_KEYS.products, shopId), loaded);
+          } else if (productsRes.status === "rejected") {
+            anyFailed = true;
+            console.warn(
+              "[StoreContext] Phase1: products failed",
+              productsRes.reason,
+            );
+          }
 
-          const loadedTransactions = transactionsRaw
-            ? (JSON.parse(transactionsRaw) as StockTransaction[])
-            : [];
-          setTransactions(loadedTransactions);
+          if (categoriesRes.status === "fulfilled" && categoriesRes.value) {
+            setCategories(JSON.parse(categoriesRes.value) as Category[]);
+          } else if (categoriesRes.status === "rejected") {
+            anyFailed = true;
+          }
 
-          const loadedCustomers = customersRaw
-            ? (JSON.parse(customersRaw) as Customer[])
-            : [];
-          setCustomers(loadedCustomers);
-          if (loadedCustomers.length > 0)
-            saveData(STORAGE_KEYS.customers, loadedCustomers);
+          if (batchesRes.status === "fulfilled" && batchesRes.value) {
+            const loaded = JSON.parse(batchesRes.value) as StockBatch[];
+            setBatches(loaded);
+            batchesRef.current = loaded;
+            if (loaded.length > 0)
+              saveData(getShopKey(STORAGE_KEYS.batches, shopId), loaded);
+          } else if (batchesRes.status === "rejected") {
+            anyFailed = true;
+            console.warn(
+              "[StoreContext] Phase1: batches failed",
+              batchesRes.reason,
+            );
+          }
 
-          const loadedInvoices = invoicesRaw
-            ? (JSON.parse(invoicesRaw) as Invoice[])
-            : [];
-          setInvoices(loadedInvoices);
-          invoicesRef.current = loadedInvoices;
-          if (loadedInvoices.length > 0)
-            saveData(STORAGE_KEYS.sales, loadedInvoices);
+          if (transactionsRes.status === "fulfilled" && transactionsRes.value) {
+            setTransactions(
+              JSON.parse(transactionsRes.value) as StockTransaction[],
+            );
+          } else if (transactionsRes.status === "rejected") {
+            anyFailed = true;
+          }
 
-          const loadedUsers = usersRaw
-            ? (JSON.parse(usersRaw) as AppUser[])
-            : [];
-          setUsers(loadedUsers);
-          // Sync loaded users to AuthContext so role resolution works
-          if (syncUsersToAuth) syncUsersToAuth(loadedUsers);
+          if (usersRes.status === "fulfilled" && usersRes.value) {
+            const loaded = JSON.parse(usersRes.value) as AppUser[];
+            setUsers(loaded);
+            if (syncUsersToAuth) syncUsersToAuth(loaded);
+          } else if (usersRes.status === "rejected") {
+            anyFailed = true;
+          }
 
-          setShopUnits(
-            shopUnitsRaw ? (JSON.parse(shopUnitsRaw) as ShopUnit[]) : [],
-          );
+          if (shopUnitsRes.status === "fulfilled" && shopUnitsRes.value) {
+            setShopUnits(JSON.parse(shopUnitsRes.value) as ShopUnit[]);
+          } else if (shopUnitsRes.status === "rejected") {
+            anyFailed = true;
+          }
 
-          const loadedPayments = paymentsRaw
-            ? (JSON.parse(paymentsRaw) as PaymentRecord[])
-            : [];
-          setPayments(loadedPayments);
-          if (loadedPayments.length > 0)
-            saveData(STORAGE_KEYS.payments, loadedPayments);
+          if (anyFailed) setPhase1HasPartialError(true);
 
-          const loadedReturns = returnsRaw
-            ? (JSON.parse(returnsRaw) as ReturnEntry[])
-            : [];
-          setReturns(loadedReturns);
-          returnsRef.current = loadedReturns;
-          if (loadedReturns.length > 0)
-            saveData(STORAGE_KEYS.returns, loadedReturns);
+          // Phase 1 complete — mark loading done so dashboard renders
+          setIsPhase1Loading(false);
+          setIsLoading(false);
 
-          // Load low price alert logs
-          (actorRef.current as any)
-            ?.getLowPriceAlertLogs?.(shopId)
-            .then((raw: string | null) => {
-              const logs = raw ? (JSON.parse(raw) as LowPriceAlertLog[]) : [];
-              setLowPriceAlertLogs(logs);
-              lowPriceAlertLogsRef.current = logs;
-            })
-            .catch(() => {});
+          // ── PHASE 2: Heavy collections — silent background fetch ────────────
+          // Never blocks user interaction. Runs after Phase 1 renders.
+          setIsPhase2Loading(true);
+          setPhase2HasPartialError(false);
 
-          // Load audit logs
-          (actorRef.current as any)
-            ?.getAuditLogs?.(shopId)
-            .then((raw: string | null) => {
-              const logs = raw ? (JSON.parse(raw) as AuditLog[]) : [];
-              setAuditLogs(logs);
-              auditLogsRef.current = logs;
-            })
-            .catch(() => {});
+          // Track which Phase 2 items failed
+          let phase2AnyFailed = false;
 
-          // Load reminder logs
-          (actorRef.current as any)
-            ?.getReminderLogs?.(shopId)
-            .then((raw: string | null) => {
-              const logs = raw ? (JSON.parse(raw) as ReminderLog[]) : [];
-              setReminderLogs(logs);
-              reminderLogsRef.current = logs;
-            })
-            .catch(() => {});
+          const phase2 = [
+            actor
+              .getInvoices(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const loaded = JSON.parse(raw) as Invoice[];
+                setInvoices(loaded);
+                invoicesRef.current = loaded;
+                if (loaded.length > 0)
+                  saveData(getShopKey(STORAGE_KEYS.sales, shopId), loaded);
+              })
+              .catch((e) => {
+                phase2AnyFailed = true;
+                console.warn("[StoreContext] Phase2: invoices failed", e);
+              }),
 
-          // Load reminder requests
-          (actorRef.current as any)
-            ?.getReminderRequests?.(shopId)
-            .then((raw: string | null) => {
-              const reqs = raw ? (JSON.parse(raw) as ReminderRequest[]) : [];
-              setReminderRequests(reqs);
-              reminderRequestsRef.current = reqs;
-            })
-            .catch(() => {});
+            actor
+              .getCustomers(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const loaded = JSON.parse(raw) as Customer[];
+                setCustomers(loaded);
+                if (loaded.length > 0)
+                  saveData(getShopKey(STORAGE_KEYS.customers, shopId), loaded);
+              })
+              .catch((e) => {
+                phase2AnyFailed = true;
+                console.warn("[StoreContext] Phase2: customers failed", e);
+              }),
 
-          // Load vendors
-          (actorRef.current as any)
-            ?.getVendors?.(shopId)
-            .then((raw: string | null) => {
-              const data = raw ? (JSON.parse(raw) as Vendor[]) : [];
-              setVendors(data);
-              vendorsRef.current = data;
-              if (data.length > 0) saveData(STORAGE_KEYS.vendors, data);
-            })
-            .catch(() => {});
+            actor
+              .getPayments(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const loaded = JSON.parse(raw) as PaymentRecord[];
+                setPayments(loaded);
+                if (loaded.length > 0)
+                  saveData(getShopKey(STORAGE_KEYS.payments, shopId), loaded);
+              })
+              .catch((e) => {
+                phase2AnyFailed = true;
+                console.warn("[StoreContext] Phase2: payments failed", e);
+              }),
 
-          // Load purchase orders
-          (actorRef.current as any)
-            ?.getPurchaseOrders?.(shopId)
-            .then((raw: string | null) => {
-              const data = raw ? (JSON.parse(raw) as PurchaseOrder[]) : [];
-              setPurchaseOrders(data);
-              purchaseOrdersRef.current = data;
-              if (data.length > 0) saveData(STORAGE_KEYS.purchaseOrders, data);
-            })
-            .catch(() => {});
+            actor
+              .getReturns(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const loaded = JSON.parse(raw) as ReturnEntry[];
+                setReturns(loaded);
+                returnsRef.current = loaded;
+                if (loaded.length > 0)
+                  saveData(getShopKey(STORAGE_KEYS.returns, shopId), loaded);
+              })
+              .catch((e) => {
+                phase2AnyFailed = true;
+                console.warn("[StoreContext] Phase2: returns failed", e);
+              }),
 
-          // Load customer orders
-          (actorRef.current as any)
-            ?.getCustomerOrders?.(shopId)
-            .then((raw: string | null) => {
-              const data = raw ? (JSON.parse(raw) as CustomerOrder[]) : [];
-              setCustomerOrders(data);
-              customerOrdersRef.current = data;
-              if (data.length > 0) saveData(STORAGE_KEYS.customerOrders, data);
-            })
-            .catch(() => {});
+            // Vendors
+            actor
+              .getVendors(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const data = JSON.parse(raw) as Vendor[];
+                setVendors(data);
+                vendorsRef.current = data;
+                if (data.length > 0)
+                  saveData(getShopKey(STORAGE_KEYS.vendors, shopId), data);
+              })
+              .catch((e) => {
+                phase2AnyFailed = true;
+                console.warn("[StoreContext] Phase2: vendors failed", e);
+              }),
 
-          // Load vendor rate history
-          (actorRef.current as any)
-            ?.getVendorRateHistory?.(shopId)
-            .then((raw: string | null) => {
-              const data = raw ? (JSON.parse(raw) as VendorRateHistory[]) : [];
-              setVendorRateHistory(data);
-              vendorRateHistoryRef.current = data;
-              if (data.length > 0)
-                saveData(STORAGE_KEYS.vendorRateHistory, data);
-            })
-            .catch(() => {});
+            // Purchase orders
+            actor
+              .getPurchaseOrders(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const data = JSON.parse(raw) as PurchaseOrder[];
+                setPurchaseOrders(data);
+                purchaseOrdersRef.current = data;
+                if (data.length > 0)
+                  saveData(
+                    getShopKey(STORAGE_KEYS.purchaseOrders, shopId),
+                    data,
+                  );
+              })
+              .catch(() => {}),
+
+            // Customer orders
+            actor
+              .getCustomerOrders(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const data = JSON.parse(raw) as CustomerOrder[];
+                setCustomerOrders(data);
+                customerOrdersRef.current = data;
+                if (data.length > 0)
+                  saveData(
+                    getShopKey(STORAGE_KEYS.customerOrders, shopId),
+                    data,
+                  );
+              })
+              .catch(() => {}),
+
+            // Vendor rate history
+            actor
+              .getVendorRateHistory(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const data = JSON.parse(raw) as VendorRateHistory[];
+                setVendorRateHistory(data);
+                vendorRateHistoryRef.current = data;
+                if (data.length > 0)
+                  saveData(
+                    getShopKey(STORAGE_KEYS.vendorRateHistory, shopId),
+                    data,
+                  );
+              })
+              .catch(() => {}),
+
+            // Low price alert logs
+            actor
+              .getLowPriceAlertLogs(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const logs = JSON.parse(raw) as LowPriceAlertLog[];
+                setLowPriceAlertLogs(logs);
+                lowPriceAlertLogsRef.current = logs;
+              })
+              .catch(() => {}),
+
+            // Audit logs
+            actor
+              .getAuditLogs(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const logs = JSON.parse(raw) as AuditLog[];
+                setAuditLogs(logs);
+                auditLogsRef.current = logs;
+              })
+              .catch(() => {}),
+
+            // Reminder logs
+            actor
+              .getReminderLogs(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const logs = JSON.parse(raw) as ReminderLog[];
+                setReminderLogs(logs);
+                reminderLogsRef.current = logs;
+              })
+              .catch(() => {}),
+
+            // Reminder requests
+            actor
+              .getReminderRequests(shopId)
+              .then((raw) => {
+                if (!raw) return;
+                const reqs = JSON.parse(raw) as ReminderRequest[];
+                setReminderRequests(reqs);
+                reminderRequestsRef.current = reqs;
+              })
+              .catch(() => {}),
+          ];
+
+          // After all Phase 2 complete — update cache timestamp and clear loading flag
+          Promise.allSettled(phase2).then(() => {
+            localStorage.setItem(cacheTimestampKey, String(Date.now()));
+            setIsPhase2Loading(false);
+            if (phase2AnyFailed) setPhase2HasPartialError(true);
+          });
         },
       )
-      .catch(console.error)
-      .finally(() => setIsLoading(false));
+      .catch(() => {
+        // Phase 1 itself threw (shouldn't happen with allSettled but safety net)
+        clearTimeout(slowNetworkTimer);
+        toast.dismiss("slow-network-warning");
+        setIsPhase1Loading(false);
+        setIsLoading(false);
+        setPhase1HasPartialError(true);
+      });
+
+    // Cleanup: cancel slow-network timer if effect re-runs before it fires
+    return () => {
+      clearTimeout(slowNetworkTimer);
+    };
   }, [shopId, actor, syncUsersToAuth]);
 
   // ── Draft / Snapshot helper (stable via ref pattern) ──────────────────────────────────────────
@@ -1197,7 +1426,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.products, updated);
+      saveData(getShopKey(STORAGE_KEYS.products, shopIdRef.current), updated);
       console.log(
         `[StoreContext] products after add: ${updated.length} items`,
         updated,
@@ -1230,7 +1459,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.products, updated);
+      saveData(getShopKey(STORAGE_KEYS.products, shopIdRef.current), updated);
       return updated;
     });
     toast.success("Data saved ✓", { duration: 2500 });
@@ -1258,7 +1487,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.products, updated);
+      saveData(getShopKey(STORAGE_KEYS.products, shopIdRef.current), updated);
       return updated;
     });
     toast.success("Data saved ✓", { duration: 2500 });
@@ -1410,7 +1639,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           JSON.stringify(updated),
         );
         withSyncRef.current(icpPromise);
-        saveData(STORAGE_KEYS.batches, updated);
+        saveData(getShopKey(STORAGE_KEYS.batches, shopIdRef.current), updated);
         return updated;
       });
       setTransactions((prev) => {
@@ -1507,7 +1736,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.customers, updated);
+      saveData(getShopKey(STORAGE_KEYS.customers, shopIdRef.current), updated);
       return updated;
     });
     toast.success("Data saved ✓", { duration: 2500 });
@@ -1520,7 +1749,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.customers, updated);
+      saveData(getShopKey(STORAGE_KEYS.customers, shopIdRef.current), updated);
       return updated;
     });
     toast.success("Data saved ✓", { duration: 2500 });
@@ -1533,7 +1762,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.customers, updated);
+      saveData(getShopKey(STORAGE_KEYS.customers, shopIdRef.current), updated);
       return updated;
     });
     toast.success("Data saved ✓", { duration: 2500 });
@@ -1664,7 +1893,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           shopIdRef.current,
           JSON.stringify(updatedBatches),
         );
-        saveData(STORAGE_KEYS.batches, updatedBatches);
+        saveData(
+          getShopKey(STORAGE_KEYS.batches, shopIdRef.current),
+          updatedBatches,
+        );
         setBatches(updatedBatches);
       }
 
@@ -1691,7 +1923,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updatedInvoices),
       );
-      saveData(STORAGE_KEYS.sales, updatedInvoices);
+      saveData(
+        getShopKey(STORAGE_KEYS.sales, shopIdRef.current),
+        updatedInvoices,
+      );
       setInvoices(updatedInvoices);
       toast.success("Data saved ✓", { duration: 2500 });
 
@@ -1855,7 +2090,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           shopIdRef.current,
           JSON.stringify(updated),
         );
-        saveData(STORAGE_KEYS.payments, updated);
+        saveData(getShopKey(STORAGE_KEYS.payments, shopIdRef.current), updated);
         return updated;
       });
 
@@ -1910,7 +2145,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           JSON.stringify(updated),
         );
         invoicesRef.current = updated;
-        saveData(STORAGE_KEYS.sales, updated);
+        saveData(getShopKey(STORAGE_KEYS.sales, shopIdRef.current), updated);
         return updated;
       });
 
@@ -1925,7 +2160,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             shopIdRef.current,
             JSON.stringify(updated),
           );
-          saveData(STORAGE_KEYS.customers, updated);
+          saveData(
+            getShopKey(STORAGE_KEYS.customers, shopIdRef.current),
+            updated,
+          );
           return updated;
         });
       }
@@ -2299,7 +2537,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           shopIdRef.current,
           JSON.stringify(updated),
         );
-        saveData(STORAGE_KEYS.batches, updated);
+        saveData(getShopKey(STORAGE_KEYS.batches, shopIdRef.current), updated);
         batchesRef.current = updated;
         return updated;
       });
@@ -2312,7 +2550,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updatedReturns),
       );
-      saveData(STORAGE_KEYS.returns, updatedReturns);
+      saveData(
+        getShopKey(STORAGE_KEYS.returns, shopIdRef.current),
+        updatedReturns,
+      );
       toast.success("Data saved ✓", { duration: 2500 });
 
       return true;
@@ -2592,7 +2833,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.vendors, updated);
+      saveData(getShopKey(STORAGE_KEYS.vendors, shopIdRef.current), updated);
       toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
@@ -2609,7 +2850,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.vendors, updated);
+      saveData(getShopKey(STORAGE_KEYS.vendors, shopIdRef.current), updated);
       toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
@@ -2623,7 +2864,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       shopIdRef.current,
       JSON.stringify(updated),
     );
-    saveData(STORAGE_KEYS.vendors, updated);
+    saveData(getShopKey(STORAGE_KEYS.vendors, shopIdRef.current), updated);
     toast.success("Data saved ✓", { duration: 2500 });
   }, []);
 
@@ -2645,7 +2886,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.purchaseOrders, updated);
+      saveData(
+        getShopKey(STORAGE_KEYS.purchaseOrders, shopIdRef.current),
+        updated,
+      );
       toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
@@ -2662,7 +2906,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.purchaseOrders, updated);
+      saveData(
+        getShopKey(STORAGE_KEYS.purchaseOrders, shopIdRef.current),
+        updated,
+      );
       toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
@@ -2685,7 +2932,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.purchaseOrders, updated);
+      saveData(
+        getShopKey(STORAGE_KEYS.purchaseOrders, shopIdRef.current),
+        updated,
+      );
       // Add stock via addStockIn
       if (receivedQty > 0) {
         addStockIn(
@@ -2732,7 +2982,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.customerOrders, updated);
+      saveData(
+        getShopKey(STORAGE_KEYS.customerOrders, shopIdRef.current),
+        updated,
+      );
       toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
@@ -2751,7 +3004,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.customerOrders, updated);
+      saveData(
+        getShopKey(STORAGE_KEYS.customerOrders, shopIdRef.current),
+        updated,
+      );
       toast.success("Data saved ✓", { duration: 2500 });
       // Convert to invoice
       const customer = customers.find((c) => c.id === co.customerId);
@@ -2798,7 +3054,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.customerOrders, updated);
+      saveData(
+        getShopKey(STORAGE_KEYS.customerOrders, shopIdRef.current),
+        updated,
+      );
       toast.success("Data saved ✓", { duration: 2500 });
     },
     [],
@@ -2834,7 +3093,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         shopIdRef.current,
         JSON.stringify(updated),
       );
-      saveData(STORAGE_KEYS.vendorRateHistory, updated);
+      saveData(
+        getShopKey(STORAGE_KEYS.vendorRateHistory, shopIdRef.current),
+        updated,
+      );
     },
     [],
   );
@@ -3522,7 +3784,67 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { sent: targets.length, customers: customersNotified };
   }, [currentShop, currentUser]);
 
+  // ── Reset Shop Data (Danger Zone) ───────────────────────────────────────────
+  const resetShopData = useCallback(async (): Promise<void> => {
+    const sid = shopIdRef.current;
+
+    // 1. Call backend to clear shop data (fire-and-forget; safe if method absent)
+    try {
+      await (actorRef.current as any)?.clearShopData?.(sid);
+    } catch (_) {
+      /* backend method may not exist yet — proceed with local reset */
+    }
+
+    // 2. Clear localStorage for this shop
+    clearShopScopedData(sid);
+
+    // 3. Reset ALL in-memory state arrays to empty
+    setProducts([]);
+    productsRef.current = [];
+    setCategories([]);
+    setBatches([]);
+    batchesRef.current = [];
+    setTransactions([]);
+    setCustomers([]);
+    setInvoices([]);
+    invoicesRef.current = [];
+    setUsers([]);
+    setShopUnits([]);
+    setPayments([]);
+    setReturns([]);
+    returnsRef.current = [];
+    setVendors([]);
+    vendorsRef.current = [];
+    setPurchaseOrders([]);
+    purchaseOrdersRef.current = [];
+    setCustomerOrders([]);
+    customerOrdersRef.current = [];
+    setVendorRateHistory([]);
+    vendorRateHistoryRef.current = [];
+    setLowPriceAlertLogs([]);
+    lowPriceAlertLogsRef.current = [];
+    setAuditLogs([]);
+    auditLogsRef.current = [];
+    setReminderLogs([]);
+    reminderLogsRef.current = [];
+    setReminderRequests([]);
+    reminderRequestsRef.current = [];
+
+    // 4. Reset draft sales for this shop
+    setDraftSales([]);
+    draftSalesRef.current = [];
+    saveDrafts([], sid);
+
+    // 5. Reset transaction counter for diamond rewards
+    txCounterRef.current = 0;
+    saveData(`transactionCounter_${sid}`, 0);
+
+    // 6. Clear cache timestamp so next load fetches fresh
+    localStorage.removeItem(`saveshop_cache_ts_${sid}`);
+  }, []);
+
   const value: StoreContextValue = {
+    resetShopData,
     categories,
     products,
     batches,
@@ -3534,6 +3856,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     shopId,
     payments,
     isLoading,
+    isPhase1Loading,
+    isPhase2Loading,
+    phase1HasPartialError,
+    phase2HasPartialError,
     refreshCounter,
     triggerRefresh,
     isSyncing,

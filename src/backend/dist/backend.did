@@ -1,8 +1,28 @@
+type UserStatsResult = 
+ record {
+   isPaid: bool;
+   lastActivity: int;
+   loginCount: nat;
+   salesCount: nat;
+   shopId: text;
+   shopName: text;
+   totalSalesAmount: float64;
+   userId: text;
+ };
 type UserProfile = record {name: text;};
 type UpdateShopResult = 
  record {
    error: opt text;
    success: bool;
+ };
+type ShopStatsResult = 
+ record {
+   lastActivity: int;
+   ownerMobile: text;
+   sessionCount: nat;
+   shopId: text;
+   shopName: text;
+   totalSalesAmount: float64;
  };
 type ShopStats = 
  record {
@@ -40,17 +60,38 @@ type BackupSnapshotMeta =
    tag: text;
    timestamp: int;
  };
+type AdminSettings = 
+ record {
+   createdAt: int;
+   superAdminMobile: text;
+   updatedAt: int;
+ };
 type AddShopResult = 
  record {
    error: opt text;
    shopId: text;
    success: bool;
  };
+type ActivityRecord = 
+ record {
+   activityType: text;
+   id: text;
+   metadata: text;
+   shopId: text;
+   timestamp: int;
+   userId: text;
+ };
 service : {
   addShop: (ownerMobile: text, shopName: text, address: text, city: text) ->
    (AddShopResult);
+  clearShopData: (shopId: text) -> ();
   deleteBackupSnapshot: (shopId: text, snapshotId: text) -> ();
   deleteShop: (shopId: text) -> (DeleteShopResult);
+  getActivities: (shopIdFilter: opt text, startTs: opt int, endTs:
+   opt int) -> (vec ActivityRecord) query;
+  getAdminSettings: () -> (AdminSettings) query;
+  getAllUsersWithStats: (startTs: opt int, endTs: opt int) ->
+   (vec UserStatsResult) query;
   getAuditLogs: (shopId: text) -> (text) query;
   getBackupSnapshotData: (shopId: text, snapshotId: text) -> (opt text) query;
   getBackupSnapshots: (shopId: text) -> (vec BackupSnapshotMeta) query;
@@ -74,6 +115,8 @@ service : {
   getReturns: (shopId: text) -> (text) query;
   getSettings: (shopId: text) -> (text) query;
   getShop: (shopId: text) -> (opt ShopMeta) query;
+  getShopPerformanceStats: (startTs: opt int, endTs: opt int) ->
+   (vec ShopStatsResult) query;
   getShopUnits: (shopId: text) -> (text) query;
   getSyncLogs: (shopId: text) -> (text) query;
   getTransactions: (shopId: text) -> (text) query;
@@ -83,6 +126,10 @@ service : {
   getVendors: (shopId: text) -> (text) query;
   listShopsForOwner: (mobile: text) -> (vec ShopMeta) query;
   pruneOldBackups: (shopId: text, retainDays: nat) -> (nat);
+  purgeOldActivities: (beforeTs: int) -> (nat);
+  recordActivity: (shopId: text, userId: text, activityType: text, metadata:
+   text) -> ();
+  saveAdminSettings: (settings: AdminSettings) -> (bool);
   saveAuditLogs: (shopId: text, data: text) -> ();
   saveBackupSnapshot: (shopId: text, snapshotId: text, tag: text, data:
    text) -> ();
@@ -110,6 +157,7 @@ service : {
   saveUsers: (shopId: text, data: text) -> ();
   saveVendorRateHistory: (shopId: text, data: text) -> ();
   saveVendors: (shopId: text, data: text) -> ();
+  toggleUserPaidStatus: (userId: text, shopId: text, isPaid: bool) -> (bool);
   updateShop: (shopId: text, name: text, address: text, city: text) ->
    (UpdateShopResult);
 }

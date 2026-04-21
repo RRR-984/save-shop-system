@@ -20,9 +20,6 @@ export interface BackupSnapshotMeta {
     tag: string;
     timestamp: bigint;
 }
-export interface DeleteShopResult {
-    success: boolean;
-}
 export interface ShopMeta {
     id: string;
     isDeleted: boolean;
@@ -32,8 +29,7 @@ export interface ShopMeta {
     address: string;
     ownerMobile: string;
 }
-export interface UpdateShopResult {
-    error?: string;
+export interface DeleteShopResult {
     success: boolean;
 }
 export interface ShopStats {
@@ -45,18 +41,57 @@ export interface ShopStats {
     products: bigint;
     customers: bigint;
 }
+export interface UpdateShopResult {
+    error?: string;
+    success: boolean;
+}
+export interface AdminSettings {
+    createdAt: bigint;
+    superAdminMobile: string;
+    updatedAt: bigint;
+}
 export interface AddShopResult {
     shopId: string;
     error?: string;
     success: boolean;
 }
+export interface ActivityRecord {
+    id: string;
+    activityType: string;
+    shopId: string;
+    metadata: string;
+    userId: string;
+    timestamp: bigint;
+}
+export interface ShopStatsResult {
+    shopId: string;
+    totalSalesAmount: number;
+    lastActivity: bigint;
+    shopName: string;
+    sessionCount: bigint;
+    ownerMobile: string;
+}
 export interface UserProfile {
     name: string;
 }
+export interface UserStatsResult {
+    shopId: string;
+    totalSalesAmount: number;
+    userId: string;
+    lastActivity: bigint;
+    isPaid: boolean;
+    loginCount: bigint;
+    shopName: string;
+    salesCount: bigint;
+}
 export interface backendInterface {
     addShop(ownerMobile: string, shopName: string, address: string, city: string): Promise<AddShopResult>;
+    clearShopData(shopId: string): Promise<void>;
     deleteBackupSnapshot(shopId: string, snapshotId: string): Promise<void>;
     deleteShop(shopId: string): Promise<DeleteShopResult>;
+    getActivities(shopIdFilter: string | null, startTs: bigint | null, endTs: bigint | null): Promise<Array<ActivityRecord>>;
+    getAdminSettings(): Promise<AdminSettings>;
+    getAllUsersWithStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<UserStatsResult>>;
     getAuditLogs(shopId: string): Promise<string>;
     getBackupSnapshotData(shopId: string, snapshotId: string): Promise<string | null>;
     getBackupSnapshots(shopId: string): Promise<Array<BackupSnapshotMeta>>;
@@ -80,6 +115,7 @@ export interface backendInterface {
     getReturns(shopId: string): Promise<string>;
     getSettings(shopId: string): Promise<string>;
     getShop(shopId: string): Promise<ShopMeta | null>;
+    getShopPerformanceStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<ShopStatsResult>>;
     getShopUnits(shopId: string): Promise<string>;
     getSyncLogs(shopId: string): Promise<string>;
     getTransactions(shopId: string): Promise<string>;
@@ -89,6 +125,9 @@ export interface backendInterface {
     getVendors(shopId: string): Promise<string>;
     listShopsForOwner(mobile: string): Promise<Array<ShopMeta>>;
     pruneOldBackups(shopId: string, retainDays: bigint): Promise<bigint>;
+    purgeOldActivities(beforeTs: bigint): Promise<bigint>;
+    recordActivity(shopId: string, userId: string, activityType: string, metadata: string): Promise<void>;
+    saveAdminSettings(settings: AdminSettings): Promise<boolean>;
     saveAuditLogs(shopId: string, data: string): Promise<void>;
     saveBackupSnapshot(shopId: string, snapshotId: string, tag: string, data: string): Promise<void>;
     saveBatches(shopId: string, data: string): Promise<void>;
@@ -115,5 +154,6 @@ export interface backendInterface {
     saveUsers(shopId: string, data: string): Promise<void>;
     saveVendorRateHistory(shopId: string, data: string): Promise<void>;
     saveVendors(shopId: string, data: string): Promise<void>;
+    toggleUserPaidStatus(userId: string, shopId: string, isPaid: boolean): Promise<boolean>;
     updateShop(shopId: string, name: string, address: string, city: string): Promise<UpdateShopResult>;
 }

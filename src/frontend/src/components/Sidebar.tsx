@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
   Smartphone,
@@ -180,6 +181,12 @@ const NAV_ITEMS: NavItem[] = [
   },
   { id: "feedback-page", label: "Feedback", icon: MessageCircle },
   { id: "referral-page", label: "Refer & Earn", icon: Gift },
+  {
+    id: "super-admin",
+    label: "Super Admin",
+    icon: ShieldCheck,
+    roles: ["owner"],
+  },
 ];
 
 // ─── Auto Mode page sets ──────────────────────────────────────────────────────

@@ -10,10 +10,23 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface ActivityRecord {
+  'id' : string,
+  'activityType' : string,
+  'shopId' : string,
+  'metadata' : string,
+  'userId' : string,
+  'timestamp' : bigint,
+}
 export interface AddShopResult {
   'shopId' : string,
   'error' : [] | [string],
   'success' : boolean,
+}
+export interface AdminSettings {
+  'createdAt' : bigint,
+  'superAdminMobile' : string,
+  'updatedAt' : bigint,
 }
 export interface BackupSnapshotMeta {
   'id' : string,
@@ -47,15 +60,43 @@ export interface ShopStats {
   'products' : bigint,
   'customers' : bigint,
 }
+export interface ShopStatsResult {
+  'shopId' : string,
+  'totalSalesAmount' : number,
+  'lastActivity' : bigint,
+  'shopName' : string,
+  'sessionCount' : bigint,
+  'ownerMobile' : string,
+}
 export interface UpdateShopResult {
   'error' : [] | [string],
   'success' : boolean,
 }
 export interface UserProfile { 'name' : string }
+export interface UserStatsResult {
+  'shopId' : string,
+  'totalSalesAmount' : number,
+  'userId' : string,
+  'lastActivity' : bigint,
+  'isPaid' : boolean,
+  'loginCount' : bigint,
+  'shopName' : string,
+  'salesCount' : bigint,
+}
 export interface _SERVICE {
   'addShop' : ActorMethod<[string, string, string, string], AddShopResult>,
+  'clearShopData' : ActorMethod<[string], undefined>,
   'deleteBackupSnapshot' : ActorMethod<[string, string], undefined>,
   'deleteShop' : ActorMethod<[string], DeleteShopResult>,
+  'getActivities' : ActorMethod<
+    [[] | [string], [] | [bigint], [] | [bigint]],
+    Array<ActivityRecord>
+  >,
+  'getAdminSettings' : ActorMethod<[], AdminSettings>,
+  'getAllUsersWithStats' : ActorMethod<
+    [[] | [bigint], [] | [bigint]],
+    Array<UserStatsResult>
+  >,
   'getAuditLogs' : ActorMethod<[string], string>,
   'getBackupSnapshotData' : ActorMethod<[string, string], [] | [string]>,
   'getBackupSnapshots' : ActorMethod<[string], Array<BackupSnapshotMeta>>,
@@ -79,6 +120,10 @@ export interface _SERVICE {
   'getReturns' : ActorMethod<[string], string>,
   'getSettings' : ActorMethod<[string], string>,
   'getShop' : ActorMethod<[string], [] | [ShopMeta]>,
+  'getShopPerformanceStats' : ActorMethod<
+    [[] | [bigint], [] | [bigint]],
+    Array<ShopStatsResult>
+  >,
   'getShopUnits' : ActorMethod<[string], string>,
   'getSyncLogs' : ActorMethod<[string], string>,
   'getTransactions' : ActorMethod<[string], string>,
@@ -88,6 +133,9 @@ export interface _SERVICE {
   'getVendors' : ActorMethod<[string], string>,
   'listShopsForOwner' : ActorMethod<[string], Array<ShopMeta>>,
   'pruneOldBackups' : ActorMethod<[string, bigint], bigint>,
+  'purgeOldActivities' : ActorMethod<[bigint], bigint>,
+  'recordActivity' : ActorMethod<[string, string, string, string], undefined>,
+  'saveAdminSettings' : ActorMethod<[AdminSettings], boolean>,
   'saveAuditLogs' : ActorMethod<[string, string], undefined>,
   'saveBackupSnapshot' : ActorMethod<
     [string, string, string, string],
@@ -117,6 +165,7 @@ export interface _SERVICE {
   'saveUsers' : ActorMethod<[string, string], undefined>,
   'saveVendorRateHistory' : ActorMethod<[string, string], undefined>,
   'saveVendors' : ActorMethod<[string, string], undefined>,
+  'toggleUserPaidStatus' : ActorMethod<[string, string, boolean], boolean>,
   'updateShop' : ActorMethod<
     [string, string, string, string],
     UpdateShopResult

@@ -1,4 +1,15 @@
 // Version: 1.0.0
+type ActivityRecord__625445840 =
+  {
+    activityType : Text;
+    id : Text;
+    metadata : Text;
+    shopId : Text;
+    timestamp : Int;
+    userId : Text
+  };
+type AdminSettings__819383327 =
+  {createdAt : Int; superAdminMobile : Text; updatedAt : Int};
 type BackupEntry__821971064 =
   {data : Text; id : Text; tag : Text; timestamp : Int};
 type Data__791452850<K, V> =
@@ -33,11 +44,19 @@ type ShopMeta__216240044 =
   };
 type UserProfile__491224006 = {name : Text};
 actor {
+  stable activityStore :
+    {
+      var root : Node__46230540<Text, ActivityRecord__625445840>;
+      var size : Nat__490723111
+    };
+  stable adminSettingsBox : {var value : ?AdminSettings__819383327};
   stable backupSnapshots :
     {
       var root : Node__46230540<Text, List__415060402<BackupEntry__821971064>>;
       var size : Nat__490723111
     };
+  stable paidUsersStore :
+    {var root : Node__46230540<Text, Bool>; var size : Nat__490723111};
   stable shopData :
     {
       var root : Node__46230540<Text, Map__605269027<Text, Text>>;

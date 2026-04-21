@@ -1,29 +1,25 @@
 {
-  "overview": "Save Shop System is a modern, mobile-first SaaS platform for Indian shop management with multi-shop support, FIFO inventory, smart billing, customer tracking, staff management, and now full offline-first sync.",
+  "overview": "Save Shop System is a mobile-first SaaS platform for Indian shop management with batch-wise FIFO inventory, multi-shop support, smart billing, PRO customer tracking, and now a Super Admin Dashboard for real-time platform monitoring.",
   "features": [
-    "Offline-first mode with auto sync",
-    "Real-time network status indicator",
-    "Background sync queue (FIFO)",
-    "Cloud backup with 30-day + unlimited history",
-    "Selective restore per collection",
-    "Duplicate prevention",
-    "Multi-shop data isolation",
-    "FIFO batch inventory",
-    "Smart billing & invoicing",
-    "Customer credit tracking",
-    "Staff management & roles",
-    "Diamond rewards gamification"
+    "Multi-shop management with per-shop data isolation",
+    "Batch-wise FIFO inventory tracking",
+    "Smart billing with Wholesaler/Retailer/Regular price modes",
+    "PRO customer tracking with VIP/Gold/Silver tier badges",
+    "Super Admin Dashboard with real-time user and shop analytics",
+    "Offline mode with auto background sync",
+    "Diamond rewards gamification system",
+    "Auto mode system (Simple/Smart/Pro)"
   ],
-  "category": "business",
+  "category": "productivity",
   "tags": [
     "shop-management",
     "inventory",
     "billing",
-    "offline",
-    "sync",
     "india",
-    "saas",
+    "multi-shop",
+    "admin-dashboard",
+    "fifo",
     "pwa"
   ],
-  "last_updated": "2026-04-19T03:20:52.664Z"
+  "last_updated": "2026-04-20T19:20:24.857Z"
 }

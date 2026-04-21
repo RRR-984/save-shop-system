@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
   AlertCircle,
+  AlertTriangle,
   Bell,
   Check,
   Clock,
@@ -156,6 +157,7 @@ export function SettingsPage() {
     customerOrders,
     vendorRateHistory,
     shopId,
+    resetShopData,
   } = useStore();
 
   // Filtered feature list — mode-gated entries only shown in the required mode
@@ -169,6 +171,38 @@ export function SettingsPage() {
     string,
     unknown
   > | null>(null);
+
+  // ── Reset Shop Data state ────────────────────────────────────────────────────
+  const [resetStep, setResetStep] = useState<"idle" | "confirm1" | "confirm2">(
+    "idle",
+  );
+  const [resetInput, setResetInput] = useState("");
+  const [resetInProgress, setResetInProgress] = useState(false);
+
+  async function handleResetConfirm() {
+    if (resetInput !== "RESET") return;
+    setResetInProgress(true);
+    try {
+      await resetShopData();
+      setResetStep("idle");
+      setResetInput("");
+      toast.success("All data cleared successfully. Start fresh.", {
+        duration: 5000,
+        icon: "✅",
+      });
+      // Reload page after a brief pause so app renders the fresh empty state
+      setTimeout(() => window.location.reload(), 1500);
+    } catch {
+      toast.error("Reset failed. Please try again.");
+    } finally {
+      setResetInProgress(false);
+    }
+  }
+
+  function handleResetCancel() {
+    setResetStep("idle");
+    setResetInput("");
+  }
 
   // ── Cloud Backup state ───────────────────────────────────────────────────────
   const [backupList, setBackupList] = useState<BackupSnapshot[]>(() =>
@@ -1377,6 +1411,169 @@ export function SettingsPage() {
             </p>
           </div>
         </div>
+
+        {/* ── Danger Zone: Reset Shop Data ── */}
+        {isOwner && (
+          <Card
+            data-ocid="settings.danger_zone.panel"
+            className="border-destructive/40"
+          >
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-destructive" />
+                <CardTitle className="text-base text-destructive">
+                  Danger Zone
+                </CardTitle>
+              </div>
+              <CardDescription>
+                Irreversible actions — proceed with caution
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/5 space-y-4">
+                <div className="flex items-start gap-3">
+                  <Trash2 className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground">
+                      Reset All Shop Data
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Permanently delete all products, sales, customers,
+                      vendors, batches, and history for{" "}
+                      <strong>{currentShop?.name ?? "this shop"}</strong>. Other
+                      shops are not affected.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 1: Idle — show the button */}
+                {resetStep === "idle" && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setResetStep("confirm1")}
+                    data-ocid="settings.reset_shop.open_modal_button"
+                    className="w-full sm:w-auto"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                    Reset All Data
+                  </Button>
+                )}
+
+                {/* Step 1 Confirmation: "Are you sure?" */}
+                {resetStep === "confirm1" && (
+                  <div
+                    className="space-y-3"
+                    data-ocid="settings.reset_shop.dialog"
+                  >
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/40">
+                      <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+                      <p className="text-sm font-medium text-destructive">
+                        Are you sure? This will permanently delete ALL data for
+                        this shop — products, sales, customers, vendors, staff
+                        records, and all history. This cannot be undone.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleResetCancel}
+                        data-ocid="settings.reset_shop.cancel_button"
+                        className="flex-1"
+                      >
+                        <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => setResetStep("confirm2")}
+                        data-ocid="settings.reset_shop.confirm_button"
+                        className="flex-1"
+                      >
+                        Continue
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2: Type RESET to confirm */}
+                {resetStep === "confirm2" && (
+                  <div
+                    className="space-y-3"
+                    data-ocid="settings.reset_shop.dialog"
+                  >
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/40">
+                      <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+                      <p className="text-sm font-medium text-destructive">
+                        Final confirmation — this action is irreversible.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="reset-confirm-input"
+                        className="text-sm font-medium text-foreground"
+                      >
+                        Type{" "}
+                        <code className="px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-mono text-xs font-bold">
+                          RESET
+                        </code>{" "}
+                        to confirm
+                      </Label>
+                      <Input
+                        id="reset-confirm-input"
+                        data-ocid="settings.reset_shop.input"
+                        value={resetInput}
+                        onChange={(e) => setResetInput(e.target.value)}
+                        placeholder="Type RESET here"
+                        className="h-9 text-sm font-mono"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Case-sensitive — must be all uppercase: RESET
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleResetCancel}
+                        disabled={resetInProgress}
+                        data-ocid="settings.reset_shop.cancel_button"
+                        className="flex-1"
+                      >
+                        <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleResetConfirm}
+                        disabled={resetInput !== "RESET" || resetInProgress}
+                        data-ocid="settings.reset_shop.submit_button"
+                        className="flex-1"
+                      >
+                        {resetInProgress ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                            Resetting…
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                            Reset
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Section 7: Backup & Restore ── */}
         <Card data-ocid="settings.backup_restore.panel">

@@ -227,4 +227,17 @@ export const mockBackend: backendInterface = {
   pruneOldBackups: async () => BigInt(0),
   saveSyncLog: async () => undefined,
   getSyncLogs: async () => JSON.stringify([]),
+  clearShopData: async () => undefined,
+  getActivities: async () => [],
+  getAdminSettings: async () => ({
+    createdAt: BigInt(0),
+    superAdminMobile: "",
+    updatedAt: BigInt(0),
+  }),
+  getAllUsersWithStats: async () => [],
+  getShopPerformanceStats: async () => [],
+  purgeOldActivities: async () => BigInt(0),
+  recordActivity: async () => undefined,
+  saveAdminSettings: async () => true,
+  toggleUserPaidStatus: async () => true,
 };

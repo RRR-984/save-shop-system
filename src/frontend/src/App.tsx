@@ -1,9 +1,10 @@
 import { Toaster } from "@/components/ui/sonner";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { ChatBot } from "./components/ChatBot";
 import { FirstTimeUserWelcomePopup } from "./components/FirstTimeUserWelcomePopup";
 import { PWAInstallModal } from "./components/PWAInstallModal";
 import { MemoSidebar as Sidebar } from "./components/Sidebar";
+import { PageSkeleton, SkeletonLoader } from "./components/SkeletonLoader";
 import { SyncStatusBanner } from "./components/SyncStatusBanner";
 import { TopBar } from "./components/TopBar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -11,36 +12,116 @@ import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import { StoreProvider, useStore } from "./context/StoreContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { useSyncEngine } from "./hooks/useSyncEngine";
-import { AdminPage } from "./pages/AdminPage";
-import { AuditLogPage } from "./pages/AuditLogPage";
-import { BillingPage } from "./pages/BillingPage";
-import { CashCounterPage } from "./pages/CashCounterPage";
-import { CustomerOrdersPage } from "./pages/CustomerOrdersPage";
-import { CustomersPage } from "./pages/CustomersPage";
+// DashboardPage — eager-loaded (first render target)
 import { DashboardPage } from "./pages/DashboardPage";
-import { DiamondRewardsPage } from "./pages/DiamondRewardsPage";
-import { DraftsPage } from "./pages/DraftsPage";
-import { FeedbackPage } from "./pages/FeedbackPage";
-import { HistoryPage } from "./pages/HistoryPage";
-import { InventoryPage } from "./pages/InventoryPage";
+// LoginPage — eager-loaded (shown before auth, must be available immediately)
 import { LoginPage } from "./pages/LoginPage";
-import { LowPriceAlertLogPage } from "./pages/LowPriceAlertLogPage";
+// OwnerDashboardPage — eager-loaded (critical path for multi-shop owners)
 import { OwnerDashboardPage } from "./pages/OwnerDashboardPage";
-import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
-import { RankingsPage } from "./pages/RankingsPage";
-import { ReferralPage } from "./pages/ReferralPage";
-import { ReminderLogPage } from "./pages/ReminderLogPage";
-import { ReportsPage } from "./pages/ReportsPage";
-import { ReturnsPage } from "./pages/ReturnsPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { ShopBoardPage } from "./pages/ShopBoardPage";
-import { StaffAttendancePage } from "./pages/StaffAttendancePage";
-import { StaffCreditReportPage } from "./pages/StaffCreditReportPage";
-import { StaffManagementPage } from "./pages/StaffManagementPage";
-import { StaffPerformancePage } from "./pages/StaffPerformancePage";
-import { StockPage } from "./pages/StockPage";
-import { VendorsPage } from "./pages/VendorsPage";
 import type { NavPage } from "./types/store";
+
+// ── Lazy-loaded pages (code-split — only loaded when user navigates there) ──
+const AdminPage = lazy(() =>
+  import("./pages/AdminPage").then((m) => ({ default: m.AdminPage })),
+);
+const AuditLogPage = lazy(() =>
+  import("./pages/AuditLogPage").then((m) => ({ default: m.AuditLogPage })),
+);
+const BillingPage = lazy(() =>
+  import("./pages/BillingPage").then((m) => ({ default: m.BillingPage })),
+);
+const CashCounterPage = lazy(() =>
+  import("./pages/CashCounterPage").then((m) => ({
+    default: m.CashCounterPage,
+  })),
+);
+const CustomerOrdersPage = lazy(() =>
+  import("./pages/CustomerOrdersPage").then((m) => ({
+    default: m.CustomerOrdersPage,
+  })),
+);
+const CustomersPage = lazy(() =>
+  import("./pages/CustomersPage").then((m) => ({ default: m.CustomersPage })),
+);
+const DiamondRewardsPage = lazy(() =>
+  import("./pages/DiamondRewardsPage").then((m) => ({
+    default: m.DiamondRewardsPage,
+  })),
+);
+const DraftsPage = lazy(() =>
+  import("./pages/DraftsPage").then((m) => ({ default: m.DraftsPage })),
+);
+const FeedbackPage = lazy(() =>
+  import("./pages/FeedbackPage").then((m) => ({ default: m.FeedbackPage })),
+);
+const HistoryPage = lazy(() =>
+  import("./pages/HistoryPage").then((m) => ({ default: m.HistoryPage })),
+);
+const InventoryPage = lazy(() =>
+  import("./pages/InventoryPage").then((m) => ({ default: m.InventoryPage })),
+);
+const LowPriceAlertLogPage = lazy(() =>
+  import("./pages/LowPriceAlertLogPage").then((m) => ({
+    default: m.LowPriceAlertLogPage,
+  })),
+);
+const PurchaseOrdersPage = lazy(() =>
+  import("./pages/PurchaseOrdersPage").then((m) => ({
+    default: m.PurchaseOrdersPage,
+  })),
+);
+const RankingsPage = lazy(() =>
+  import("./pages/RankingsPage").then((m) => ({ default: m.RankingsPage })),
+);
+const ReferralPage = lazy(() =>
+  import("./pages/ReferralPage").then((m) => ({ default: m.ReferralPage })),
+);
+const ReminderLogPage = lazy(() =>
+  import("./pages/ReminderLogPage").then((m) => ({
+    default: m.ReminderLogPage,
+  })),
+);
+const ReportsPage = lazy(() =>
+  import("./pages/ReportsPage").then((m) => ({ default: m.ReportsPage })),
+);
+const ReturnsPage = lazy(() =>
+  import("./pages/ReturnsPage").then((m) => ({ default: m.ReturnsPage })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+const ShopBoardPage = lazy(() =>
+  import("./pages/ShopBoardPage").then((m) => ({ default: m.ShopBoardPage })),
+);
+const StaffAttendancePage = lazy(() =>
+  import("./pages/StaffAttendancePage").then((m) => ({
+    default: m.StaffAttendancePage,
+  })),
+);
+const StaffCreditReportPage = lazy(() =>
+  import("./pages/StaffCreditReportPage").then((m) => ({
+    default: m.StaffCreditReportPage,
+  })),
+);
+const StaffManagementPage = lazy(() =>
+  import("./pages/StaffManagementPage").then((m) => ({
+    default: m.StaffManagementPage,
+  })),
+);
+const StaffPerformancePage = lazy(() =>
+  import("./pages/StaffPerformancePage").then((m) => ({
+    default: m.StaffPerformancePage,
+  })),
+);
+const StockPage = lazy(() =>
+  import("./pages/StockPage").then((m) => ({ default: m.StockPage })),
+);
+const VendorsPage = lazy(() =>
+  import("./pages/VendorsPage").then((m) => ({ default: m.VendorsPage })),
+);
+const SuperAdminPage = lazy(() =>
+  import("./pages/SuperAdminPage").then((m) => ({ default: m.SuperAdminPage })),
+);
 
 const NAV_STATE_KEY = "save_shop_nav_state";
 
@@ -94,7 +175,38 @@ const PAGE_TITLES: Record<NavPage, string> = {
   "referral-page": "🔗 Refer & Earn",
   attendance: "📅 Attendance",
   "owner-dashboard": "🏪 Owner Overview",
+  "super-admin": "🛡️ Super Admin",
 };
+
+/** Non-blocking amber banner shown when Phase 1 takes > 2000ms */
+function SlowNetworkBanner({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <output
+      className="fixed top-0 left-0 right-0 z-[9999] flex items-center justify-center gap-2 bg-amber-500/90 text-white text-xs font-medium py-1.5 px-4 backdrop-blur-sm"
+      data-ocid="app.slow_network_banner"
+      aria-live="polite"
+    >
+      <div className="w-3 h-3 rounded-full border border-white/60 border-t-white animate-spin" />
+      Slow internet, working...
+    </output>
+  );
+}
+
+/** Badge shown on dashboard when Phase 1 had partial errors */
+function PartialDataBadge({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <output
+      className="mx-4 mt-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2"
+      data-ocid="app.partial_data_badge"
+      aria-live="polite"
+    >
+      <span>⚠️</span>
+      <span>Some data unavailable, retrying in background...</span>
+    </output>
+  );
+}
 
 function AppContent() {
   const initial = readNavState();
@@ -102,9 +214,20 @@ function AppContent() {
   const [navHistory, setNavHistory] = useState<NavPage[]>(initial.history);
   const [transitioning, setTransitioning] = useState(false);
   const [pageParams, setPageParams] = useState<Record<string, unknown>>({});
-  const { isLoading, actorError, referralCodes, recordReferralSignup, shopId } =
-    useStore();
+  const {
+    isLoading,
+    isPhase1Loading,
+    phase1HasPartialError,
+    actorError,
+    referralCodes,
+    recordReferralSignup,
+    shopId,
+  } = useStore();
   const [loadingTooLong, setLoadingTooLong] = useState(false);
+  // Slow network: Phase 1 not done after 2000ms
+  const [slowNetwork, setSlowNetwork] = useState(false);
+  // Auto-hide skeleton after 1.5s max even if Phase 1 hasn't resolved
+  const [skeletonTimeout, setSkeletonTimeout] = useState(false);
 
   // Global background sync engine — runs silently, never blocks UI
   const syncEngine = useSyncEngine(shopId);
@@ -115,12 +238,13 @@ function AppContent() {
       window.dispatchEvent(new Event("app-ready"));
     }
   }, [isLoading]);
+
   const pendingPageRef = useRef<NavPage | null>(null);
-  // Ref mirrors keep the popstate handler free of stale closure issues
   const navHistoryRef = useRef<NavPage[]>(initial.history);
   const currentPageRef = useRef<NavPage>(initial.page);
   const { t } = useLanguage();
 
+  // Existing 5s "Taking longer than usual..." timer
   useEffect(() => {
     if (!isLoading) {
       setLoadingTooLong(false);
@@ -130,8 +254,26 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, [isLoading]);
 
+  // Slow network banner: show after 2000ms if Phase 1 still loading
+  useEffect(() => {
+    if (!isPhase1Loading) {
+      setSlowNetwork(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlowNetwork(true), 2000);
+    return () => clearTimeout(timer);
+  }, [isPhase1Loading]);
+
+  // Skeleton timeout: hide skeleton after 1.5s regardless of Phase 1
+  useEffect(() => {
+    const timer = setTimeout(() => setSkeletonTimeout(true), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Show skeleton only while Phase 1 is loading AND timeout hasn't expired
+  const showSkeleton = isPhase1Loading && !skeletonTimeout;
+
   // Process any referral code that was saved to localStorage during login
-  // (LoginPage cannot call useStore() since it renders outside StoreProvider)
   useEffect(() => {
     if (isLoading) return;
     try {
@@ -281,6 +423,8 @@ function AppContent() {
         return <StaffAttendancePage />;
       case "owner-dashboard":
         return <OwnerDashboardPage onNavigate={handleNavigate} />;
+      case "super-admin":
+        return <SuperAdminPage onBack={handleGoHome} />;
       default:
         return <DashboardPage onNavigate={handleNavigate} />;
     }
@@ -312,16 +456,24 @@ function AppContent() {
     );
   }
 
-  if (isLoading) {
+  // Phase 1 skeleton — shown instead of blank screen while initial data loads
+  if (showSkeleton) {
     return (
       <div
-        className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background"
+        className="min-h-screen flex flex-col bg-background"
         data-ocid="app.loading_state"
       >
-        <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-        <p className="text-muted-foreground text-sm">Loading data...</p>
+        <SlowNetworkBanner visible={slowNetwork} />
+        {/* Minimal header skeleton */}
+        <div className="h-14 border-b border-border bg-card flex items-center px-4 gap-3">
+          <div className="w-8 h-8 rounded bg-muted animate-pulse" />
+          <div className="flex-1 h-4 max-w-[140px] rounded bg-muted animate-pulse" />
+          <div className="w-20 h-6 rounded-full bg-muted animate-pulse" />
+        </div>
+        <SkeletonLoader />
+        {/* Existing "taking longer" fallback preserved */}
         {loadingTooLong && (
-          <div className="flex flex-col items-center gap-2 mt-2">
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 bg-card border border-border rounded-xl px-5 py-3 shadow-lg z-50">
             <p className="text-xs text-muted-foreground">
               Taking longer than usual...
             </p>
@@ -341,14 +493,7 @@ function AppContent() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Top progress bar — shows during initial data load */}
-      {isLoading && (
-        <div
-          className="fixed top-0 left-0 h-[3px] bg-primary z-[9999] transition-all duration-300"
-          style={{ width: "70%", animation: "none" }}
-          data-ocid="app.top_progress_bar"
-        />
-      )}
+      <SlowNetworkBanner visible={slowNetwork} />
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-auto">
@@ -359,11 +504,17 @@ function AppContent() {
         />
         <SyncStatusBanner engine={syncEngine} />
 
+        {/* Partial data warning badge — shown when Phase 1 had errors but app rendered anyway */}
+        {phase1HasPartialError && currentPage === "dashboard" && (
+          <PartialDataBadge visible />
+        )}
+
         <div
           className={transitioning ? "page-fade-out" : "page-fade-in"}
           style={{ flex: 1, display: "flex", flexDirection: "column" }}
         >
-          {renderPage()}
+          {/* Wrap all lazy pages in Suspense with PageSkeleton fallback */}
+          <Suspense fallback={<PageSkeleton />}>{renderPage()}</Suspense>
         </div>
 
         <footer className="mt-auto px-6 py-3 border-t border-border pb-20 md:pb-3">

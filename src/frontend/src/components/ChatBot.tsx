@@ -34,11 +34,18 @@ type QueryType =
   | "low_stock"
   | "dead_stock"
   | "today_sales"
+  | "recent_sales"
   | "pending_due"
   | "stock_value"
   | "out_of_stock"
   | "total_products"
   | "today_profit"
+  | "total_profit"
+  | "customer_count"
+  | "birthday_today"
+  | "best_selling"
+  | "vendor_due"
+  | "staff_performance"
   | "help_add_shop"
   | "help_dead_stock_time"
   | "help_add_stock"
@@ -69,6 +76,26 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
     keywords: ["hello", "namaste", "hey", "hii", "helllo", "helo", "namaskar"],
   },
 
+  // Birthday today — very specific, checked early
+  {
+    type: "birthday_today",
+    keywords: [
+      "aaj birthday",
+      "birthday aaj",
+      "birthday today",
+      "today birthday",
+      "janmdin aaj",
+      "aaj janmdin",
+      "aaj ka birthday",
+      "birthday kaun",
+      "whose birthday",
+      "kiska birthday",
+      "birthday list",
+      "birthday reminder",
+      "janmdin today",
+    ],
+  },
+
   // Dead stock time/settings — more specific, must come before generic "dead stock"
   {
     type: "help_dead_stock_time",
@@ -95,6 +122,8 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "dedstock",
       "डेड स्टॉक",
       "dead maal",
+      "nahi bik raha",
+      "nahi bika",
     ],
   },
 
@@ -110,10 +139,11 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "कम स्टॉक",
       "low stok",
       "lo stock",
+      "stock khatam hone",
     ],
   },
 
-  // Out of stock
+  // Out of stock — checked before khatam product to avoid ambiguity
   {
     type: "out_of_stock",
     keywords: [
@@ -124,6 +154,42 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "khatam ho",
       "ख़त्म",
       "khatm stock",
+      "stock nahi hai",
+    ],
+  },
+
+  // Best selling — before today_profit/total_profit
+  {
+    type: "best_selling",
+    keywords: [
+      "best selling",
+      "bestselling",
+      "sabse jyada bikne",
+      "sabse zyada sale",
+      "sabse zyada bika",
+      "top product",
+      "most sold",
+      "popular product",
+      "popular item",
+      "top selling",
+      "highest sale",
+      "zyada bikne wala",
+      "sabse popular",
+    ],
+  },
+
+  // Total profit (all time) — before today_profit
+  {
+    type: "total_profit",
+    keywords: [
+      "total profit",
+      "kul profit",
+      "kul munafa",
+      "overall profit",
+      "sab ka profit",
+      "kitna profit hua",
+      "profit kitna hai",
+      "total munafa",
     ],
   },
 
@@ -133,12 +199,32 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
     keywords: [
       "aaj ka profit",
       "today profit",
-      "kitna profit",
       "aaj profit",
       "profit aaj",
       "आज का लाभ",
       "आज लाभ",
       "profit kitna",
+    ],
+  },
+
+  // Recent / weekly / monthly sales — checked before today_sales
+  {
+    type: "recent_sales",
+    keywords: [
+      "recent sales",
+      "kal ki sale",
+      "is hafte ki sale",
+      "weekly sales",
+      "monthly sales",
+      "is mahine ki sale",
+      "hafte ki bikri",
+      "mahine ki bikri",
+      "week sales",
+      "month sales",
+      "last 7 days",
+      "last 30 days",
+      "pichle hafte",
+      "pichle mahine",
     ],
   },
 
@@ -156,6 +242,39 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "आज बिक्री",
       "आज की बिक्री",
       "aaj biki",
+      "today's sales",
+      "aaj ki bikri",
+    ],
+  },
+
+  // Customer count — before pending_due so "customer" doesn't match wrong
+  {
+    type: "customer_count",
+    keywords: [
+      "kitne customer",
+      "total customer",
+      "customer count",
+      "customer kitne",
+      "कितने ग्राहक",
+      "total customers",
+      "customers kitne",
+      "customers hain",
+    ],
+  },
+
+  // Vendor due / outstanding — checked before pending_due
+  {
+    type: "vendor_due",
+    keywords: [
+      "vendor due",
+      "vendor payment",
+      "vendor ko kitna",
+      "vendor outstanding",
+      "supplier due",
+      "vendor baaki",
+      "vendor ka payment",
+      "vendor ka due",
+      "vendor paise",
     ],
   },
 
@@ -175,6 +294,27 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "paise lena",
       "credit lena",
       "payment baaki",
+      "baaki hai kiska",
+      "kitna baaki hai",
+      "customer due",
+    ],
+  },
+
+  // Staff performance
+  {
+    type: "staff_performance",
+    keywords: [
+      "staff performance",
+      "staff sales",
+      "kaun sa staff",
+      "best employee",
+      "staff ranking",
+      "staff report",
+      "employee performance",
+      "best staff",
+      "staff ka performance",
+      "staff ne kitna",
+      "staff sales report",
     ],
   },
 
@@ -203,6 +343,7 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "kitna product",
       "items count",
       "kitne item",
+      "stock mein kya",
     ],
   },
 
@@ -311,13 +452,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "बिलिंग",
       "बिक्री कैसे",
       "बिल कैसे",
-    ],
-  },
-
-  // Help: payment collect
-  {
-    type: "help_sell",
-    keywords: [
       "payment kaise le",
       "payment kese le",
       "payment lo",
@@ -594,6 +728,14 @@ function tierLabel(totalPurchase: number, isHi: boolean): string {
   return isHi ? "Normal" : "Normal";
 }
 
+/** Get today's month-day in MM-DD format */
+function todayMMDD(): string {
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${mm}-${dd}`;
+}
+
 function generateResponse(
   type: QueryType,
   lang: "en" | "hi",
@@ -611,6 +753,8 @@ function generateResponse(
   const isHi = lang === "hi";
 
   const todayStr = new Date().toDateString();
+  const now = Date.now();
+
   const todayInvoices = store.invoices.filter(
     (inv) => new Date(inv.date).toDateString() === todayStr,
   );
@@ -619,8 +763,30 @@ function generateResponse(
   switch (type) {
     case "greeting":
       return isHi
-        ? "Namaste! 🙏 Main aapka Shop Assistant hoon.\n\nAap mujhse pooch sakte hain:\n• Low stock batao\n• Aaj ki sale kitni hai\n• Dead stock kya hai\n• Pending due kitna hai\n• New shop kaise banaye\n• Vendor kese add kare\n• Product kese add kare\n• Billing kaise kare\n• Staff kese add kare\n• Payment kaise le"
-        : "Hello! 👋 I'm your Shop Assistant.\n\nYou can ask me:\n• Low stock products\n• Today's sales\n• Dead stock\n• Pending due\n• How to add a new shop\n• How to add stock\n• How to do billing";
+        ? "Namaste! 🙏 Main aapka Shop Assistant hoon.\n\nAap mujhse pooch sakte hain:\n• Low stock batao\n• Aaj ki sale kitni hai\n• Aaj birthday kaun?\n• Dead stock kya hai\n• Pending due kitna hai\n• Best selling product\n• New shop kaise banaye\n• Vendor kese add kare\n• Billing kaise kare\n• Staff kese add kare"
+        : "Hello! 👋 I'm your Shop Assistant.\n\nYou can ask me:\n• Low stock products\n• Today's sales\n• Today's birthdays\n• Dead stock\n• Pending due\n• Best selling products\n• How to add a new shop\n• How to add stock\n• How to do billing";
+
+    // ── Birthday today ────────────────────────────────────────────────────
+    case "birthday_today": {
+      const mmdd = todayMMDD();
+      const birthdays = store.customers.filter((c) => {
+        if (!c.birthday) return false;
+        // birthday format: YYYY-MM-DD — extract MM-DD
+        const bmmdd = c.birthday.slice(5); // "MM-DD"
+        return bmmdd === mmdd;
+      });
+      if (!birthdays.length) {
+        return isHi
+          ? "🎂 Aaj kisi bhi customer ka birthday nahi hai."
+          : "🎂 No customer birthdays today.";
+      }
+      const list = birthdays
+        .map((c) => `🎂 ${c.name}${c.mobile ? ` (${c.mobile})` : ""}`)
+        .join("\n");
+      return isHi
+        ? `🎉 Aaj ${birthdays.length} customer(s) ka birthday hai:\n${list}\n\nWish karein aur unhe special feel karaayen!`
+        : `🎉 ${birthdays.length} customer birthday(s) today:\n${list}\n\nSend them a birthday wish!`;
+    }
 
     case "low_stock": {
       const low = store.products.filter((p) => {
@@ -645,7 +811,7 @@ function generateResponse(
 
     case "dead_stock": {
       const days = store.appConfig.deadStockThresholdDays || 90;
-      const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+      const cutoff = now - days * 24 * 60 * 60 * 1000;
       const dead = store.products.filter((p) => {
         const lastSold = store.getLastSoldDate(p.id);
         if (!lastSold) return store.getProductStock(p.id) > 0;
@@ -675,6 +841,23 @@ function generateResponse(
       return isHi
         ? `📊 Aaj ${todayInvoices.length} bill bane hain.\nTotal sale: ${formatCurrency(todayTotal)}`
         : `📊 ${todayInvoices.length} bills made today.\nTotal: ${formatCurrency(todayTotal)}`;
+
+    // ── Recent / weekly / monthly sales ──────────────────────────────────
+    case "recent_sales": {
+      const weekMs = 7 * 24 * 60 * 60 * 1000;
+      const monthMs = 30 * 24 * 60 * 60 * 1000;
+      const weekInvoices = store.invoices.filter(
+        (inv) => now - new Date(inv.date).getTime() <= weekMs,
+      );
+      const monthInvoices = store.invoices.filter(
+        (inv) => now - new Date(inv.date).getTime() <= monthMs,
+      );
+      const weekTotal = weekInvoices.reduce((s, i) => s + i.totalAmount, 0);
+      const monthTotal = monthInvoices.reduce((s, i) => s + i.totalAmount, 0);
+      return isHi
+        ? `📈 Sales Summary:\n\n🗓️ Aaj: ${todayInvoices.length} bills — ${formatCurrency(todayTotal)}\n📅 Is hafte (7 din): ${weekInvoices.length} bills — ${formatCurrency(weekTotal)}\n🗓️ Is mahine (30 din): ${monthInvoices.length} bills — ${formatCurrency(monthTotal)}`
+        : `📈 Sales Summary:\n\n🗓️ Today: ${todayInvoices.length} bills — ${formatCurrency(todayTotal)}\n📅 This week (7d): ${weekInvoices.length} bills — ${formatCurrency(weekTotal)}\n🗓️ This month (30d): ${monthInvoices.length} bills — ${formatCurrency(monthTotal)}`;
+    }
 
     case "pending_due": {
       const totalDue = store.customers.reduce(
@@ -717,10 +900,19 @@ function generateResponse(
         : `❌ ${oos.length} product(s) out of stock:\n${list}`;
     }
 
-    case "total_products":
+    case "total_products": {
+      const inStock = store.products.filter(
+        (p) => store.getProductStock(p.id) > 0,
+      ).length;
       return isHi
-        ? `📋 Aapke paas total ${store.products.length} product(s) hain.`
-        : `📋 You have ${store.products.length} product(s) in total.`;
+        ? `📋 Total ${store.products.length} product(s) hain, jisme ${inStock} in-stock hain.`
+        : `📋 ${store.products.length} total product(s), ${inStock} currently in stock.`;
+    }
+
+    case "customer_count":
+      return isHi
+        ? `👥 Aapke paas total ${store.customers.length} registered customer(s) hain.`
+        : `👥 You have ${store.customers.length} registered customer(s).`;
 
     case "today_profit": {
       let profit = 0;
@@ -734,6 +926,105 @@ function generateResponse(
       return isHi
         ? `💹 Aaj ka estimated profit: ${formatCurrency(Math.max(0, profit))}`
         : `💹 Estimated profit today: ${formatCurrency(Math.max(0, profit))}`;
+    }
+
+    // ── Total profit (all time) ───────────────────────────────────────────
+    case "total_profit": {
+      let totalProfit = 0;
+      for (const inv of store.invoices) {
+        if (inv.items) {
+          for (const item of inv.items) {
+            totalProfit +=
+              (item.sellingRate - item.purchaseCost) * item.quantity;
+          }
+        }
+      }
+      return isHi
+        ? `💹 Sab invoices ka total estimated profit: ${formatCurrency(Math.max(0, totalProfit))}`
+        : `💹 Total estimated profit (all invoices): ${formatCurrency(Math.max(0, totalProfit))}`;
+    }
+
+    // ── Best selling products ─────────────────────────────────────────────
+    case "best_selling": {
+      if (!store.invoices.length) {
+        return isHi
+          ? "📊 Abhi koi bhi sale record nahi hai. Pehle kuch bill banao!"
+          : "📊 No sales records yet. Create some bills first!";
+      }
+      // Aggregate qty sold per product
+      const qtySold: Record<string, { name: string; qty: number }> = {};
+      for (const inv of store.invoices) {
+        for (const item of inv.items ?? []) {
+          if (!qtySold[item.productId]) {
+            qtySold[item.productId] = { name: item.productName, qty: 0 };
+          }
+          qtySold[item.productId].qty += item.quantity;
+        }
+      }
+      const ranked = Object.values(qtySold)
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 5);
+      if (!ranked.length) {
+        return isHi
+          ? "📊 Product-wise sale data abhi available nahi hai."
+          : "📊 Product-wise sale data not available yet.";
+      }
+      const list = ranked
+        .map((p, i) => `${i + 1}. ${p.name} — ${p.qty} units`)
+        .join("\n");
+      return isHi
+        ? `🏆 Top 5 Best Selling Products:\n${list}`
+        : `🏆 Top 5 Best Selling Products:\n${list}`;
+    }
+
+    // ── Vendor due ────────────────────────────────────────────────────────
+    case "vendor_due": {
+      // Vendor due is typically managed via purchase orders — surface known pending data
+      return isHi
+        ? "🏭 Vendor due check karne ke liye:\n\n1. Sidebar mein 'Vendors' pe jaao\n2. 'Purchase Orders' mein dekho — pending orders mein vendor ka due milega\n3. Ya 'Reports' mein Purchase Report dekho\n\nAbhi real-time vendor outstanding data chatbot mein available nahi hai — directly Purchase Orders page check karein."
+        : "🏭 To check vendor dues:\n\n1. Go to 'Vendors' in the sidebar\n2. Check 'Purchase Orders' — pending orders show vendor dues\n3. Or view Purchase Report in Reports\n\nReal-time vendor outstanding isn't available in chat yet — check the Purchase Orders page directly.";
+    }
+
+    // ── Staff performance ─────────────────────────────────────────────────
+    case "staff_performance": {
+      if (!store.invoices.length) {
+        return isHi
+          ? "👥 Abhi koi sales record nahi hai — staff performance data available nahi hai."
+          : "👥 No sales records yet — staff performance data unavailable.";
+      }
+      const staffSales: Record<
+        string,
+        { name: string; count: number; total: number }
+      > = {};
+      for (const inv of store.invoices) {
+        if (!inv.soldByUserId || !inv.soldByName) continue;
+        if (!staffSales[inv.soldByUserId]) {
+          staffSales[inv.soldByUserId] = {
+            name: inv.soldByName,
+            count: 0,
+            total: 0,
+          };
+        }
+        staffSales[inv.soldByUserId].count += 1;
+        staffSales[inv.soldByUserId].total += inv.totalAmount;
+      }
+      const ranked = Object.values(staffSales)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 5);
+      if (!ranked.length) {
+        return isHi
+          ? "👥 Staff-wise sales data abhi available nahi hai. Staff ne bills banate waqt login kiya ho tab track hota hai."
+          : "👥 No staff-wise sales data yet. Staff must be logged in when creating bills to track performance.";
+      }
+      const list = ranked
+        .map(
+          (s, i) =>
+            `${i + 1}. ${s.name} — ${s.count} bills — ${formatCurrency(s.total)}`,
+        )
+        .join("\n");
+      return isHi
+        ? `🏅 Staff Performance (sale ke hisaab se):\n${list}`
+        : `🏅 Staff Performance (by sales):\n${list}`;
     }
 
     // ── Help guides ───────────────────────────────────────────────────────────
@@ -820,15 +1111,15 @@ function generateResponse(
             "Sidebar mein 'Customers' mein jaao",
             "'+ Add Customer' button dabao",
             "Customer ka naam, mobile bharo",
+            "Birthday (optional) bhi add kar sakte hain — birthday reminders milenge",
             "'Save' dabao — customer add ho jaayega",
-            "Billing mein bhi auto-add hota hai jab mobile fill karo",
           ])}`
         : `👤 How to add a customer:\n${steps([
             "Go to 'Customers' in the sidebar",
             "Click '+ Add Customer' button",
             "Fill customer name and mobile",
+            "Optionally add birthday — you'll get birthday reminders",
             "Click 'Save' — customer added!",
-            "Also auto-added during billing when mobile is filled",
           ])}`;
 
     case "help_reports":
@@ -1025,9 +1316,7 @@ function generateResponse(
       const list = sorted
         .map((c, i) => {
           const tier = tierLabel(c.totalPurchase || 0, isHi);
-          return isHi
-            ? `${i + 1}. ${c.name} — ${tier} — ${formatCurrency(c.totalPurchase || 0)}`
-            : `${i + 1}. ${c.name} — ${tier} — ${formatCurrency(c.totalPurchase || 0)}`;
+          return `${i + 1}. ${c.name} — ${tier} — ${formatCurrency(c.totalPurchase || 0)}`;
         })
         .join("\n");
       return isHi
@@ -1067,8 +1356,8 @@ function generateResponse(
 
     default: {
       return isHi
-        ? `Samajh nahi aaya. 🤔 Ye try karein:\n• "Low stock batao"\n• "Vendor kaise add karein"\n• "Aaj ki sale kitni hai"\n• "Dead stock kya hai"\n• "Billing kaise kare"\n• "Staff kese add kare"\n• "Naya shop kaise banaye"\n• "Payment kaise le"`
-        : `Sorry, I didn't understand that. 🤔\n\nTry asking:\n• "Low stock products"\n• "Today's sales"\n• "How to add vendor"\n• "How to do billing"\n• "How to add staff"`;
+        ? `Samajh nahi aaya. 🤔 Ye try karein:\n• "Aaj birthday kaun?"\n• "Low stock batao"\n• "Aaj ki sale kitni hai"\n• "Best selling product"\n• "Pending payment kiska"\n• "Vendor kaise add karein"\n• "Billing kaise kare"\n• "Naya shop kaise banaye"`
+        : `Sorry, I didn't understand that. 🤔\n\nTry asking:\n• "Today's birthdays"\n• "Low stock products"\n• "Today's sales"\n• "Best selling product"\n• "Pending payments"\n• "How to add vendor"\n• "How to do billing"`;
     }
   }
 }
@@ -1080,14 +1369,16 @@ interface PanelPos {
 }
 
 const PANEL_W = 320;
-const PANEL_H = 420;
+const PANEL_H = 480;
 
 function getDefaultPos(): PanelPos {
   // Bottom-left, mirroring the bubble position (left: 16px, above bubble)
   const vh = typeof window !== "undefined" ? window.innerHeight : 700;
+  // Clamp so the panel fits within viewport
+  const panelH = Math.min(PANEL_H, vh - 120);
   return {
     x: 16,
-    y: Math.max(8, vh - PANEL_H - 144), // ~same as bottom-36 from bottom
+    y: Math.max(8, vh - panelH - 80),
   };
 }
 
@@ -1289,6 +1580,30 @@ export function ChatBot() {
     };
   }, []);
 
+  // Quick chips: updated to include birthday + best selling
+  const hiChips = [
+    "🎂 Aaj birthday?",
+    "Low stock batao",
+    "Aaj ki sale",
+    "Best selling",
+    "💰 Pending",
+    "Dead stock",
+    "⭐ Top Customers",
+    "🔕 Inactive",
+    "Vendor kese add kare",
+  ];
+  const enChips = [
+    "🎂 Today birthday?",
+    "Low stock",
+    "Today sales",
+    "Best selling",
+    "💰 Pending",
+    "Dead stock",
+    "⭐ Top Customers",
+    "🔕 Inactive",
+    "Add vendor",
+  ];
+
   return (
     <>
       {/* Pulse glow animation */}
@@ -1319,13 +1634,27 @@ export function ChatBot() {
         aria-label="Open Shop Assistant"
         data-ocid="chatbot.open_modal_button"
         onClick={() => setOpen((v) => !v)}
-        className="chatbot-bubble fixed bottom-20 left-4 z-[9998] w-14 h-14 rounded-full flex items-center justify-center text-2xl text-white select-none transition-transform duration-150 active:scale-90 md:bottom-6"
+        className="chatbot-bubble fixed bottom-20 left-4 z-[9998] w-14 h-14 rounded-full flex items-center justify-center text-white select-none transition-transform duration-150 active:scale-90 md:bottom-6 overflow-hidden p-0"
         style={{
           background:
             "linear-gradient(135deg, #7c3aed 0%, #4f46e5 55%, #6d28d9 100%)",
         }}
       >
-        🤖
+        <img
+          src="/assets/chatbot-robot.jpg"
+          alt="Shop Assistant"
+          style={{
+            width: 56,
+            height: 56,
+            objectFit: "cover",
+            borderRadius: "50%",
+          }}
+          onError={(e) => {
+            // Fallback to emoji if image fails to load
+            const parent = (e.target as HTMLImageElement).parentElement;
+            if (parent) parent.innerHTML = "🤖";
+          }}
+        />
         {!open && (
           <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-white" />
         )}
@@ -1341,7 +1670,8 @@ export function ChatBot() {
             left: panelPos.x,
             top: panelPos.y,
             width: `min(${PANEL_W}px, 90vw)`,
-            maxHeight: PANEL_H,
+            height: `min(${PANEL_H}px, calc(100vh - 120px))`,
+            maxHeight: `min(${PANEL_H}px, calc(100vh - 120px))`,
             userSelect: isDragging ? "none" : undefined,
           }}
         >
@@ -1357,7 +1687,21 @@ export function ChatBot() {
             }}
           >
             <div className="flex items-center gap-2">
-              <span className="text-xl">🤖</span>
+              <img
+                src="/assets/chatbot-robot.jpg"
+                alt="Shop Assistant"
+                style={{
+                  width: 32,
+                  height: 32,
+                  objectFit: "cover",
+                  borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.4)",
+                  flexShrink: 0,
+                }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
               <div>
                 <p className="text-white font-semibold text-sm leading-tight">
                   Shop Assistant
@@ -1382,7 +1726,7 @@ export function ChatBot() {
           {/* Messages */}
           <div
             className="flex-1 overflow-y-auto p-3 space-y-3 bg-muted/20"
-            style={{ minHeight: 0 }}
+            style={{ minHeight: 0, overscrollBehavior: "contain" }}
           >
             {messages.map((msg) => (
               <div
@@ -1425,37 +1769,17 @@ export function ChatBot() {
 
           {/* Quick chips */}
           <div
-            className="flex gap-1.5 px-3 py-2 overflow-x-auto border-t border-border bg-card scrollbar-none"
-            style={{ scrollbarWidth: "none" }}
+            className="flex gap-1.5 px-3 py-2 overflow-x-auto border-t border-border bg-card scrollbar-none flex-shrink-0"
+            style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
           >
-            {(isHi
-              ? [
-                  "Low stock batao",
-                  "Aaj ki sale",
-                  "Dead stock",
-                  "⭐ Top Customers",
-                  "🔕 Inactive",
-                  "❌ Lost Customers",
-                  "💰 Pending",
-                  "Vendor kese add kare",
-                  "Billing kaise kare",
-                ]
-              : [
-                  "Low stock",
-                  "Today sales",
-                  "Dead stock",
-                  "⭐ Top Customers",
-                  "🔕 Inactive",
-                  "❌ Lost Customers",
-                  "💰 Pending",
-                  "Add vendor",
-                  "Billing help",
-                ]
-            ).map((chip) => (
+            {(isHi ? hiChips : enChips).map((chip) => (
               <button
                 key={chip}
                 type="button"
-                data-ocid={`chatbot.${chip.toLowerCase().replace(/\s+/g, "_")}_chip`}
+                data-ocid={`chatbot.${chip
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "_")
+                  .replace(/^_|_$/g, "")}_chip`}
                 onClick={() => {
                   setInput(chip);
                   setTimeout(() => {
@@ -1496,7 +1820,12 @@ export function ChatBot() {
           </div>
 
           {/* Input */}
-          <div className="flex items-center gap-2 px-3 py-2.5 border-t border-border bg-card">
+          <div
+            className="flex items-center gap-2 px-3 py-2.5 border-t border-border bg-card flex-shrink-0"
+            style={{
+              paddingBottom: "max(10px, env(safe-area-inset-bottom, 10px))",
+            }}
+          >
             <input
               ref={inputRef}
               type="text"

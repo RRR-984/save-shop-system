@@ -3,6 +3,10 @@ import type { AutoModeType, DraftSale } from "../types/store";
 // ─── Storage Keys ─────────────────────────────────────────────────────────────
 // All keys use "saveshop_" prefix to avoid collision with
 // existing keys: shopSettings_*, appConfig_*, last_shop_id
+//
+// IMPORTANT: shop-data keys are now shop-scoped via getShopKey().
+// Use getShopKey(STORAGE_KEYS.products, shopId) instead of STORAGE_KEYS.products directly
+// when reading/writing per-shop data.
 export const STORAGE_KEYS = {
   products: "saveshop_products",
   customers: "saveshop_customers",
@@ -26,6 +30,45 @@ export const STORAGE_KEYS = {
   referralDeviceId: "referral_device_id",
   referralDeviceUsedCode: "referral_device_used_code",
 } as const;
+
+/**
+ * Returns a shop-scoped localStorage key.
+ * e.g. getShopKey("saveshop_products", "shop_123") → "saveshop_products_shop_123"
+ *
+ * This prevents data from one shop bleeding into another after a shop switch.
+ */
+export function getShopKey(baseKey: string, shopId: string): string {
+  if (!shopId || shopId === "shop-default") return baseKey;
+  return `${baseKey}_${shopId}`;
+}
+
+/** Keys that hold per-shop data and should be cleared on shop switch. */
+const PER_SHOP_BASE_KEYS = [
+  STORAGE_KEYS.products,
+  STORAGE_KEYS.customers,
+  STORAGE_KEYS.vendors,
+  STORAGE_KEYS.sales,
+  STORAGE_KEYS.batches,
+  STORAGE_KEYS.transactions,
+  STORAGE_KEYS.payments,
+  STORAGE_KEYS.returns,
+  STORAGE_KEYS.purchaseOrders,
+  STORAGE_KEYS.customerOrders,
+  STORAGE_KEYS.vendorRateHistory,
+] as const;
+
+/**
+ * Clears all shop-scoped localStorage keys for the given shopId.
+ * Call this when switching away from a shop to ensure no stale data is served.
+ */
+export function clearShopScopedData(shopId: string): void {
+  if (!shopId) return;
+  for (const baseKey of PER_SHOP_BASE_KEYS) {
+    localStorage.removeItem(getShopKey(baseKey, shopId));
+  }
+  // Also clear the cache-freshness timestamp for this shop
+  localStorage.removeItem(`saveshop_cache_ts_${shopId}`);
+}
 
 export function saveData<T>(key: string, data: T): void {
   try {

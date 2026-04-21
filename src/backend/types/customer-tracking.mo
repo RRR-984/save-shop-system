@@ -32,6 +32,7 @@ module {
     totalPurchase : ?Float;
     visitCount : ?Nat;
     pendingBalance : ?Float;
+    birthday : ?Text;       // YYYY-MM-DD — used for birthday reminders
   };
 
   /// Payload returned when a customer lookup resolves from mobile number.

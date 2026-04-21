@@ -102,9 +102,6 @@ export interface BackupSnapshotMeta {
     tag: string;
     timestamp: bigint;
 }
-export interface DeleteShopResult {
-    success: boolean;
-}
 export interface ShopMeta {
     id: string;
     isDeleted: boolean;
@@ -114,8 +111,7 @@ export interface ShopMeta {
     address: string;
     ownerMobile: string;
 }
-export interface UpdateShopResult {
-    error?: string;
+export interface DeleteShopResult {
     success: boolean;
 }
 export interface ShopStats {
@@ -127,18 +123,57 @@ export interface ShopStats {
     products: bigint;
     customers: bigint;
 }
+export interface UpdateShopResult {
+    error?: string;
+    success: boolean;
+}
+export interface AdminSettings {
+    createdAt: bigint;
+    superAdminMobile: string;
+    updatedAt: bigint;
+}
 export interface AddShopResult {
     shopId: string;
     error?: string;
     success: boolean;
 }
+export interface ActivityRecord {
+    id: string;
+    activityType: string;
+    shopId: string;
+    metadata: string;
+    userId: string;
+    timestamp: bigint;
+}
+export interface ShopStatsResult {
+    shopId: string;
+    totalSalesAmount: number;
+    lastActivity: bigint;
+    shopName: string;
+    sessionCount: bigint;
+    ownerMobile: string;
+}
 export interface UserProfile {
     name: string;
 }
+export interface UserStatsResult {
+    shopId: string;
+    totalSalesAmount: number;
+    userId: string;
+    lastActivity: bigint;
+    isPaid: boolean;
+    loginCount: bigint;
+    shopName: string;
+    salesCount: bigint;
+}
 export interface backendInterface {
     addShop(ownerMobile: string, shopName: string, address: string, city: string): Promise<AddShopResult>;
+    clearShopData(shopId: string): Promise<void>;
     deleteBackupSnapshot(shopId: string, snapshotId: string): Promise<void>;
     deleteShop(shopId: string): Promise<DeleteShopResult>;
+    getActivities(shopIdFilter: string | null, startTs: bigint | null, endTs: bigint | null): Promise<Array<ActivityRecord>>;
+    getAdminSettings(): Promise<AdminSettings>;
+    getAllUsersWithStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<UserStatsResult>>;
     getAuditLogs(shopId: string): Promise<string>;
     getBackupSnapshotData(shopId: string, snapshotId: string): Promise<string | null>;
     getBackupSnapshots(shopId: string): Promise<Array<BackupSnapshotMeta>>;
@@ -162,6 +197,7 @@ export interface backendInterface {
     getReturns(shopId: string): Promise<string>;
     getSettings(shopId: string): Promise<string>;
     getShop(shopId: string): Promise<ShopMeta | null>;
+    getShopPerformanceStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<ShopStatsResult>>;
     getShopUnits(shopId: string): Promise<string>;
     getSyncLogs(shopId: string): Promise<string>;
     getTransactions(shopId: string): Promise<string>;
@@ -171,6 +207,9 @@ export interface backendInterface {
     getVendors(shopId: string): Promise<string>;
     listShopsForOwner(mobile: string): Promise<Array<ShopMeta>>;
     pruneOldBackups(shopId: string, retainDays: bigint): Promise<bigint>;
+    purgeOldActivities(beforeTs: bigint): Promise<bigint>;
+    recordActivity(shopId: string, userId: string, activityType: string, metadata: string): Promise<void>;
+    saveAdminSettings(settings: AdminSettings): Promise<boolean>;
     saveAuditLogs(shopId: string, data: string): Promise<void>;
     saveBackupSnapshot(shopId: string, snapshotId: string, tag: string, data: string): Promise<void>;
     saveBatches(shopId: string, data: string): Promise<void>;
@@ -197,6 +236,7 @@ export interface backendInterface {
     saveUsers(shopId: string, data: string): Promise<void>;
     saveVendorRateHistory(shopId: string, data: string): Promise<void>;
     saveVendors(shopId: string, data: string): Promise<void>;
+    toggleUserPaidStatus(userId: string, shopId: string, isPaid: boolean): Promise<boolean>;
     updateShop(shopId: string, name: string, address: string, city: string): Promise<UpdateShopResult>;
 }
 import type { AddShopResult as _AddShopResult, ShopMeta as _ShopMeta, UpdateShopResult as _UpdateShopResult, UserProfile as _UserProfile } from "./declarations/backend.did.d.ts";
@@ -214,6 +254,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.addShop(arg0, arg1, arg2, arg3);
             return from_candid_AddShopResult_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async clearShopData(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.clearShopData(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.clearShopData(arg0);
+            return result;
         }
     }
     async deleteBackupSnapshot(arg0: string, arg1: string): Promise<void> {
@@ -241,6 +295,48 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.deleteShop(arg0);
+            return result;
+        }
+    }
+    async getActivities(arg0: string | null, arg1: bigint | null, arg2: bigint | null): Promise<Array<ActivityRecord>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getActivities(to_candid_opt_n4(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg2));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getActivities(to_candid_opt_n4(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg2));
+            return result;
+        }
+    }
+    async getAdminSettings(): Promise<AdminSettings> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAdminSettings();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAdminSettings();
+            return result;
+        }
+    }
+    async getAllUsersWithStats(arg0: bigint | null, arg1: bigint | null): Promise<Array<UserStatsResult>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllUsersWithStats(to_candid_opt_n5(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllUsersWithStats(to_candid_opt_n5(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1));
             return result;
         }
     }
@@ -304,14 +400,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserProfile();
-                return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserProfile();
-            return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCategories(arg0: string): Promise<string> {
@@ -556,14 +652,28 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getShop(arg0);
-                return from_candid_opt_n5(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getShop(arg0);
-            return from_candid_opt_n5(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getShopPerformanceStats(arg0: bigint | null, arg1: bigint | null): Promise<Array<ShopStatsResult>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getShopPerformanceStats(to_candid_opt_n5(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getShopPerformanceStats(to_candid_opt_n5(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1));
+            return result;
         }
     }
     async getShopUnits(arg0: string): Promise<string> {
@@ -612,14 +722,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n4(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUsers(arg0: string): Promise<string> {
@@ -689,6 +799,48 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.pruneOldBackups(arg0, arg1);
+            return result;
+        }
+    }
+    async purgeOldActivities(arg0: bigint): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.purgeOldActivities(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.purgeOldActivities(arg0);
+            return result;
+        }
+    }
+    async recordActivity(arg0: string, arg1: string, arg2: string, arg3: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.recordActivity(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.recordActivity(arg0, arg1, arg2, arg3);
+            return result;
+        }
+    }
+    async saveAdminSettings(arg0: AdminSettings): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveAdminSettings(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveAdminSettings(arg0);
             return result;
         }
     }
@@ -1056,34 +1208,48 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async toggleUserPaidStatus(arg0: string, arg1: string, arg2: boolean): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.toggleUserPaidStatus(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.toggleUserPaidStatus(arg0, arg1, arg2);
+            return result;
+        }
+    }
     async updateShop(arg0: string, arg1: string, arg2: string, arg3: string): Promise<UpdateShopResult> {
         if (this.processError) {
             try {
                 const result = await this.actor.updateShop(arg0, arg1, arg2, arg3);
-                return from_candid_UpdateShopResult_n6(this._uploadFile, this._downloadFile, result);
+                return from_candid_UpdateShopResult_n8(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.updateShop(arg0, arg1, arg2, arg3);
-            return from_candid_UpdateShopResult_n6(this._uploadFile, this._downloadFile, result);
+            return from_candid_UpdateShopResult_n8(this._uploadFile, this._downloadFile, result);
         }
     }
 }
 function from_candid_AddShopResult_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AddShopResult): AddShopResult {
     return from_candid_record_n2(_uploadFile, _downloadFile, value);
 }
-function from_candid_UpdateShopResult_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UpdateShopResult): UpdateShopResult {
-    return from_candid_record_n7(_uploadFile, _downloadFile, value);
+function from_candid_UpdateShopResult_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UpdateShopResult): UpdateShopResult {
+    return from_candid_record_n9(_uploadFile, _downloadFile, value);
 }
 function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_ShopMeta]): ShopMeta | null {
+function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_ShopMeta]): ShopMeta | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
@@ -1101,7 +1267,7 @@ function from_candid_record_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint
         success: value.success
     };
 }
-function from_candid_record_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     error: [] | [string];
     success: boolean;
 }): {
@@ -1112,6 +1278,12 @@ function from_candid_record_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint
         error: record_opt_to_undefined(from_candid_opt_n3(_uploadFile, _downloadFile, value.error)),
         success: value.success
     };
+}
+function to_candid_opt_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: string | null): [] | [string] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: bigint | null): [] | [bigint] {
+    return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {
     agent?: Agent;

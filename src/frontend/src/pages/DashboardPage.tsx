@@ -921,6 +921,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     diamondRewards,
     awardDiamond,
     refreshCounter,
+    isPhase1Loading,
+    phase2HasPartialError,
   } = useStore();
 
   const { currentShop, session, currentUser, createNewShop } = useAuth();
@@ -976,6 +978,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         "quickActions",
         "filterBar",
         "otherSections",
+        "diamonds",
+        "ads",
       ]);
       return mode2Visible.has(section);
     }
@@ -986,6 +990,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       "quickActions",
       "filterBar",
       "otherSections",
+      "diamonds",
+      "ads",
       "banner",
       "marquee",
       "liveBoard",
@@ -2039,6 +2045,65 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       className="flex flex-col min-h-screen bg-background pb-28 w-full"
       style={{ overflowX: "clip" }}
     >
+      {/* ── Shop-switch loading overlay — shown when Phase 1 is in-flight ── */}
+      {isPhase1Loading && (
+        <div
+          data-ocid="dashboard.loading_state"
+          className="fixed inset-0 z-[500] flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm gap-4"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Store size={24} className="text-primary animate-pulse" />
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-sm font-semibold text-foreground">
+                Loading shop data...
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Please wait a moment
+              </p>
+            </div>
+            <div className="flex gap-1.5 mt-1">
+              <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:0ms]" />
+              <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:150ms]" />
+              <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce [animation-delay:300ms]" />
+            </div>
+          </div>
+          {/* Skeleton preview */}
+          <div className="w-full max-w-sm px-4 flex flex-col gap-3 mt-2">
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="h-20 rounded-2xl bg-muted/60 animate-pulse" />
+              <div className="h-20 rounded-2xl bg-muted/60 animate-pulse" />
+              <div className="h-20 rounded-2xl bg-muted/60 animate-pulse" />
+              <div className="h-20 rounded-2xl bg-muted/60 animate-pulse" />
+            </div>
+            <div className="h-12 rounded-xl bg-muted/40 animate-pulse" />
+            <div className="h-32 rounded-2xl bg-muted/40 animate-pulse" />
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 2 partial error banner ── */}
+      {phase2HasPartialError && !isPhase1Loading && (
+        <div
+          data-ocid="dashboard.error_state"
+          className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-300"
+        >
+          <AlertTriangle size={14} className="flex-shrink-0" />
+          <span className="text-xs font-medium flex-1">
+            Some data could not be loaded. Sales, customers or payment data may
+            be incomplete.
+          </span>
+          <button
+            type="button"
+            data-ocid="dashboard.phase2_error.retry_button"
+            onClick={() => window.location.reload()}
+            className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 underline underline-offset-2 flex-shrink-0"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
       {/* ===========================================================
           LIVE UI ELEMENT — DO NOT REMOVE: MarqueeAlertBar
           Scrolling alert ticker — persistent in all future updates

@@ -1,5 +1,5 @@
 // Version check — must run before any React code
-const APP_VERSION = "v161";
+const APP_VERSION = "v172";
 if (localStorage.getItem("app_version") !== APP_VERSION) {
   localStorage.setItem("app_version", APP_VERSION);
   window.location.reload();

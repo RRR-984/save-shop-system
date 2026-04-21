@@ -5,6 +5,8 @@ import Int "mo:core/Int";
 import MultiShopTypes "types/multishop";
 import MultiShopLib "lib/multishop";
 import MultiShopMixin "mixins/multishop-api";
+import AdminDashboardTypes "types/admin-dashboard";
+import AdminDashboardMixin "mixins/admin-dashboard-api";
 
 actor {
   // Shop data: shopId -> (collectionName -> jsonData)
@@ -14,7 +16,18 @@ actor {
   // Multi-shop registry: ownerMobile -> List<ShopMeta>
   let shopRegistry : MultiShopLib.Registry = Map.empty<Text, List.List<MultiShopTypes.ShopMeta>>();
 
+  // ── Admin Dashboard Global State ────────────────────────────────────────────
+  // Flat activity log: activityId -> ActivityRecord (global, not per-shop)
+  let activityStore = Map.empty<Text, AdminDashboardTypes.ActivityRecord>();
+
+  // Single global AdminSettings record (super-admin mobile, etc.)
+  let adminSettingsBox = { var value : ?AdminDashboardTypes.AdminSettings = null };
+
+  // Paid user flags: "userId_shopId" -> Bool
+  let paidUsersStore = Map.empty<Text, Bool>();
+
   include MultiShopMixin(shopRegistry, shopData);
+  include AdminDashboardMixin(activityStore, adminSettingsBox, paidUsersStore, shopRegistry, shopData);
 
   // Backup snapshots: shopId -> List<BackupEntry>
   // Stored separately from shopData to allow structured pruning by timestamp
@@ -281,6 +294,24 @@ actor {
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     userProfiles.add(caller, profile);
+  };
+
+  // ── Clear Shop Data (Reset) ─────────────────────────────────────────────────
+
+  // Resets all data collections for the given shopId to empty arrays.
+  // Shop metadata in the registry (name, address, etc.) is preserved.
+  // Strictly scoped to the passed shopId — no other shops are affected.
+  public shared func clearShopData(shopId : Text) : async () {
+    let collections = [
+      "products", "batches", "customers", "invoices", "payments",
+      "vendors", "returns", "purchaseOrders", "customerOrders",
+      "vendorRateHistory", "transactions", "drafts", "lowPriceAlertLogs",
+      "auditLogs", "reminderLogs", "reminderRequests", "feedback",
+      "referralCodes", "referralSignups", "diamondRewards", "appConfig", "settings"
+    ];
+    for (collection in collections.vals()) {
+      saveShopCollection(shopId, collection, "[]");
+    };
   };
 
   // ── Cloud Backup & Restore ──────────────────────────────────────────────────

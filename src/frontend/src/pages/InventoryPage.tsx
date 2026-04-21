@@ -286,6 +286,9 @@ export function InventoryPage({
     getProductBatches,
     purchaseOrders,
     refreshCounter,
+    isPhase1Loading,
+    phase1HasPartialError,
+    phase2HasPartialError,
   } = useStore();
   void refreshCounter; // ensures InventoryPage re-renders whenever a mutation fires
   const { currentUser } = useAuth();
@@ -334,129 +337,190 @@ export function InventoryPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold">Inventory Management</h1>
-            <p className="text-muted-foreground text-sm">
-              FIFO batch-wise stock tracking
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {onNavigate && (
-              <Button
-                data-ocid="inventory.add_new_stock.button"
-                onClick={() => onNavigate("stock")}
-                size="sm"
-                className="gap-1.5 text-sm font-semibold"
-              >
-                <Plus size={15} />
-                <span className="hidden sm:inline">Add New Stock</span>
-                <span className="sm:hidden">Add Stock</span>
-              </Button>
-            )}
-            <Badge variant="outline" className="text-xs">
-              {totalStockItems} Products
-            </Badge>
-            {lowStockCount > 0 && (
-              <Badge variant="destructive" className="text-xs">
-                <AlertTriangle size={10} className="mr-1" /> {lowStockCount} Low
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              size={14}
-            />
-            <Input
-              data-ocid="inventory.search.input"
-              placeholder="Search products..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-8 text-sm"
-            />
-          </div>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger
-              data-ocid="inventory.category.select"
-              className="w-44 h-8 text-sm"
-            >
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Product Cards */}
-        <div className="space-y-3">
-          {filtered.length === 0 && (
-            <div
-              data-ocid="inventory.list.empty_state"
-              className="text-center py-12 text-muted-foreground"
-            >
-              <Package className="mx-auto mb-3" size={32} />
-              No products found
-            </div>
-          )}
-
-          {filtered.map((p, idx) => {
-            // Look up last purchase order for this product to pre-fill reorder
-            const lastPO = purchaseOrders
-              .filter((po) => po.productId === p.id)
-              .sort((a, b) => b.createdAt - a.createdAt)[0];
-            const isHighlighted = p.id === initialSelectedProductId;
-
-            return (
+      {/* ── Phase 1 loading skeleton (shop switch) ── */}
+      {isPhase1Loading && (
+        <div
+          data-ocid="inventory.loading_state"
+          className="px-4 md:px-6 pt-6 flex flex-col gap-4"
+        >
+          <div className="h-7 w-48 rounded-lg bg-muted/60 animate-pulse" />
+          <div className="h-8 rounded-xl bg-muted/40 animate-pulse" />
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
               <div
-                key={p.id}
-                ref={isHighlighted ? highlightedCardRef : null}
-                className={
-                  isHighlighted
-                    ? "ring-2 ring-primary ring-offset-2 rounded-xl transition-all duration-300"
-                    : ""
-                }
-              >
-                <ProductCard
-                  product={p}
-                  idx={idx}
-                  isExpanded={expandedProduct === p.id}
-                  onToggle={(id) =>
-                    setExpandedProduct(expandedProduct === id ? null : id)
-                  }
-                  getProductStock={getProductStock}
-                  getProductBatches={getProductBatches}
-                  onViewBatches={(prod) => setBatchDialogProduct(prod)}
-                  canViewCost={canViewCost}
-                  canEdit={ROLE_PERMISSIONS.canEditProduct(userRole)}
-                  canDelete={ROLE_PERMISSIONS.canDeleteProducts(userRole)}
-                  onReorder={
-                    onNavigate
-                      ? () =>
-                          onNavigate("purchase-orders", {
-                            reorderProductId: p.id,
-                            reorderVendorId: lastPO?.vendorId,
-                            reorderRate: lastPO?.rate,
-                          })
-                      : undefined
-                  }
-                />
-              </div>
-            );
-          })}
+                key={i}
+                className="h-20 rounded-2xl bg-muted/40 animate-pulse"
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── Phase 1 error banner ── */}
+      {phase1HasPartialError && !isPhase1Loading && (
+        <div
+          data-ocid="inventory.error_state"
+          className="mx-4 mt-4 flex items-center gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/40 rounded-xl text-red-800 dark:text-red-300"
+        >
+          <AlertTriangle size={14} className="flex-shrink-0" />
+          <span className="text-xs font-medium flex-1">
+            Some inventory data failed to load. Product or batch data may be
+            incomplete.
+          </span>
+          <button
+            type="button"
+            data-ocid="inventory.phase1_error.retry_button"
+            onClick={() => window.location.reload()}
+            className="text-[11px] font-semibold underline underline-offset-2 flex-shrink-0 text-red-700 dark:text-red-400"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* ── Phase 2 error banner ── */}
+      {phase2HasPartialError && !isPhase1Loading && (
+        <div className="mx-4 flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl text-amber-800 dark:text-amber-300">
+          <AlertTriangle size={13} className="flex-shrink-0" />
+          <span className="text-xs flex-1">
+            Some background data (sales, payments) could not be loaded.
+          </span>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="text-[11px] font-semibold underline underline-offset-2 flex-shrink-0 text-amber-700 dark:text-amber-400"
+          >
+            Refresh
+          </button>
+        </div>
+      )}
+
+      {!isPhase1Loading && (
+        <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold">Inventory Management</h1>
+              <p className="text-muted-foreground text-sm">
+                FIFO batch-wise stock tracking
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {onNavigate && (
+                <Button
+                  data-ocid="inventory.add_new_stock.button"
+                  onClick={() => onNavigate("stock")}
+                  size="sm"
+                  className="gap-1.5 text-sm font-semibold"
+                >
+                  <Plus size={15} />
+                  <span className="hidden sm:inline">Add New Stock</span>
+                  <span className="sm:hidden">Add Stock</span>
+                </Button>
+              )}
+              <Badge variant="outline" className="text-xs">
+                {totalStockItems} Products
+              </Badge>
+              {lowStockCount > 0 && (
+                <Badge variant="destructive" className="text-xs">
+                  <AlertTriangle size={10} className="mr-1" /> {lowStockCount}{" "}
+                  Low
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="flex gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                size={14}
+              />
+              <Input
+                data-ocid="inventory.search.input"
+                placeholder="Search products..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-8 text-sm"
+              />
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger
+                data-ocid="inventory.category.select"
+                className="w-44 h-8 text-sm"
+              >
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Product Cards */}
+          <div className="space-y-3">
+            {filtered.length === 0 && (
+              <div
+                data-ocid="inventory.list.empty_state"
+                className="text-center py-12 text-muted-foreground"
+              >
+                <Package className="mx-auto mb-3" size={32} />
+                No products found
+              </div>
+            )}
+
+            {filtered.map((p, idx) => {
+              // Look up last purchase order for this product to pre-fill reorder
+              const lastPO = purchaseOrders
+                .filter((po) => po.productId === p.id)
+                .sort((a, b) => b.createdAt - a.createdAt)[0];
+              const isHighlighted = p.id === initialSelectedProductId;
+
+              return (
+                <div
+                  key={p.id}
+                  ref={isHighlighted ? highlightedCardRef : null}
+                  className={
+                    isHighlighted
+                      ? "ring-2 ring-primary ring-offset-2 rounded-xl transition-all duration-300"
+                      : ""
+                  }
+                >
+                  <ProductCard
+                    product={p}
+                    idx={idx}
+                    isExpanded={expandedProduct === p.id}
+                    onToggle={(id) =>
+                      setExpandedProduct(expandedProduct === id ? null : id)
+                    }
+                    getProductStock={getProductStock}
+                    getProductBatches={getProductBatches}
+                    onViewBatches={(prod) => setBatchDialogProduct(prod)}
+                    canViewCost={canViewCost}
+                    canEdit={ROLE_PERMISSIONS.canEditProduct(userRole)}
+                    canDelete={ROLE_PERMISSIONS.canDeleteProducts(userRole)}
+                    onReorder={
+                      onNavigate
+                        ? () =>
+                            onNavigate("purchase-orders", {
+                              reorderProductId: p.id,
+                              reorderVendorId: lastPO?.vendorId,
+                              reorderRate: lastPO?.rate,
+                            })
+                        : undefined
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Batch View Dialog */}
       <BatchViewDialog
