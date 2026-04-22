@@ -42,8 +42,11 @@ type ShopMeta__216240044 =
     name : Text;
     ownerMobile : Text
   };
+type SuperAdminChangeLog__469178578 =
+  {fromMobile : Text; id : Text; timestamp : Int; toMobile : Text};
 type UserProfile__491224006 = {name : Text};
 actor {
+  stable PERMANENT_SUPER_ADMIN : Text;
   stable activityStore :
     {
       var root : Node__46230540<Text, ActivityRecord__625445840>;
@@ -54,6 +57,12 @@ actor {
     {
       var root : Node__46230540<Text, List__415060402<BackupEntry__821971064>>;
       var size : Nat__490723111
+    };
+  stable mergeAuditLog :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?Text]];
+      var elementIndex : Nat__490723111
     };
   stable paidUsersStore :
     {var root : Node__46230540<Text, Bool>; var size : Nat__490723111};
@@ -66,6 +75,12 @@ actor {
     {
       var root : Node__46230540<Text, List__415060402<ShopMeta__216240044>>;
       var size : Nat__490723111
+    };
+  stable superAdminChangeLog :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?SuperAdminChangeLog__469178578]];
+      var elementIndex : Nat__490723111
     };
   stable userProfiles :
     {

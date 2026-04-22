@@ -56,8 +56,9 @@ const EMPTY_FORM: StaffFormState = {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export function StaffManagementPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, session } = useAuth();
   const { users, shopId, addUser, updateUser, addAuditLog } = useStore();
+  const ownerMobile = session?.mobile ?? "";
 
   const [form, setForm] = useState<StaffFormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -138,7 +139,18 @@ export function StaffManagementPage() {
       );
       toast.success(`${form.name}'s details updated`);
     } else {
-      // Check duplicate mobile
+      // Check if mobile belongs to the shop owner
+      if (
+        ownerMobile &&
+        form.mobile.trim() === ownerMobile.replace(/\D/g, "")
+      ) {
+        setFormErrors({
+          mobile:
+            "This mobile number belongs to the shop owner and cannot be added as staff.",
+        });
+        return;
+      }
+      // Check duplicate mobile within this shop
       const dup = users.find(
         (u) =>
           u.shopId === shopId &&
@@ -146,7 +158,9 @@ export function StaffManagementPage() {
           !u.deleted,
       );
       if (dup) {
-        setFormErrors({ mobile: "This mobile number is already registered" });
+        setFormErrors({
+          mobile: "This mobile number is already registered in this shop.",
+        });
         return;
       }
       const newUser: Omit<AppUser, "id"> = {

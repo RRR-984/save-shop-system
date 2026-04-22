@@ -15,6 +15,13 @@ type UpdateShopResult =
    error: opt text;
    success: bool;
  };
+type SuperAdminChangeLog = 
+ record {
+   fromMobile: text;
+   id: text;
+   timestamp: int;
+   toMobile: text;
+ };
 type ShopStatsResult = 
  record {
    lastActivity: int;
@@ -84,9 +91,11 @@ type ActivityRecord =
 service : {
   addShop: (ownerMobile: text, shopName: text, address: text, city: text) ->
    (AddShopResult);
+  checkMobileExists: (mobile: text) -> (bool) query;
   clearShopData: (shopId: text) -> ();
   deleteBackupSnapshot: (shopId: text, snapshotId: text) -> ();
   deleteShop: (shopId: text) -> (DeleteShopResult);
+  findDuplicateUsers: () -> (text);
   getActivities: (shopIdFilter: opt text, startTs: opt int, endTs:
    opt int) -> (vec ActivityRecord) query;
   getAdminSettings: () -> (AdminSettings) query;
@@ -104,6 +113,7 @@ service : {
   getFeedback: (shopId: text) -> (text) query;
   getInvoices: (shopId: text) -> (text) query;
   getLowPriceAlertLogs: (shopId: text) -> (text) query;
+  getMergeAuditLog: () -> (text) query;
   getOwnerStats: (mobile: text) -> (OwnerStats) query;
   getPayments: (shopId: text) -> (text) query;
   getProducts: (shopId: text) -> (text) query;
@@ -118,13 +128,18 @@ service : {
   getShopPerformanceStats: (startTs: opt int, endTs: opt int) ->
    (vec ShopStatsResult) query;
   getShopUnits: (shopId: text) -> (text) query;
+  getStaffAcrossShops: (mobile: text) -> (text) query;
+  getSuperAdminChangeLog: () -> (vec SuperAdminChangeLog) query;
   getSyncLogs: (shopId: text) -> (text) query;
   getTransactions: (shopId: text) -> (text) query;
   getUserProfile: (user: principal) -> (opt UserProfile) query;
   getUsers: (shopId: text) -> (text) query;
   getVendorRateHistory: (shopId: text) -> (text) query;
   getVendors: (shopId: text) -> (text) query;
+  initPermanentSuperAdmin: () -> ();
+  isPermanentSuperAdminQuery: (mobile: text) -> (bool) query;
   listShopsForOwner: (mobile: text) -> (vec ShopMeta) query;
+  mergeUserAccounts: (primaryId: text, secondaryIds: text) -> (text);
   pruneOldBackups: (shopId: text, retainDays: nat) -> (nat);
   purgeOldActivities: (beforeTs: int) -> (nat);
   recordActivity: (shopId: text, userId: text, activityType: text, metadata:
@@ -160,4 +175,9 @@ service : {
   toggleUserPaidStatus: (userId: text, shopId: text, isPaid: bool) -> (bool);
   updateShop: (shopId: text, name: text, address: text, city: text) ->
    (UpdateShopResult);
+  verifyAndChangeSuperAdmin: (currentMobile: text, newMobile: text) ->
+   (record {
+      message: text;
+      ok: bool;
+    });
 }

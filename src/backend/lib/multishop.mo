@@ -22,6 +22,21 @@ module {
     };
   };
 
+  /// Returns true if the mobile number already owns at least one non-deleted shop.
+  /// Used by the frontend to confirm a returning user before OTP,
+  /// preventing duplicate registry entries for the same mobile.
+  public func checkMobileExists(registry : Registry, mobile : Text) : Bool {
+    switch (registry.get(mobile)) {
+      case (null) { false };
+      case (?shops) {
+        switch (shops.find(func(s : Types.ShopMeta) : Bool { not s.isDeleted })) {
+          case (null) { false };
+          case (?_) { true };
+        };
+      };
+    };
+  };
+
   /// Create a new shop and insert it into the registry.
   public func addShop(
     registry : Registry,
@@ -34,6 +49,22 @@ module {
       case (null) { List.empty<Types.ShopMeta>() };
       case (?existing) { existing };
     };
+
+    // Prevent duplicate shop name for the same owner (non-deleted shops only)
+    let nameTaken = shops.find(func(s : Types.ShopMeta) : Bool {
+      not s.isDeleted and s.name == shopName
+    });
+    switch (nameTaken) {
+      case (?_) {
+        return {
+          shopId = "";
+          success = false;
+          error = ?"A shop with this name already exists. Please choose a different name.";
+        };
+      };
+      case (null) {};
+    };
+
     let existingCount = shops.size();
     let shopId = generateShopId(ownerMobile, existingCount);
 

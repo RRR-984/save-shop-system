@@ -55,4 +55,11 @@ mixin (
   ) : async Types.OwnerStats {
     MultiShopLib.getOwnerStats(shopRegistry, shopData, mobile)
   };
+
+  /// Returns true if the mobile number already has at least one non-deleted shop
+  /// in the registry (i.e. is a known owner). The frontend calls this before
+  /// creating OTP flows to avoid spawning duplicate registry entries.
+  public query func checkMobileExists(mobile : Text) : async Bool {
+    MultiShopLib.checkMobileExists(shopRegistry, mobile)
+  };
 };

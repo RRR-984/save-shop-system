@@ -77,6 +77,12 @@ export const ShopStatsResult = IDL.Record({
   'sessionCount' : IDL.Nat,
   'ownerMobile' : IDL.Text,
 });
+export const SuperAdminChangeLog = IDL.Record({
+  'id' : IDL.Text,
+  'fromMobile' : IDL.Text,
+  'timestamp' : IDL.Int,
+  'toMobile' : IDL.Text,
+});
 export const UpdateShopResult = IDL.Record({
   'error' : IDL.Opt(IDL.Text),
   'success' : IDL.Bool,
@@ -88,9 +94,11 @@ export const idlService = IDL.Service({
       [AddShopResult],
       [],
     ),
+  'checkMobileExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'clearShopData' : IDL.Func([IDL.Text], [], []),
   'deleteBackupSnapshot' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'deleteShop' : IDL.Func([IDL.Text], [DeleteShopResult], []),
+  'findDuplicateUsers' : IDL.Func([], [IDL.Text], []),
   'getActivities' : IDL.Func(
       [IDL.Opt(IDL.Text), IDL.Opt(IDL.Int), IDL.Opt(IDL.Int)],
       [IDL.Vec(ActivityRecord)],
@@ -122,6 +130,7 @@ export const idlService = IDL.Service({
   'getFeedback' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getInvoices' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getLowPriceAlertLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getMergeAuditLog' : IDL.Func([], [IDL.Text], ['query']),
   'getOwnerStats' : IDL.Func([IDL.Text], [OwnerStats], ['query']),
   'getPayments' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getProducts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
@@ -139,6 +148,12 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getShopUnits' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getStaffAcrossShops' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getSuperAdminChangeLog' : IDL.Func(
+      [],
+      [IDL.Vec(SuperAdminChangeLog)],
+      ['query'],
+    ),
   'getSyncLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getTransactions' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getUserProfile' : IDL.Func(
@@ -149,7 +164,10 @@ export const idlService = IDL.Service({
   'getUsers' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getVendorRateHistory' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getVendors' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'initPermanentSuperAdmin' : IDL.Func([], [], []),
+  'isPermanentSuperAdminQuery' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'listShopsForOwner' : IDL.Func([IDL.Text], [IDL.Vec(ShopMeta)], ['query']),
+  'mergeUserAccounts' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
   'pruneOldBackups' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Nat], []),
   'purgeOldActivities' : IDL.Func([IDL.Int], [IDL.Nat], []),
   'recordActivity' : IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Text], [], []),
@@ -192,6 +210,11 @@ export const idlService = IDL.Service({
   'updateShop' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [UpdateShopResult],
+      [],
+    ),
+  'verifyAndChangeSuperAdmin' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Record({ 'ok' : IDL.Bool, 'message' : IDL.Text })],
       [],
     ),
 });
@@ -268,6 +291,12 @@ export const idlFactory = ({ IDL }) => {
     'sessionCount' : IDL.Nat,
     'ownerMobile' : IDL.Text,
   });
+  const SuperAdminChangeLog = IDL.Record({
+    'id' : IDL.Text,
+    'fromMobile' : IDL.Text,
+    'timestamp' : IDL.Int,
+    'toMobile' : IDL.Text,
+  });
   const UpdateShopResult = IDL.Record({
     'error' : IDL.Opt(IDL.Text),
     'success' : IDL.Bool,
@@ -279,9 +308,11 @@ export const idlFactory = ({ IDL }) => {
         [AddShopResult],
         [],
       ),
+    'checkMobileExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'clearShopData' : IDL.Func([IDL.Text], [], []),
     'deleteBackupSnapshot' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'deleteShop' : IDL.Func([IDL.Text], [DeleteShopResult], []),
+    'findDuplicateUsers' : IDL.Func([], [IDL.Text], []),
     'getActivities' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Opt(IDL.Int), IDL.Opt(IDL.Int)],
         [IDL.Vec(ActivityRecord)],
@@ -313,6 +344,7 @@ export const idlFactory = ({ IDL }) => {
     'getFeedback' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getInvoices' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getLowPriceAlertLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getMergeAuditLog' : IDL.Func([], [IDL.Text], ['query']),
     'getOwnerStats' : IDL.Func([IDL.Text], [OwnerStats], ['query']),
     'getPayments' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getProducts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
@@ -330,6 +362,12 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getShopUnits' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getStaffAcrossShops' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getSuperAdminChangeLog' : IDL.Func(
+        [],
+        [IDL.Vec(SuperAdminChangeLog)],
+        ['query'],
+      ),
     'getSyncLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getTransactions' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getUserProfile' : IDL.Func(
@@ -340,7 +378,10 @@ export const idlFactory = ({ IDL }) => {
     'getUsers' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getVendorRateHistory' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getVendors' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'initPermanentSuperAdmin' : IDL.Func([], [], []),
+    'isPermanentSuperAdminQuery' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'listShopsForOwner' : IDL.Func([IDL.Text], [IDL.Vec(ShopMeta)], ['query']),
+    'mergeUserAccounts' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
     'pruneOldBackups' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Nat], []),
     'purgeOldActivities' : IDL.Func([IDL.Int], [IDL.Nat], []),
     'recordActivity' : IDL.Func(
@@ -387,6 +428,11 @@ export const idlFactory = ({ IDL }) => {
     'updateShop' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [UpdateShopResult],
+        [],
+      ),
+    'verifyAndChangeSuperAdmin' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Record({ 'ok' : IDL.Bool, 'message' : IDL.Text })],
         [],
       ),
   });

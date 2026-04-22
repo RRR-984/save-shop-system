@@ -240,4 +240,17 @@ export const mockBackend: backendInterface = {
   recordActivity: async () => undefined,
   saveAdminSettings: async () => true,
   toggleUserPaidStatus: async () => true,
+  checkMobileExists: async (_mobile: string) => false,
+  findDuplicateUsers: async () => JSON.stringify([]),
+  getMergeAuditLog: async () => JSON.stringify([]),
+  getStaffAcrossShops: async (_mobile: string) => JSON.stringify([]),
+  mergeUserAccounts: async (_primaryId: string, _secondaryIds: string) =>
+    JSON.stringify({ success: true }),
+  getSuperAdminChangeLog: async () => [],
+  initPermanentSuperAdmin: async () => undefined,
+  isPermanentSuperAdminQuery: async (_mobile: string) => false,
+  verifyAndChangeSuperAdmin: async (_currentMobile: string, _newMobile: string) => ({
+    ok: true,
+    message: "Super admin changed successfully",
+  }),
 };

@@ -1020,16 +1020,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       `[StoreContext] === Loading shop from ICP backend: ${shopId} (cacheFresh=${isCacheFresh}, shopSwitch=${isShopSwitch}) ===`,
     );
 
-    // ── Slow network detection: show notice if Phase 1 takes >5s ────────────
-    const slowNetworkTimer = setTimeout(() => {
-      // Only warn if we're still loading
-      toast("Slow connection, please wait...", {
-        id: "slow-network-warning",
-        duration: 8000,
-        icon: "🌐",
-      });
-    }, 5000);
-
     // ── PHASE 1: Essential collections ─────────────────────────────────────
     // products, categories, batches, shopUnits, transactions, users
     // Uses Promise.allSettled so one failure doesn't block the rest.
@@ -1052,10 +1042,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           usersRes,
           shopUnitsRes,
         ]) => {
-          clearTimeout(slowNetworkTimer);
-          // Dismiss slow network toast if it was shown
-          toast.dismiss("slow-network-warning");
-
           let anyFailed = false;
 
           if (productsRes.status === "fulfilled" && productsRes.value) {
@@ -1305,17 +1291,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       )
       .catch(() => {
         // Phase 1 itself threw (shouldn't happen with allSettled but safety net)
-        clearTimeout(slowNetworkTimer);
-        toast.dismiss("slow-network-warning");
         setIsPhase1Loading(false);
         setIsLoading(false);
         setPhase1HasPartialError(true);
       });
 
-    // Cleanup: cancel slow-network timer if effect re-runs before it fires
-    return () => {
-      clearTimeout(slowNetworkTimer);
-    };
+    // No cleanup needed (no timers active)
+    return () => {};
   }, [shopId, actor, syncUsersToAuth]);
 
   // ── Draft / Snapshot helper (stable via ref pattern) ──────────────────────────────────────────

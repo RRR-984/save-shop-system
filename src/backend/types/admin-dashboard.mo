@@ -20,6 +20,15 @@ module {
     updatedAt        : Int;
   };
 
+  /// Audit record for every super-admin mobile change.
+  /// Permanently stored; never deleted.
+  public type SuperAdminChangeLog = {
+    id          : Text;
+    fromMobile  : Text;
+    toMobile    : Text;
+    timestamp   : Int;
+  };
+
   /// Per-user stats aggregated for the super-admin dashboard.
   public type UserStatsResult = {
     userId           : Text;

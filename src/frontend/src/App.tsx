@@ -178,21 +178,6 @@ const PAGE_TITLES: Record<NavPage, string> = {
   "super-admin": "🛡️ Super Admin",
 };
 
-/** Non-blocking amber banner shown when Phase 1 takes > 2000ms */
-function SlowNetworkBanner({ visible }: { visible: boolean }) {
-  if (!visible) return null;
-  return (
-    <output
-      className="fixed top-0 left-0 right-0 z-[9999] flex items-center justify-center gap-2 bg-amber-500/90 text-white text-xs font-medium py-1.5 px-4 backdrop-blur-sm"
-      data-ocid="app.slow_network_banner"
-      aria-live="polite"
-    >
-      <div className="w-3 h-3 rounded-full border border-white/60 border-t-white animate-spin" />
-      Slow internet, working...
-    </output>
-  );
-}
-
 /** Badge shown on dashboard when Phase 1 had partial errors */
 function PartialDataBadge({ visible }: { visible: boolean }) {
   if (!visible) return null;
@@ -224,8 +209,6 @@ function AppContent() {
     shopId,
   } = useStore();
   const [loadingTooLong, setLoadingTooLong] = useState(false);
-  // Slow network: Phase 1 not done after 2000ms
-  const [slowNetwork, setSlowNetwork] = useState(false);
   // Auto-hide skeleton after 1.5s max even if Phase 1 hasn't resolved
   const [skeletonTimeout, setSkeletonTimeout] = useState(false);
 
@@ -253,16 +236,6 @@ function AppContent() {
     const timer = setTimeout(() => setLoadingTooLong(true), 5000);
     return () => clearTimeout(timer);
   }, [isLoading]);
-
-  // Slow network banner: show after 2000ms if Phase 1 still loading
-  useEffect(() => {
-    if (!isPhase1Loading) {
-      setSlowNetwork(false);
-      return;
-    }
-    const timer = setTimeout(() => setSlowNetwork(true), 2000);
-    return () => clearTimeout(timer);
-  }, [isPhase1Loading]);
 
   // Skeleton timeout: hide skeleton after 1.5s regardless of Phase 1
   useEffect(() => {
@@ -463,7 +436,6 @@ function AppContent() {
         className="min-h-screen flex flex-col bg-background"
         data-ocid="app.loading_state"
       >
-        <SlowNetworkBanner visible={slowNetwork} />
         {/* Minimal header skeleton */}
         <div className="h-14 border-b border-border bg-card flex items-center px-4 gap-3">
           <div className="w-8 h-8 rounded bg-muted animate-pulse" />
@@ -493,7 +465,6 @@ function AppContent() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <SlowNetworkBanner visible={slowNetwork} />
       <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-auto">

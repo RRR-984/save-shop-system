@@ -67,7 +67,7 @@ interface AuthContextValue {
     mobile: string,
     otp: string,
     shopName: string,
-  ) => { success: boolean; error?: string };
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // PIN flow (Manager / Staff login via mobile + PIN)
   loginWithPin: (
@@ -483,11 +483,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Verify OTP ────────────────────────────────────────────────────────────
   const verifyOtp = useCallback(
-    (
+    async (
       mobile: string,
       enteredOtp: string,
       shopName: string,
-    ): { success: boolean; error?: string } => {
+    ): Promise<{ success: boolean; error?: string }> => {
       const cleaned = mobile.replace(/\D/g, "");
 
       let pending = pendingOtp;
@@ -509,27 +509,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const shopId = `shop_${cleaned}`;
 
+      // ── Unique user enforcement: check backend for existing shops before
+      //    creating a new one. If the mobile already has shops registered,
+      //    skip addShop — the user account already exists.
+      let resolvedShopId = shopId;
+      let resolvedShopName = shopName.trim() || `Shop ${cleaned}`;
+
+      const actor = actorRef.current;
+      if (actor) {
+        try {
+          const existingBackendShops = await actor.listShopsForOwner(cleaned);
+          const activeBackendShops = existingBackendShops.filter(
+            (s) => !s.isDeleted,
+          );
+          if (activeBackendShops.length > 0) {
+            // Returning user — do NOT call addShop again. Use the most recent shop.
+            const latest = activeBackendShops.reduce((a, b) =>
+              a.createdAt > b.createdAt ? a : b,
+            );
+            resolvedShopId = latest.id;
+            resolvedShopName = latest.name;
+          } else {
+            // First-time user — create the primary shop in backend
+            await actor.addShop(cleaned, resolvedShopName, "", "");
+          }
+        } catch (err) {
+          // Backend unreachable — fall through to localStorage-only path
+          console.warn("[AuthContext] verifyOtp backend check failed:", err);
+        }
+      }
+
       // Auto-create shop record if first time (localStorage compat)
       const existingShops = lsGet<Shop[]>("store_shops") ?? [];
-      const shopExists = existingShops.find((s) => s.id === shopId);
+      const shopExists = existingShops.find((s) => s.id === resolvedShopId);
       if (!shopExists) {
         const newShop: Shop = {
-          id: shopId,
-          name: shopName.trim() || `Shop ${cleaned}`,
+          id: resolvedShopId,
+          name: resolvedShopName,
           createdAt: new Date().toISOString(),
           mobile: cleaned,
         };
         lsSet("store_shops", [...existingShops, newShop]);
+      } else {
+        resolvedShopName = shopExists.name || resolvedShopName;
       }
 
-      const shopRecord =
-        shopExists ??
-        lsGet<Shop[]>("store_shops")?.find((s) => s.id === shopId);
-      const resolvedShopName =
-        shopRecord?.name ?? (shopName.trim() || `Shop ${cleaned}`);
-
       const existingUsers = usersRef.current.filter(
-        (u) => u.shopId === shopId && !u.deleted,
+        (u) => u.shopId === resolvedShopId && !u.deleted,
       );
       const matchedUser = existingUsers.find(
         (u) => u.mobile?.replace(/\D/g, "") === cleaned,
@@ -540,12 +566,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const newSession: MobileSession = {
         mobile: cleaned,
-        shopId,
+        shopId: resolvedShopId,
         shopName: resolvedShopName,
         loginAt: new Date().toISOString(),
         userId,
         userRole,
-        selectedShopId: shopId,
+        selectedShopId: resolvedShopId,
       };
 
       lsSet("mobile_auth_session", newSession);

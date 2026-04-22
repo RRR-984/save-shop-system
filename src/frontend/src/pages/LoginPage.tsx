@@ -168,7 +168,7 @@ function OtpLoginFlow({
     setIsVerifying(true);
     setOtpError("");
     await new Promise((r) => setTimeout(r, 350));
-    const result = verifyOtp(mobile.replace(/\D/g, ""), otp, shopName);
+    const result = await verifyOtp(mobile.replace(/\D/g, ""), otp, shopName);
     if (!result.success) {
       setOtpError(result.error ?? "Error verifying OTP");
     } else {

@@ -5,25 +5,30 @@ interface SyncStatusBannerProps {
   engine: SyncEngineState;
 }
 
+/**
+ * Subtle floating pill — never blocks UI, never shows alarming "Slow internet" text.
+ * Renders as a small fixed badge in the bottom-right corner while syncing or on error.
+ * Returns null when idle so it disappears completely.
+ */
 export function SyncStatusBanner({ engine }: SyncStatusBannerProps) {
   const { syncStatus, pendingCount, syncingCount, errorCount, triggerSync } =
     engine;
 
-  // Only visible during syncing or error states
+  // Invisible when idle — no DOM node at all
   if (syncStatus === "idle" || syncStatus === "pending") return null;
 
   if (syncStatus === "syncing") {
     const total = syncingCount + pendingCount;
     return (
       <div
-        className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 text-white text-xs font-medium"
+        className="fixed bottom-20 right-4 z-50 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-800/80 dark:bg-gray-700/90 text-white text-[11px] font-medium shadow-lg backdrop-blur-sm pointer-events-none select-none"
         data-ocid="sync_banner.syncing"
         aria-live="polite"
+        aria-label="Updating data"
       >
-        <Loader2 size={12} className="animate-spin flex-shrink-0" />
+        <Loader2 size={10} className="animate-spin flex-shrink-0" />
         <span>
-          Syncing data
-          {total > 1 ? ` (${syncingCount}/${total})` : ""}…
+          Updating data{total > 1 ? ` (${syncingCount}/${total})` : ""}…
         </span>
       </div>
     );
@@ -32,23 +37,21 @@ export function SyncStatusBanner({ engine }: SyncStatusBannerProps) {
   if (syncStatus === "error") {
     return (
       <div
-        className="flex items-center justify-between gap-2 px-4 py-1.5 bg-destructive/90 text-white text-xs font-medium"
+        className="fixed bottom-20 right-4 z-50 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-800/80 dark:bg-gray-700/90 text-white text-[11px] font-medium shadow-lg backdrop-blur-sm"
         data-ocid="sync_banner.error"
         role="alert"
+        aria-label="Sync failed"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <AlertCircle size={12} className="flex-shrink-0" />
-          <span className="truncate">
-            Sync failed for {errorCount} record{errorCount !== 1 ? "s" : ""}
-          </span>
-        </div>
+        <AlertCircle size={10} className="flex-shrink-0 text-red-400" />
+        <span>Sync failed ({errorCount})</span>
         <button
           type="button"
           onClick={triggerSync}
           data-ocid="sync_banner.retry_button"
-          className="flex items-center gap-1 px-2 py-0.5 rounded border border-white/40 hover:bg-white/20 transition-colors whitespace-nowrap flex-shrink-0"
+          className="ml-1 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border border-white/30 hover:bg-white/20 transition-colors text-[10px] whitespace-nowrap"
+          aria-label="Retry sync"
         >
-          <RefreshCw size={10} />
+          <RefreshCw size={9} />
           Retry
         </button>
       </div>

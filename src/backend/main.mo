@@ -26,8 +26,38 @@ actor {
   // Paid user flags: "userId_shopId" -> Bool
   let paidUsersStore = Map.empty<Text, Bool>();
 
+  // Merge audit log: global list of JSON audit entry strings (last 10 used, unlimited stored)
+  let mergeAuditLog = List.empty<Text>();
+
+  // Permanent audit trail of every super-admin mobile change (never deleted)
+  let superAdminChangeLog = List.empty<AdminDashboardTypes.SuperAdminChangeLog>();
+
   include MultiShopMixin(shopRegistry, shopData);
-  include AdminDashboardMixin(activityStore, adminSettingsBox, paidUsersStore, shopRegistry, shopData);
+  include AdminDashboardMixin(activityStore, adminSettingsBox, paidUsersStore, shopRegistry, shopData, mergeAuditLog, superAdminChangeLog);
+
+  // ── Permanent super-admin bootstrap ────────────────────────────────────────
+  // On every canister start, ensure the permanent super-admin (9929306080) is set.
+  // This runs once at actor initialization and guarantees recoverability after
+  // upgrades or a null adminSettingsBox.
+  switch (adminSettingsBox.value) {
+    case (null) {
+      adminSettingsBox.value := ?{
+        superAdminMobile = "9929306080";
+        createdAt        = Time.now();
+        updatedAt        = Time.now();
+      };
+    };
+    case (?s) {
+      if (s.superAdminMobile == "") {
+        adminSettingsBox.value := ?{
+          superAdminMobile = "9929306080";
+          createdAt        = s.createdAt;
+          updatedAt        = Time.now();
+        };
+      };
+      // Already has a valid super-admin — do not overwrite.
+    };
+  };
 
   // Backup snapshots: shopId -> List<BackupEntry>
   // Stored separately from shopData to allow structured pruning by timestamp

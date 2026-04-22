@@ -88,7 +88,6 @@ function CreditPanel({
       style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
       data-ocid="credit_panel.overlay"
     >
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: overlay backdrop dismiss */}
       <div
         role="button"
         tabIndex={-1}

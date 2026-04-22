@@ -767,7 +767,7 @@ function TopBarInner({
               className="flex items-center gap-1 text-[10px] font-medium text-amber-500 flex-shrink-0"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
-              <span className="hidden sm:inline">Syncing</span>
+              <span className="hidden sm:inline">Updating</span>
             </span>
           ) : syncStatus === "sync_pending" ? (
             <span

@@ -68,6 +68,12 @@ export interface ShopStatsResult {
   'sessionCount' : bigint,
   'ownerMobile' : string,
 }
+export interface SuperAdminChangeLog {
+  'id' : string,
+  'fromMobile' : string,
+  'timestamp' : bigint,
+  'toMobile' : string,
+}
 export interface UpdateShopResult {
   'error' : [] | [string],
   'success' : boolean,
@@ -85,9 +91,11 @@ export interface UserStatsResult {
 }
 export interface _SERVICE {
   'addShop' : ActorMethod<[string, string, string, string], AddShopResult>,
+  'checkMobileExists' : ActorMethod<[string], boolean>,
   'clearShopData' : ActorMethod<[string], undefined>,
   'deleteBackupSnapshot' : ActorMethod<[string, string], undefined>,
   'deleteShop' : ActorMethod<[string], DeleteShopResult>,
+  'findDuplicateUsers' : ActorMethod<[], string>,
   'getActivities' : ActorMethod<
     [[] | [string], [] | [bigint], [] | [bigint]],
     Array<ActivityRecord>
@@ -109,6 +117,7 @@ export interface _SERVICE {
   'getFeedback' : ActorMethod<[string], string>,
   'getInvoices' : ActorMethod<[string], string>,
   'getLowPriceAlertLogs' : ActorMethod<[string], string>,
+  'getMergeAuditLog' : ActorMethod<[], string>,
   'getOwnerStats' : ActorMethod<[string], OwnerStats>,
   'getPayments' : ActorMethod<[string], string>,
   'getProducts' : ActorMethod<[string], string>,
@@ -125,13 +134,18 @@ export interface _SERVICE {
     Array<ShopStatsResult>
   >,
   'getShopUnits' : ActorMethod<[string], string>,
+  'getStaffAcrossShops' : ActorMethod<[string], string>,
+  'getSuperAdminChangeLog' : ActorMethod<[], Array<SuperAdminChangeLog>>,
   'getSyncLogs' : ActorMethod<[string], string>,
   'getTransactions' : ActorMethod<[string], string>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUsers' : ActorMethod<[string], string>,
   'getVendorRateHistory' : ActorMethod<[string], string>,
   'getVendors' : ActorMethod<[string], string>,
+  'initPermanentSuperAdmin' : ActorMethod<[], undefined>,
+  'isPermanentSuperAdminQuery' : ActorMethod<[string], boolean>,
   'listShopsForOwner' : ActorMethod<[string], Array<ShopMeta>>,
+  'mergeUserAccounts' : ActorMethod<[string, string], string>,
   'pruneOldBackups' : ActorMethod<[string, bigint], bigint>,
   'purgeOldActivities' : ActorMethod<[bigint], bigint>,
   'recordActivity' : ActorMethod<[string, string, string, string], undefined>,
@@ -169,6 +183,10 @@ export interface _SERVICE {
   'updateShop' : ActorMethod<
     [string, string, string, string],
     UpdateShopResult
+  >,
+  'verifyAndChangeSuperAdmin' : ActorMethod<
+    [string, string],
+    { 'ok' : boolean, 'message' : string }
   >,
 }
 export declare const idlService: IDL.ServiceClass;

@@ -15,6 +15,12 @@ export interface OwnerStats {
     shopStats: Array<ShopStats>;
     totalTransactions: bigint;
 }
+export interface SuperAdminChangeLog {
+    id: string;
+    fromMobile: string;
+    timestamp: bigint;
+    toMobile: string;
+}
 export interface BackupSnapshotMeta {
     id: string;
     tag: string;
@@ -86,9 +92,11 @@ export interface UserStatsResult {
 }
 export interface backendInterface {
     addShop(ownerMobile: string, shopName: string, address: string, city: string): Promise<AddShopResult>;
+    checkMobileExists(mobile: string): Promise<boolean>;
     clearShopData(shopId: string): Promise<void>;
     deleteBackupSnapshot(shopId: string, snapshotId: string): Promise<void>;
     deleteShop(shopId: string): Promise<DeleteShopResult>;
+    findDuplicateUsers(): Promise<string>;
     getActivities(shopIdFilter: string | null, startTs: bigint | null, endTs: bigint | null): Promise<Array<ActivityRecord>>;
     getAdminSettings(): Promise<AdminSettings>;
     getAllUsersWithStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<UserStatsResult>>;
@@ -104,6 +112,7 @@ export interface backendInterface {
     getFeedback(shopId: string): Promise<string>;
     getInvoices(shopId: string): Promise<string>;
     getLowPriceAlertLogs(shopId: string): Promise<string>;
+    getMergeAuditLog(): Promise<string>;
     getOwnerStats(mobile: string): Promise<OwnerStats>;
     getPayments(shopId: string): Promise<string>;
     getProducts(shopId: string): Promise<string>;
@@ -117,13 +126,18 @@ export interface backendInterface {
     getShop(shopId: string): Promise<ShopMeta | null>;
     getShopPerformanceStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<ShopStatsResult>>;
     getShopUnits(shopId: string): Promise<string>;
+    getStaffAcrossShops(mobile: string): Promise<string>;
+    getSuperAdminChangeLog(): Promise<Array<SuperAdminChangeLog>>;
     getSyncLogs(shopId: string): Promise<string>;
     getTransactions(shopId: string): Promise<string>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsers(shopId: string): Promise<string>;
     getVendorRateHistory(shopId: string): Promise<string>;
     getVendors(shopId: string): Promise<string>;
+    initPermanentSuperAdmin(): Promise<void>;
+    isPermanentSuperAdminQuery(mobile: string): Promise<boolean>;
     listShopsForOwner(mobile: string): Promise<Array<ShopMeta>>;
+    mergeUserAccounts(primaryId: string, secondaryIds: string): Promise<string>;
     pruneOldBackups(shopId: string, retainDays: bigint): Promise<bigint>;
     purgeOldActivities(beforeTs: bigint): Promise<bigint>;
     recordActivity(shopId: string, userId: string, activityType: string, metadata: string): Promise<void>;
@@ -156,4 +170,8 @@ export interface backendInterface {
     saveVendors(shopId: string, data: string): Promise<void>;
     toggleUserPaidStatus(userId: string, shopId: string, isPaid: boolean): Promise<boolean>;
     updateShop(shopId: string, name: string, address: string, city: string): Promise<UpdateShopResult>;
+    verifyAndChangeSuperAdmin(currentMobile: string, newMobile: string): Promise<{
+        ok: boolean;
+        message: string;
+    }>;
 }

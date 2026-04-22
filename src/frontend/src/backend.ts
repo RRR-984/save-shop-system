@@ -97,6 +97,12 @@ export interface OwnerStats {
     shopStats: Array<ShopStats>;
     totalTransactions: bigint;
 }
+export interface SuperAdminChangeLog {
+    id: string;
+    fromMobile: string;
+    timestamp: bigint;
+    toMobile: string;
+}
 export interface BackupSnapshotMeta {
     id: string;
     tag: string;
@@ -168,9 +174,11 @@ export interface UserStatsResult {
 }
 export interface backendInterface {
     addShop(ownerMobile: string, shopName: string, address: string, city: string): Promise<AddShopResult>;
+    checkMobileExists(mobile: string): Promise<boolean>;
     clearShopData(shopId: string): Promise<void>;
     deleteBackupSnapshot(shopId: string, snapshotId: string): Promise<void>;
     deleteShop(shopId: string): Promise<DeleteShopResult>;
+    findDuplicateUsers(): Promise<string>;
     getActivities(shopIdFilter: string | null, startTs: bigint | null, endTs: bigint | null): Promise<Array<ActivityRecord>>;
     getAdminSettings(): Promise<AdminSettings>;
     getAllUsersWithStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<UserStatsResult>>;
@@ -186,6 +194,7 @@ export interface backendInterface {
     getFeedback(shopId: string): Promise<string>;
     getInvoices(shopId: string): Promise<string>;
     getLowPriceAlertLogs(shopId: string): Promise<string>;
+    getMergeAuditLog(): Promise<string>;
     getOwnerStats(mobile: string): Promise<OwnerStats>;
     getPayments(shopId: string): Promise<string>;
     getProducts(shopId: string): Promise<string>;
@@ -199,13 +208,18 @@ export interface backendInterface {
     getShop(shopId: string): Promise<ShopMeta | null>;
     getShopPerformanceStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<ShopStatsResult>>;
     getShopUnits(shopId: string): Promise<string>;
+    getStaffAcrossShops(mobile: string): Promise<string>;
+    getSuperAdminChangeLog(): Promise<Array<SuperAdminChangeLog>>;
     getSyncLogs(shopId: string): Promise<string>;
     getTransactions(shopId: string): Promise<string>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsers(shopId: string): Promise<string>;
     getVendorRateHistory(shopId: string): Promise<string>;
     getVendors(shopId: string): Promise<string>;
+    initPermanentSuperAdmin(): Promise<void>;
+    isPermanentSuperAdminQuery(mobile: string): Promise<boolean>;
     listShopsForOwner(mobile: string): Promise<Array<ShopMeta>>;
+    mergeUserAccounts(primaryId: string, secondaryIds: string): Promise<string>;
     pruneOldBackups(shopId: string, retainDays: bigint): Promise<bigint>;
     purgeOldActivities(beforeTs: bigint): Promise<bigint>;
     recordActivity(shopId: string, userId: string, activityType: string, metadata: string): Promise<void>;
@@ -238,6 +252,10 @@ export interface backendInterface {
     saveVendors(shopId: string, data: string): Promise<void>;
     toggleUserPaidStatus(userId: string, shopId: string, isPaid: boolean): Promise<boolean>;
     updateShop(shopId: string, name: string, address: string, city: string): Promise<UpdateShopResult>;
+    verifyAndChangeSuperAdmin(currentMobile: string, newMobile: string): Promise<{
+        ok: boolean;
+        message: string;
+    }>;
 }
 import type { AddShopResult as _AddShopResult, ShopMeta as _ShopMeta, UpdateShopResult as _UpdateShopResult, UserProfile as _UserProfile } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -254,6 +272,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.addShop(arg0, arg1, arg2, arg3);
             return from_candid_AddShopResult_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async checkMobileExists(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.checkMobileExists(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.checkMobileExists(arg0);
+            return result;
         }
     }
     async clearShopData(arg0: string): Promise<void> {
@@ -295,6 +327,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.deleteShop(arg0);
+            return result;
+        }
+    }
+    async findDuplicateUsers(): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.findDuplicateUsers();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.findDuplicateUsers();
             return result;
         }
     }
@@ -508,6 +554,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getMergeAuditLog(): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getMergeAuditLog();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getMergeAuditLog();
+            return result;
+        }
+    }
     async getOwnerStats(arg0: string): Promise<OwnerStats> {
         if (this.processError) {
             try {
@@ -690,6 +750,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async getStaffAcrossShops(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getStaffAcrossShops(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getStaffAcrossShops(arg0);
+            return result;
+        }
+    }
+    async getSuperAdminChangeLog(): Promise<Array<SuperAdminChangeLog>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getSuperAdminChangeLog();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getSuperAdminChangeLog();
+            return result;
+        }
+    }
     async getSyncLogs(arg0: string): Promise<string> {
         if (this.processError) {
             try {
@@ -774,6 +862,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async initPermanentSuperAdmin(): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.initPermanentSuperAdmin();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.initPermanentSuperAdmin();
+            return result;
+        }
+    }
+    async isPermanentSuperAdminQuery(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isPermanentSuperAdminQuery(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isPermanentSuperAdminQuery(arg0);
+            return result;
+        }
+    }
     async listShopsForOwner(arg0: string): Promise<Array<ShopMeta>> {
         if (this.processError) {
             try {
@@ -785,6 +901,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.listShopsForOwner(arg0);
+            return result;
+        }
+    }
+    async mergeUserAccounts(arg0: string, arg1: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.mergeUserAccounts(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.mergeUserAccounts(arg0, arg1);
             return result;
         }
     }
@@ -1234,6 +1364,23 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.updateShop(arg0, arg1, arg2, arg3);
             return from_candid_UpdateShopResult_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async verifyAndChangeSuperAdmin(arg0: string, arg1: string): Promise<{
+        ok: boolean;
+        message: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.verifyAndChangeSuperAdmin(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.verifyAndChangeSuperAdmin(arg0, arg1);
+            return result;
         }
     }
 }
