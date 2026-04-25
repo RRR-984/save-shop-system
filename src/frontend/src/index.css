@@ -681,16 +681,21 @@
 
 /* ===========================================================
    FLOATING ACTION BUTTON — always visible on ALL devices
-   new-sale-fab: fixed bottom-right, never hidden, never clipped
+   new-sale-fab: position controlled by React inline style (left/top)
+   Bottom/right removed — React state drives exact position.
    =========================================================== */
 .new-sale-fab {
   position: fixed !important;
-  bottom: 20px !important;
-  right: 20px !important;
   z-index: 9999 !important;
   display: flex !important;
   visibility: visible !important;
   opacity: 1 !important;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.new-sale-fab.is-dragging {
+  cursor: grabbing !important;
 }
 
 @media (max-width: 1024px) {
@@ -698,8 +703,6 @@
     display: flex !important;
     visibility: visible !important;
     opacity: 1 !important;
-    bottom: 20px !important;
-    right: 20px !important;
   }
 }
 

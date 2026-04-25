@@ -253,4 +253,18 @@ export const mockBackend: backendInterface = {
     ok: true,
     message: "Super admin changed successfully",
   }),
+  fullSystemReset: async (_callerMobile: string) => ({
+    success: true,
+    deletedShops: BigInt(0),
+    message: "System reset complete",
+  }),
+  // ── Concurrency / Locking ────────────────────────────────────────────────
+  acquireLock: async () => ({ __kind__: "acquired" as const, acquired: null }),
+  releaseLock: async () => true,
+  heartbeatLock: async () => true,
+  getLockStatus: async () => null,
+  releaseAllLocksForUser: async () => BigInt(0),
+  getActiveUsersForShop: async () => [],
+  checkIdempotency: async () => null,
+  registerIdempotency: async () => true,
 };

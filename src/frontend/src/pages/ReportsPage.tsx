@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { PartialDataBadge } from "../components/PartialDataBadge";
 import { useStore } from "../context/StoreContext";
 import type { NavPage } from "../types/store";
 
@@ -87,7 +88,17 @@ function ReportsPageInner({
     getProductStock,
     getStockValue,
     getProductBatches,
+    isPhase2Loading,
+    appConfig,
+    autoMode,
   } = useStore();
+
+  // Phase2 key — when isPhase2Loading flips to false, useMemo caches below
+  // automatically recompute with fresh invoice data. Consumed via void to
+  // satisfy the linter while still establishing the reactivity dependency.
+  void isPhase2Loading;
+  void appConfig; // ensures re-render when featureMode changes
+  void autoMode; // ensures re-render when mode switcher changes
 
   // ── 12-Month Profit Trend ──────────────────────────────────────────────────
   const monthlyProfitData = useMemo(() => {
@@ -263,6 +274,9 @@ function ReportsPageInner({
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Partial data warning — shown on ALL pages when Phase1 had errors */}
+      <PartialDataBadge />
+
       <div className="px-4 md:px-6 pb-6 flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>

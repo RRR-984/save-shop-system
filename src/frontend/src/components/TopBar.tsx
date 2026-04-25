@@ -10,7 +10,6 @@ import {
 import {
   Bell,
   CheckCircle,
-  Download,
   Home,
   Loader2,
   Moon,
@@ -28,7 +27,6 @@ import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import { useTheme } from "../context/ThemeContext";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
-import usePWA from "../hooks/usePWA";
 import type { AutoModeType, ShopMeta } from "../types/store";
 
 interface TopBarProps {
@@ -39,14 +37,13 @@ interface TopBarProps {
   isHome?: boolean;
 }
 
-// ─── Auto Mode Switcher (Simple | Smart | Pro) ────────────────────────────────
+// ─── Auto Mode Switcher ────────────────────────────────────────────────────────
 const AUTO_MODE_OPTIONS: {
   value: AutoModeType;
   label: string;
   shortLabel: string;
   emoji: string;
   desc: string;
-  color: string;
   activeClass: string;
 }[] = [
   {
@@ -55,17 +52,15 @@ const AUTO_MODE_OPTIONS: {
     shortLabel: "S",
     emoji: "🟢",
     desc: "Stock, Billing, Payment",
-    color: "green",
     activeClass:
       "bg-green-500 text-white border-green-500 shadow-sm shadow-green-200 dark:shadow-green-900/30",
   },
   {
     value: "smart",
     label: "Smart",
-    shortLabel: "M",
+    shortLabel: "Sm",
     emoji: "🟡",
     desc: "Inventory, Reports, Credit",
-    color: "amber",
     activeClass:
       "bg-amber-500 text-white border-amber-500 shadow-sm shadow-amber-200 dark:shadow-amber-900/30",
   },
@@ -75,12 +70,12 @@ const AUTO_MODE_OPTIONS: {
     shortLabel: "P",
     emoji: "🔴",
     desc: "All features",
-    color: "red",
     activeClass:
       "bg-red-500 text-white border-red-500 shadow-sm shadow-red-200 dark:shadow-red-900/30",
   },
 ];
 
+/** Full-size mode switcher — for tablet+desktop */
 function AutoModeSwitcher({
   mode,
   onChange,
@@ -117,9 +112,52 @@ function AutoModeSwitcher({
             `}
           >
             <span className="text-[10px] leading-none">{opt.emoji}</span>
-            {/* Full label on sm+, short on xs */}
-            <span className="hidden sm:inline leading-none">{opt.label}</span>
-            <span className="sm:hidden leading-none">{opt.shortLabel}</span>
+            <span className="leading-none">{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Compact mode switcher for mobile — colored dots + single-letter label */
+function AutoModeSwitcherCompact({
+  mode,
+  onChange,
+}: {
+  mode: AutoModeType;
+  onChange: (m: AutoModeType) => void;
+}) {
+  return (
+    <div
+      className="flex items-center rounded-md border border-border bg-secondary p-0.5 gap-0.5 flex-shrink-0"
+      data-ocid="topbar.auto_mode_switcher_compact"
+      role="toolbar"
+      aria-label="UI Mode switcher"
+    >
+      {AUTO_MODE_OPTIONS.map((opt) => {
+        const isActive = mode === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            data-ocid={`topbar.auto_mode_compact.${opt.value}`}
+            onClick={() => onChange(opt.value)}
+            title={`${opt.emoji} ${opt.label} Mode`}
+            aria-pressed={isActive}
+            className={`
+              flex items-center gap-0.5 h-6 px-1.5 rounded text-[11px] font-bold
+              transition-all duration-200 focus-visible:outline-none focus-visible:ring-2
+              focus-visible:ring-primary select-none whitespace-nowrap
+              ${
+                isActive
+                  ? opt.activeClass
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              }
+            `}
+          >
+            <span className="text-[9px] leading-none">{opt.emoji}</span>
+            <span className="leading-none">{opt.shortLabel}</span>
           </button>
         );
       })}
@@ -257,14 +295,13 @@ function ShopModal({
   );
 }
 
-// ─── Shop Chips (inline pills — no dropdown) ──────────────────────────────────
+// ─── Shop Chips (inline pills) ────────────────────────────────────────────────
 interface ShopChipsProps {
-  /** Extra class on the scroll container */
   className?: string;
   language?: "en" | "hi";
 }
 
-function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
+function ShopChips({ className = "" }: ShopChipsProps) {
   const {
     allShops,
     switchShop,
@@ -277,7 +314,6 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
   const activeId = session?.selectedShopId ?? session?.shopId;
   const [switching, setSwitching] = useState<string | null>(null);
 
-  // Modal state
   const [showNewModal, setShowNewModal] = useState(false);
   const [editModal, setEditModal] = useState<ShopMeta | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<ShopMeta | null>(null);
@@ -288,7 +324,6 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
   });
   const [saving, setSaving] = useState(false);
 
-  // Long-press timer for edit/delete (mobile-friendly)
   const pressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [longPressShop, setLongPressShop] = useState<ShopMeta | null>(null);
 
@@ -296,7 +331,6 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
     if (shopId === activeId) return;
     setSwitching(shopId);
     switchShop(shopId);
-    // Clear switching state after a short tick so the active chip updates visually
     setTimeout(() => {
       setSwitching(null);
       toast.success("Shop switched");
@@ -374,18 +408,15 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
     }
   };
 
-  // Truncate shop name to fit compactly
   const truncName = (name: string, max = 11) =>
     name.length > max ? `${name.slice(0, max - 1)}…` : name;
 
   return (
     <>
-      {/* Chips row: scrollable shop chips + sticky "+ Add" button always visible */}
       <div
         className={`flex items-center gap-1.5 min-w-0 ${className}`}
         data-ocid="topbar.shop_chips_row"
       >
-        {/* Scrollable chips area — overflow-x:auto so chips scroll, not clip */}
         <div
           className="flex items-center gap-1.5 overflow-x-auto flex-nowrap min-w-0 flex-1"
           style={
@@ -449,7 +480,6 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
                   {truncName(shop.name)}
                 </button>
 
-                {/* Edit/delete mini-actions — long-press (mobile) */}
                 {isLongPressed && (
                   <div
                     className="absolute top-8 left-0 z-50 flex items-center gap-1 bg-card border border-border rounded-lg shadow-lg p-1"
@@ -478,7 +508,6 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
                   </div>
                 )}
 
-                {/* Desktop hover edit/delete — opacity transition (no DOM reflow, no flicker) */}
                 <div className="absolute top-8 left-0 z-50 flex items-center gap-1 bg-card border border-border rounded-lg shadow-lg p-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-150">
                   <button
                     type="button"
@@ -506,23 +535,19 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
           })}
         </div>
 
-        {/* "+ Add" pill — always visible, outside scroll container, flex-shrink-0 */}
         <button
           type="button"
           data-ocid="topbar.new_shop_chip"
           onClick={openNew}
-          title={language === "hi" ? "नई शॉप जोड़ें" : "Add new shop"}
-          aria-label={language === "hi" ? "नई शॉप जोड़ें" : "Add new shop"}
+          title="Add new shop"
+          aria-label="Add new shop"
           className="flex items-center gap-1 h-7 pl-2 pr-2.5 rounded-full border border-dashed border-primary/50 text-primary hover:bg-primary/8 hover:border-primary transition-colors flex-shrink-0 text-xs font-semibold whitespace-nowrap"
         >
           <Plus size={12} />
-          <span className="hidden sm:inline">
-            {language === "hi" ? "जोड़ें" : "Add"}
-          </span>
+          <span className="hidden sm:inline">Add</span>
         </button>
       </div>
 
-      {/* New Shop Modal */}
       {showNewModal && (
         <ShopModal
           title="Create New Shop"
@@ -536,7 +561,6 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
         />
       )}
 
-      {/* Edit Shop Modal */}
       {editModal && (
         <ShopModal
           title="Edit Shop"
@@ -550,7 +574,6 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
         />
       )}
 
-      {/* Delete Confirmation */}
       {deleteConfirm && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4"
@@ -607,6 +630,52 @@ function ShopChips({ className = "", language = "en" }: ShopChipsProps) {
   );
 }
 
+// ─── Sync Indicator ───────────────────────────────────────────────────────────
+function SyncDot({
+  isOnline,
+  syncStatus,
+  isSyncing,
+}: {
+  isOnline: boolean;
+  syncStatus: string;
+  isSyncing: boolean;
+}) {
+  if (!isOnline)
+    return (
+      <span
+        data-ocid="topbar.sync_indicator"
+        title="Offline — data saved locally"
+        className="flex items-center gap-0.5 text-[10px] font-medium text-red-500 flex-shrink-0"
+      >
+        <WifiOff size={11} />
+        <span className="hidden sm:inline text-[10px]">Offline</span>
+      </span>
+    );
+  if (syncStatus === "syncing" || isSyncing)
+    return (
+      <span
+        data-ocid="topbar.sync_indicator"
+        title="Syncing..."
+        className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0"
+      />
+    );
+  if (syncStatus === "sync_pending")
+    return (
+      <span
+        data-ocid="topbar.sync_indicator"
+        title="Sync pending"
+        className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0"
+      />
+    );
+  return (
+    <span
+      data-ocid="topbar.sync_indicator"
+      title="All data synced"
+      className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0 transition-colors duration-500"
+    />
+  );
+}
+
 // ─── TopBar Inner ─────────────────────────────────────────────────────────────
 function TopBarInner({
   title,
@@ -625,7 +694,6 @@ function TopBarInner({
   const { currentUser, session, currentShop, allShops } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const { language, toggleLanguage } = useLanguage();
-  const { isInstallable, isInstalled, showInstallPrompt } = usePWA();
   const { isOnline, syncStatus } = useNetworkStatus();
 
   const lowStockCount = getLowStockProducts().length;
@@ -663,17 +731,353 @@ function TopBarInner({
   const shopName = currentShop?.name ?? "Save Shop";
   const lowStockItems = getLowStockProducts();
 
-  // Show shop chips only for owners with at least 1 shop
   const showShopChips = role === "owner" && allShops.length > 0;
-  // On mobile: if more than 2 shops, put chips in sub-bar; else inline
   const manyShops = allShops.length > 2;
 
+  // ── Notification popover (shared between mobile and desktop) ──────────────
+  const NotifBell = (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-ocid="topbar.notification_bell"
+          className="relative w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+          aria-label="Notifications"
+        >
+          <Bell size={15} />
+          {totalNotifCount > 0 && (
+            <Badge className="absolute -top-1 -right-1 min-w-[16px] h-4 p-0 px-0.5 text-[9px] flex items-center justify-center bg-destructive text-destructive-foreground border-0">
+              {totalNotifCount}
+            </Badge>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-0 shadow-lg">
+        <div className="p-3 border-b border-border flex items-center gap-2">
+          <Bell size={13} className="text-primary" />
+          <span className="text-sm font-semibold">Notifications</span>
+          {totalNotifCount > 0 && (
+            <Badge className="bg-red-500 text-white border-0 text-[10px] ml-auto">
+              {totalNotifCount}
+            </Badge>
+          )}
+        </div>
+        <div className="max-h-64 overflow-y-auto divide-y divide-border">
+          {totalNotifCount === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-sm">
+              <CheckCircle size={20} className="text-green-500" />
+              No alerts ✅
+            </div>
+          ) : (
+            <>
+              {lowStockItems.length > 0 && (
+                <div className="p-3">
+                  <p className="text-[11px] font-semibold text-amber-600 uppercase mb-2">
+                    Low Stock ({lowStockItems.length})
+                  </p>
+                  {lowStockItems.slice(0, 5).map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex justify-between text-xs py-0.5"
+                    >
+                      <span className="text-foreground truncate max-w-[140px]">
+                        {p.name}
+                      </span>
+                      <span className="text-amber-600 font-medium ml-2">
+                        {p.unit}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!isStaff && dueCount > 0 && (
+                <div className="p-3">
+                  <p className="text-[11px] font-semibold text-red-600 uppercase mb-2">
+                    Due Payments ({dueCount})
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {dueCount} customer(s) have pending dues
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
+  // ── Profile avatar ─────────────────────────────────────────────────────────
+  const ProfileAvatar = (
+    <div
+      className="flex items-center gap-1.5 cursor-default relative flex-shrink-0"
+      data-ocid="topbar.profile"
+    >
+      <div className="relative">
+        <Avatar className="w-8 h-8 flex-shrink-0">
+          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+      </div>
+      <div className="hidden md:flex flex-col leading-tight">
+        <span className="text-xs font-semibold text-foreground truncate max-w-[100px]">
+          {displayName}
+        </span>
+        <span
+          className={`text-[10px] font-medium border rounded-full px-1.5 py-0 leading-4 w-fit ${roleBadgeClass}`}
+        >
+          {roleLabel}
+        </span>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="sticky top-0 z-30">
-      {/* ── Main header bar ── */}
+    <div className="sticky top-0 z-30" data-ocid="topbar.header">
+      {/* ════════════════════════════════════════════════════════════════
+          MOBILE HEADER (< 768px) — two-row compact layout
+          Row 1: [Home/spacer] [Logo+ShopName] [spacer] [Bell] [Avatar]
+          Row 2: [SyncDot] [ModeSwitcher] [Lang] [Theme]
+          ════════════════════════════════════════════════════════════════ */}
+      <header className="md:hidden bg-card border-b border-border shadow-sm">
+        {/* Row 1 */}
+        <div className="flex items-center gap-2 px-3 py-2 min-w-0">
+          {/* Home / back button */}
+          {!isHome && goHome ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={goHome}
+              data-ocid="topbar.home_button"
+              className="flex items-center justify-center text-muted-foreground hover:text-foreground px-2 h-8 -ml-1 flex-shrink-0 w-8"
+              aria-label="Go to Home"
+            >
+              <Home size={17} />
+            </Button>
+          ) : (
+            <div className="w-8 flex-shrink-0" />
+          )}
+
+          {/* Logo + shop name */}
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <img
+              src="/assets/fb-logo.jpg"
+              alt="FIFO Bridge Logo"
+              style={{
+                height: "30px",
+                width: "auto",
+                borderRadius: "5px",
+                objectFit: "contain",
+                flexShrink: 0,
+              }}
+            />
+            <span className="text-sm font-bold text-foreground truncate min-w-0">
+              {shopName}
+            </span>
+          </div>
+
+          {/* Right cluster: Bell + Profile avatar */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {NotifBell}
+            {ProfileAvatar}
+          </div>
+        </div>
+
+        {/* Row 2 — compact controls strip */}
+        <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/40 bg-card/80">
+          {/* Sync dot */}
+          <SyncDot
+            isOnline={isOnline}
+            syncStatus={syncStatus}
+            isSyncing={isSyncing}
+          />
+
+          {/* Mode switcher (compact) */}
+          <AutoModeSwitcherCompact mode={autoMode} onChange={setAutoMode} />
+
+          {/* Language toggle */}
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            data-ocid="topbar.language_toggle"
+            aria-label={
+              language === "hi" ? "Switch to English" : "Switch to Hindi"
+            }
+            title={language === "hi" ? "Switch to English" : "Switch to Hindi"}
+            className="h-7 px-2 rounded-md bg-secondary flex items-center justify-center gap-0.5 text-muted-foreground hover:text-foreground transition-colors text-xs font-bold border border-transparent hover:border-border flex-shrink-0"
+          >
+            <span className="text-xs leading-none">
+              {language === "hi" ? "🇮🇳" : "🇬🇧"}
+            </span>
+            <span className="text-[11px] leading-none">
+              {language === "hi" ? "H" : "E"}
+            </span>
+          </button>
+
+          {/* Theme toggle */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            data-ocid="topbar.theme_toggle"
+            aria-label={
+              isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"
+            }
+            title={isDarkMode ? "Light Mode" : "Dark Mode"}
+            className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+          >
+            {isDarkMode ? <Sun size={13} /> : <Moon size={13} />}
+          </button>
+
+          {/* Search — if provided, fill remaining space */}
+          {onSearchChange && (
+            <div className="flex-1 min-w-0">
+              <div className="relative">
+                <Search
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  size={13}
+                />
+                <Input
+                  data-ocid="topbar.search_input"
+                  placeholder="Search..."
+                  className="pl-8 h-7 text-xs bg-secondary border-0"
+                  value={searchValue}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Row 3 (optional) — shop chips on mobile when owner has shops */}
+        {showShopChips && (
+          <div
+            className="px-3 py-1.5 border-t border-border/40 bg-card/60"
+            data-ocid="topbar.shop_chips_subbar"
+          >
+            <ShopChips className="gap-1" language={language} />
+          </div>
+        )}
+      </header>
+
+      {/* ════════════════════════════════════════════════════════════════
+          TABLET HEADER (768px – 1023px) — single compact row
+          ════════════════════════════════════════════════════════════════ */}
+      <header className="hidden md:flex lg:hidden bg-card border-b border-border px-3 py-2 items-center gap-2 shadow-sm">
+        {/* Home / back */}
+        {!isHome && goHome ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={goHome}
+            data-ocid="topbar.home_button"
+            className="flex items-center gap-1 text-muted-foreground hover:text-foreground px-2 h-8 -ml-1 flex-shrink-0"
+            aria-label="Go to Home"
+          >
+            <Home size={17} />
+            <span className="text-sm font-medium">Home</span>
+          </Button>
+        ) : (
+          <div className="w-8 flex-shrink-0" />
+        )}
+
+        {/* Logo + shop name */}
+        <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
+          <img
+            src="/assets/fb-logo.jpg"
+            alt="FIFO Bridge Logo"
+            style={{
+              height: "32px",
+              width: "auto",
+              borderRadius: "6px",
+              objectFit: "contain",
+              flexShrink: 0,
+            }}
+          />
+          <span className="text-sm font-bold text-foreground truncate max-w-[110px]">
+            {shopName}
+          </span>
+        </div>
+
+        {/* Shop chips — if owner */}
+        {showShopChips && (
+          <div className="flex-shrink-0 min-w-0 max-w-[200px]">
+            <ShopChips language={language} />
+          </div>
+        )}
+
+        {/* Search */}
+        {onSearchChange && (
+          <div className="flex-1 max-w-xs min-w-0">
+            <div className="relative">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                size={13}
+              />
+              <Input
+                data-ocid="topbar.search_input"
+                placeholder="Search..."
+                className="pl-8 h-8 text-sm bg-secondary border-0"
+                value={searchValue}
+                onChange={(e) => onSearchChange(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1" />
+
+        {/* Right group — compact for tablet */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <SyncDot
+            isOnline={isOnline}
+            syncStatus={syncStatus}
+            isSyncing={isSyncing}
+          />
+
+          {/* Compact mode switcher on tablet */}
+          <AutoModeSwitcherCompact mode={autoMode} onChange={setAutoMode} />
+
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            data-ocid="topbar.language_toggle"
+            aria-label={
+              language === "hi" ? "Switch to English" : "Switch to Hindi"
+            }
+            className="h-8 px-2 rounded-lg bg-secondary flex items-center justify-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-xs font-bold border border-transparent hover:border-border"
+          >
+            <span className="text-sm leading-none">
+              {language === "hi" ? "🇮🇳" : "🇬🇧"}
+            </span>
+            <span className="leading-none">
+              {language === "hi" ? "H" : "E"}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleTheme}
+            data-ocid="topbar.theme_toggle"
+            aria-label={
+              isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"
+            }
+            className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+
+          {NotifBell}
+          {ProfileAvatar}
+        </div>
+      </header>
+
+      {/* ════════════════════════════════════════════════════════════════
+          DESKTOP HEADER (≥ 1024px) — full layout unchanged
+          ════════════════════════════════════════════════════════════════ */}
       <header
-        className="bg-card border-b border-border px-3 md:px-5 py-2.5 flex items-center gap-2 shadow-sm"
-        data-ocid="topbar.header"
+        className="hidden lg:flex bg-card border-b border-border px-5 py-2.5 items-center gap-2 shadow-sm"
+        data-ocid="topbar.header_desktop"
       >
         {/* Home button */}
         {!isHome && goHome ? (
@@ -686,10 +1090,10 @@ function TopBarInner({
             aria-label="Go to Home"
           >
             <Home size={17} />
-            <span className="text-sm font-medium hidden sm:inline">Home</span>
+            <span className="text-sm font-medium">Home</span>
           </Button>
         ) : (
-          <div className="w-10 md:hidden flex-shrink-0" />
+          <div className="w-2 flex-shrink-0" />
         )}
 
         {/* LEFT: Logo + Shop Name */}
@@ -705,28 +1109,28 @@ function TopBarInner({
               flexShrink: 0,
             }}
           />
-          <div className="flex flex-col leading-tight min-w-0 flex">
-            <span className="text-base font-bold text-foreground truncate max-w-[80px] sm:max-w-[120px]">
+          <div className="flex flex-col leading-tight min-w-0">
+            <span className="text-base font-bold text-foreground truncate max-w-[120px] xl:max-w-[160px]">
               {shopName}
             </span>
             {title !== shopName && (
-              <span className="text-[11px] text-muted-foreground truncate hidden md:block">
+              <span className="text-[11px] text-muted-foreground truncate">
                 {title}
               </span>
             )}
           </div>
         </div>
 
-        {/* Shop chips — inline on tablet/desktop, or inline on mobile when ≤2 shops */}
+        {/* Shop chips */}
         {showShopChips && (
           <div
-            className={`flex-shrink-0 min-w-0 ${manyShops ? "hidden sm:flex sm:max-w-[280px] lg:max-w-[400px]" : "flex max-w-[200px] sm:max-w-[320px]"}`}
+            className={`flex-shrink-0 min-w-0 ${manyShops ? "max-w-[280px] xl:max-w-[400px]" : "max-w-[320px]"}`}
           >
             <ShopChips language={language} />
           </div>
         )}
 
-        {/* Search (if provided) */}
+        {/* Search */}
         {onSearchChange && (
           <div className="flex-1 max-w-xs">
             <div className="relative">
@@ -745,51 +1149,18 @@ function TopBarInner({
           </div>
         )}
 
-        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* RIGHT: Sync dot + Mode Switcher + Language + Theme + Install + Bell + Profile */}
+        {/* RIGHT: full desktop controls */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Network/Sync status indicator */}
-          {!isOnline ? (
-            <span
-              data-ocid="topbar.sync_indicator"
-              title="Offline — data saved locally"
-              className="flex items-center gap-1 text-[10px] font-medium text-red-500 flex-shrink-0"
-            >
-              <WifiOff size={11} />
-              <span className="hidden sm:inline">Offline</span>
-            </span>
-          ) : syncStatus === "syncing" || isSyncing ? (
-            <span
-              data-ocid="topbar.sync_indicator"
-              title="Syncing to cloud..."
-              className="flex items-center gap-1 text-[10px] font-medium text-amber-500 flex-shrink-0"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
-              <span className="hidden sm:inline">Updating</span>
-            </span>
-          ) : syncStatus === "sync_pending" ? (
-            <span
-              data-ocid="topbar.sync_indicator"
-              title="Sync pending"
-              className="flex items-center gap-1 text-[10px] font-medium text-yellow-500 flex-shrink-0"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
-              <span className="hidden sm:inline">Pending</span>
-            </span>
-          ) : (
-            <span
-              data-ocid="topbar.sync_indicator"
-              title="All data synced"
-              className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0 transition-colors duration-500"
-            />
-          )}
+          <SyncDot
+            isOnline={isOnline}
+            syncStatus={syncStatus}
+            isSyncing={isSyncing}
+          />
 
-          {/* Mode Switcher: Simple | Smart | Pro */}
           <AutoModeSwitcher mode={autoMode} onChange={setAutoMode} />
 
-          {/* Language toggle */}
           <button
             type="button"
             onClick={toggleLanguage}
@@ -808,7 +1179,6 @@ function TopBarInner({
             </span>
           </button>
 
-          {/* Dark / Light mode toggle */}
           <button
             type="button"
             onClick={toggleTheme}
@@ -822,90 +1192,7 @@ function TopBarInner({
             {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
           </button>
 
-          {/* Install App button */}
-          {isInstallable && !isInstalled && (
-            <button
-              type="button"
-              onClick={showInstallPrompt}
-              data-ocid="topbar.install_app_button"
-              aria-label="Install App"
-              title="Install App"
-              className="relative w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Download size={15} />
-            </button>
-          )}
-
-          {/* Notification Bell */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                data-ocid="topbar.notification_bell"
-                className="relative w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Notifications"
-              >
-                <Bell size={15} />
-                {totalNotifCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 min-w-[16px] h-4 p-0 px-0.5 text-[9px] flex items-center justify-center bg-destructive text-destructive-foreground border-0">
-                    {totalNotifCount}
-                  </Badge>
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-0 shadow-lg">
-              <div className="p-3 border-b border-border flex items-center gap-2">
-                <Bell size={13} className="text-primary" />
-                <span className="text-sm font-semibold">Notifications</span>
-                {totalNotifCount > 0 && (
-                  <Badge className="bg-red-500 text-white border-0 text-[10px] ml-auto">
-                    {totalNotifCount}
-                  </Badge>
-                )}
-              </div>
-              <div className="max-h-64 overflow-y-auto divide-y divide-border">
-                {totalNotifCount === 0 ? (
-                  <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-sm">
-                    <CheckCircle size={20} className="text-green-500" />
-                    No alerts ✅
-                  </div>
-                ) : (
-                  <>
-                    {lowStockItems.length > 0 && (
-                      <div className="p-3">
-                        <p className="text-[11px] font-semibold text-amber-600 uppercase mb-2">
-                          Low Stock ({lowStockItems.length})
-                        </p>
-                        {lowStockItems.slice(0, 5).map((p) => (
-                          <div
-                            key={p.id}
-                            className="flex justify-between text-xs py-0.5"
-                          >
-                            <span className="text-foreground truncate max-w-[140px]">
-                              {p.name}
-                            </span>
-                            <span className="text-amber-600 font-medium ml-2">
-                              {p.unit}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {!isStaff && dueCount > 0 && (
-                      <div className="p-3">
-                        <p className="text-[11px] font-semibold text-red-600 uppercase mb-2">
-                          Due Payments ({dueCount})
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {dueCount} customer(s) have pending dues
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          {NotifBell}
 
           {/* Profile */}
           <div
@@ -918,9 +1205,8 @@ function TopBarInner({
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              {/* Diamond badge removed — count is shown in the Diamond Rewards card on the dashboard */}
             </div>
-            <div className="hidden sm:flex flex-col leading-tight">
+            <div className="flex flex-col leading-tight">
               <span className="text-xs font-semibold text-foreground truncate max-w-[100px]">
                 {displayName}
               </span>
@@ -933,16 +1219,6 @@ function TopBarInner({
           </div>
         </div>
       </header>
-
-      {/* ── Sub-bar: shop chips on mobile when there are >2 shops ── */}
-      {showShopChips && manyShops && (
-        <div
-          className="sm:hidden bg-card border-b border-border px-3 py-1.5"
-          data-ocid="topbar.shop_chips_subbar"
-        >
-          <ShopChips className="gap-1.5" language={language} />
-        </div>
-      )}
     </div>
   );
 }

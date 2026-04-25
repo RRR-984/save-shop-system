@@ -8,12 +8,30 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const LockResult = IDL.Variant({
+  'conflict' : IDL.Record({
+    'userName' : IDL.Text,
+    'expiresInSeconds' : IDL.Int,
+    'lockedBy' : IDL.Text,
+  }),
+  'acquired' : IDL.Null,
+});
 export const AddShopResult = IDL.Record({
   'shopId' : IDL.Text,
   'error' : IDL.Opt(IDL.Text),
   'success' : IDL.Bool,
 });
+export const IdempotencyRecord = IDL.Record({
+  'shopId' : IDL.Text,
+  'invoiceId' : IDL.Text,
+  'processedAt' : IDL.Int,
+});
 export const DeleteShopResult = IDL.Record({ 'success' : IDL.Bool });
+export const ActiveUserRecord = IDL.Record({
+  'userName' : IDL.Text,
+  'userId' : IDL.Text,
+  'lastSeen' : IDL.Int,
+});
 export const ActivityRecord = IDL.Record({
   'id' : IDL.Text,
   'activityType' : IDL.Text,
@@ -43,6 +61,15 @@ export const BackupSnapshotMeta = IDL.Record({
   'timestamp' : IDL.Int,
 });
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
+export const LockRecord = IDL.Record({
+  'userName' : IDL.Text,
+  'expiresAt' : IDL.Int,
+  'shopId' : IDL.Text,
+  'userId' : IDL.Text,
+  'recordType' : IDL.Text,
+  'acquiredAt' : IDL.Int,
+  'recordId' : IDL.Text,
+});
 export const ShopStats = IDL.Record({
   'shopId' : IDL.Text,
   'sales' : IDL.Nat,
@@ -89,16 +116,42 @@ export const UpdateShopResult = IDL.Record({
 });
 
 export const idlService = IDL.Service({
+  'acquireLock' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [LockResult],
+      [],
+    ),
   'addShop' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [AddShopResult],
       [],
+    ),
+  'checkIdempotency' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Opt(IdempotencyRecord)],
+      ['query'],
     ),
   'checkMobileExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'clearShopData' : IDL.Func([IDL.Text], [], []),
   'deleteBackupSnapshot' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'deleteShop' : IDL.Func([IDL.Text], [DeleteShopResult], []),
   'findDuplicateUsers' : IDL.Func([], [IDL.Text], []),
+  'fullSystemReset' : IDL.Func(
+      [IDL.Text],
+      [
+        IDL.Record({
+          'deletedShops' : IDL.Nat,
+          'message' : IDL.Text,
+          'success' : IDL.Bool,
+        }),
+      ],
+      [],
+    ),
+  'getActiveUsersForShop' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(ActiveUserRecord)],
+      ['query'],
+    ),
   'getActivities' : IDL.Func(
       [IDL.Opt(IDL.Text), IDL.Opt(IDL.Int), IDL.Opt(IDL.Int)],
       [IDL.Vec(ActivityRecord)],
@@ -129,6 +182,11 @@ export const idlService = IDL.Service({
   'getDrafts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getFeedback' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getInvoices' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getLockStatus' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Opt(LockRecord)],
+      ['query'],
+    ),
   'getLowPriceAlertLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getMergeAuditLog' : IDL.Func([], [IDL.Text], ['query']),
   'getOwnerStats' : IDL.Func([IDL.Text], [OwnerStats], ['query']),
@@ -164,6 +222,11 @@ export const idlService = IDL.Service({
   'getUsers' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getVendorRateHistory' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getVendors' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'heartbeatLock' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Bool],
+      [],
+    ),
   'initPermanentSuperAdmin' : IDL.Func([], [], []),
   'isPermanentSuperAdminQuery' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'listShopsForOwner' : IDL.Func([IDL.Text], [IDL.Vec(ShopMeta)], ['query']),
@@ -171,6 +234,17 @@ export const idlService = IDL.Service({
   'pruneOldBackups' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Nat], []),
   'purgeOldActivities' : IDL.Func([IDL.Int], [IDL.Nat], []),
   'recordActivity' : IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Text], [], []),
+  'registerIdempotency' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Bool],
+      [],
+    ),
+  'releaseAllLocksForUser' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
+  'releaseLock' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Bool],
+      [],
+    ),
   'saveAdminSettings' : IDL.Func([AdminSettings], [IDL.Bool], []),
   'saveAuditLogs' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveBackupSnapshot' : IDL.Func(
@@ -222,12 +296,30 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const LockResult = IDL.Variant({
+    'conflict' : IDL.Record({
+      'userName' : IDL.Text,
+      'expiresInSeconds' : IDL.Int,
+      'lockedBy' : IDL.Text,
+    }),
+    'acquired' : IDL.Null,
+  });
   const AddShopResult = IDL.Record({
     'shopId' : IDL.Text,
     'error' : IDL.Opt(IDL.Text),
     'success' : IDL.Bool,
   });
+  const IdempotencyRecord = IDL.Record({
+    'shopId' : IDL.Text,
+    'invoiceId' : IDL.Text,
+    'processedAt' : IDL.Int,
+  });
   const DeleteShopResult = IDL.Record({ 'success' : IDL.Bool });
+  const ActiveUserRecord = IDL.Record({
+    'userName' : IDL.Text,
+    'userId' : IDL.Text,
+    'lastSeen' : IDL.Int,
+  });
   const ActivityRecord = IDL.Record({
     'id' : IDL.Text,
     'activityType' : IDL.Text,
@@ -257,6 +349,15 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : IDL.Int,
   });
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
+  const LockRecord = IDL.Record({
+    'userName' : IDL.Text,
+    'expiresAt' : IDL.Int,
+    'shopId' : IDL.Text,
+    'userId' : IDL.Text,
+    'recordType' : IDL.Text,
+    'acquiredAt' : IDL.Int,
+    'recordId' : IDL.Text,
+  });
   const ShopStats = IDL.Record({
     'shopId' : IDL.Text,
     'sales' : IDL.Nat,
@@ -303,16 +404,42 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    'acquireLock' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [LockResult],
+        [],
+      ),
     'addShop' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [AddShopResult],
         [],
+      ),
+    'checkIdempotency' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(IdempotencyRecord)],
+        ['query'],
       ),
     'checkMobileExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'clearShopData' : IDL.Func([IDL.Text], [], []),
     'deleteBackupSnapshot' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'deleteShop' : IDL.Func([IDL.Text], [DeleteShopResult], []),
     'findDuplicateUsers' : IDL.Func([], [IDL.Text], []),
+    'fullSystemReset' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Record({
+            'deletedShops' : IDL.Nat,
+            'message' : IDL.Text,
+            'success' : IDL.Bool,
+          }),
+        ],
+        [],
+      ),
+    'getActiveUsersForShop' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(ActiveUserRecord)],
+        ['query'],
+      ),
     'getActivities' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Opt(IDL.Int), IDL.Opt(IDL.Int)],
         [IDL.Vec(ActivityRecord)],
@@ -343,6 +470,11 @@ export const idlFactory = ({ IDL }) => {
     'getDrafts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getFeedback' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getInvoices' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getLockStatus' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Opt(LockRecord)],
+        ['query'],
+      ),
     'getLowPriceAlertLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getMergeAuditLog' : IDL.Func([], [IDL.Text], ['query']),
     'getOwnerStats' : IDL.Func([IDL.Text], [OwnerStats], ['query']),
@@ -378,6 +510,11 @@ export const idlFactory = ({ IDL }) => {
     'getUsers' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getVendorRateHistory' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getVendors' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'heartbeatLock' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
     'initPermanentSuperAdmin' : IDL.Func([], [], []),
     'isPermanentSuperAdminQuery' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'listShopsForOwner' : IDL.Func([IDL.Text], [IDL.Vec(ShopMeta)], ['query']),
@@ -387,6 +524,17 @@ export const idlFactory = ({ IDL }) => {
     'recordActivity' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [],
+        [],
+      ),
+    'registerIdempotency' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Bool],
+        [],
+      ),
+    'releaseAllLocksForUser' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
+    'releaseLock' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Bool],
         [],
       ),
     'saveAdminSettings' : IDL.Func([AdminSettings], [IDL.Bool], []),

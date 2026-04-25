@@ -87,6 +87,8 @@ export interface AppConfig {
   autoUpdateCostOnVendorRateChange?: boolean;
   /** Per-section dashboard visibility toggles (Owner only). All default to true. */
   dashboardSections?: DashboardSectionConfig;
+  /** Shop GSTIN number — printed on every invoice when set */
+  gstinNumber?: string;
   /**
    * Feature mode: controls sidebar nav and dashboard section complexity.
    * 1 = Basic    (minimal nav: Dashboard, Stock, Billing, Settings)
@@ -120,6 +122,13 @@ export interface Product {
   retailerPrice?: number;
   /** Optional wholesaler price — used when Customer Type = Wholesaler */
   wholesalerPrice?: number;
+  /** Spare part / auto part fields — displayed automatically when present */
+  partNo?: string;
+  srNo?: string;
+  tnNo?: string;
+  dd?: string;
+  ed?: string;
+  mrp?: number;
 }
 
 export interface StockBatch {
@@ -214,6 +223,14 @@ export interface Invoice {
   transportCharge?: number;
   labourCharge?: number;
   otherCharges?: number;
+  /** GST applied at sale time */
+  gstRate?: number;
+  gstAmount?: number;
+  /** CGST/SGST split — each = gstRate/2 */
+  cgstRate?: number;
+  sgstRate?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
 }
 
 export interface PaymentRecord {

@@ -7,6 +7,8 @@ import MultiShopLib "lib/multishop";
 import MultiShopMixin "mixins/multishop-api";
 import AdminDashboardTypes "types/admin-dashboard";
 import AdminDashboardMixin "mixins/admin-dashboard-api";
+import ConcurrencyTypes "types/concurrency";
+import ConcurrencyMixin "mixins/concurrency-api";
 
 actor {
   // Shop data: shopId -> (collectionName -> jsonData)
@@ -32,8 +34,16 @@ actor {
   // Permanent audit trail of every super-admin mobile change (never deleted)
   let superAdminChangeLog = List.empty<AdminDashboardTypes.SuperAdminChangeLog>();
 
+  // ── Concurrency State ───────────────────────────────────────────────────────
+  // Lock table: lockKey (shopId:recordType:recordId) -> LockRecord
+  let lockTable = Map.empty<Text, ConcurrencyTypes.LockRecord>();
+
+  // Idempotency index: idempotencyKey -> IdempotencyRecord (24-hour window)
+  let idempotencyTable = Map.empty<Text, ConcurrencyTypes.IdempotencyRecord>();
+
   include MultiShopMixin(shopRegistry, shopData);
   include AdminDashboardMixin(activityStore, adminSettingsBox, paidUsersStore, shopRegistry, shopData, mergeAuditLog, superAdminChangeLog);
+  include ConcurrencyMixin(lockTable, idempotencyTable);
 
   // ── Permanent super-admin bootstrap ────────────────────────────────────────
   // On every canister start, ensure the permanent super-admin (9929306080) is set.
@@ -324,6 +334,53 @@ actor {
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     userProfiles.add(caller, profile);
+  };
+
+  // ── Full System Reset ───────────────────────────────────────────────────────
+
+  // Wipes ALL data across every store in the canister.
+  // Only the permanent super-admin (9929306080) may call this.
+  // Clears: shopRegistry, shopData, activityStore, paidUsersStore,
+  //         backupSnapshots, mergeAuditLog, superAdminChangeLog, userProfiles.
+  // Resets adminSettingsBox to null — it auto-recovers to PERMANENT_SUPER_ADMIN
+  // on the next canister start (the hardcoded constant is not affected).
+  public shared func fullSystemReset(
+    callerMobile : Text
+  ) : async { success : Bool; deletedShops : Nat; message : Text } {
+    let PERMANENT_SUPER_ADMIN : Text = "9929306080";
+
+    if (callerMobile != PERMANENT_SUPER_ADMIN) {
+      return {
+        success      = false;
+        deletedShops = 0;
+        message      = "Unauthorized. Only the permanent super admin may perform a full system reset.";
+      };
+    };
+
+    // Count total shops before wiping
+    var deletedShops : Nat = 0;
+    for ((_, shops) in shopRegistry.entries()) {
+      deletedShops += shops.size();
+    };
+
+    // Wipe all stores in sequence
+    shopRegistry.clear();
+    shopData.clear();
+    activityStore.clear();
+    paidUsersStore.clear();
+    backupSnapshots.clear();
+    mergeAuditLog.clear();
+    superAdminChangeLog.clear();
+    userProfiles.clear();
+
+    // Reset adminSettingsBox — auto-recovers on next canister init
+    adminSettingsBox.value := null;
+
+    {
+      success      = true;
+      deletedShops;
+      message      = "System reset complete. All data wiped.";
+    }
   };
 
   // ── Clear Shop Data (Reset) ─────────────────────────────────────────────────

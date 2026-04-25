@@ -41,8 +41,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { LockBadge } from "../components/LockBadge";
 import { useAuth } from "../context/AuthContext";
 import { type CustomerLedger, useStore } from "../context/StoreContext";
+import { useLockManager } from "../hooks/useLockManager";
 import type {
   ActivityStatus,
   AppUser,
@@ -1001,9 +1003,13 @@ function CustomerCard({
   isProMode: boolean;
 }) {
   const { customers } = useStore();
+  const { acquireLock, releaseLock } = useLockManager();
   const [showPayment, setShowPayment] = useState(false);
   const [showInvoices, setShowInvoices] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [editLockStatus, setEditLockStatus] = useState<
+    "idle" | "mine" | "conflict"
+  >("idle");
   const isPaid = ledger.totalDue === 0;
   const dueBadge = getDueBadge(ledger.totalDue);
 
@@ -1157,11 +1163,39 @@ function CustomerCard({
 
             {/* Right: Actions */}
             <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+              {/* Lock badge when another user is editing */}
+              {editLockStatus !== "idle" && (
+                <LockBadge
+                  recordId={custRecord?.id ?? ledger.customerMobile}
+                  recordType="customer"
+                  onLockConflict={() => setEditLockStatus("conflict")}
+                  onLockAcquired={() => setEditLockStatus("mine")}
+                />
+              )}
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 text-xs px-2 text-muted-foreground hover:bg-muted"
-                onClick={() => setShowEdit(true)}
+                className={`h-7 text-xs px-2 ${
+                  editLockStatus === "conflict"
+                    ? "opacity-40 cursor-not-allowed text-muted-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+                disabled={editLockStatus === "conflict"}
+                onClick={() => {
+                  if (editLockStatus === "mine") {
+                    // Already have lock — just open edit dialog
+                    setShowEdit(true);
+                    return;
+                  }
+                  const recordId = custRecord?.id ?? ledger.customerMobile;
+                  const result = acquireLock(recordId, "customer");
+                  if (result.status === "conflict") {
+                    setEditLockStatus("conflict");
+                  } else {
+                    setEditLockStatus("mine");
+                    setShowEdit(true);
+                  }
+                }}
                 data-ocid={`customers.edit_button.${index + 1}`}
                 title="Edit customer details"
               >
@@ -1299,7 +1333,12 @@ function CustomerCard({
       {showEdit && (
         <AddEditCustomerDialog
           open={showEdit}
-          onClose={() => setShowEdit(false)}
+          onClose={() => {
+            setShowEdit(false);
+            const recordId = custRecord?.id ?? ledger.customerMobile;
+            releaseLock(recordId, "customer");
+            setEditLockStatus("idle");
+          }}
           existing={custRecord}
           isProMode={isProMode}
         />

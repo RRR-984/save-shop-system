@@ -26,7 +26,12 @@ const RETRY_DELAYS = [1000, 3000, 10000];
 const MAX_RETRIES = 3;
 
 export function useSyncEngine(shopId: string): SyncEngineState {
-  const { isOnline, syncStatus: netStatus, setSyncStatus } = useNetworkStatus();
+  const {
+    isOnline,
+    syncStatus: netStatus,
+    setSyncStatus,
+    reconnectCounter,
+  } = useNetworkStatus();
   const [pendingCount, setPendingCount] = useState(0);
   const [syncingCount, setSyncingCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
@@ -35,7 +40,10 @@ export function useSyncEngine(shopId: string): SyncEngineState {
     "idle" | "syncing" | "error" | "pending"
   >("idle");
   const syncRunning = useRef(false);
-  const { isSyncing } = useStore();
+  const { isSyncing, triggerRefresh } = useStore();
+
+  // Track previous reconnectCounter to detect a new reconnect event
+  const prevReconnectCounter = useRef(reconnectCounter);
 
   // Refresh counts from queue
   const refreshCounts = useCallback(() => {
@@ -128,7 +136,23 @@ export function useSyncEngine(shopId: string): SyncEngineState {
     }
   }, [shopId, setSyncStatus, refreshCounts]);
 
-  // Trigger sync on reconnect
+  // On reconnect: process pending queue AND trigger a full data refetch
+  useEffect(() => {
+    if (reconnectCounter === 0) return; // skip initial mount
+    if (reconnectCounter === prevReconnectCounter.current) return;
+    prevReconnectCounter.current = reconnectCounter;
+
+    // Small delay to let the connection stabilise before refetching
+    const timer = setTimeout(() => {
+      // Flush any pending sync queue items first
+      void processSyncQueue();
+      // Then force a full Phase1+Phase2 refetch so stale/partial data gets replaced
+      triggerRefresh();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [reconnectCounter, processSyncQueue, triggerRefresh]);
+
+  // Also trigger sync when network transitions to sync_pending (existing behaviour)
   useEffect(() => {
     if (isOnline && netStatus === "sync_pending") {
       const timer = setTimeout(() => {

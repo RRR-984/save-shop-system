@@ -29,6 +29,10 @@ export const STORAGE_KEYS = {
   // Device fingerprint keys for referral fraud prevention
   referralDeviceId: "referral_device_id",
   referralDeviceUsedCode: "referral_device_used_code",
+  // Draggable element positions (per-device, not per-shop)
+  chatbotBubblePos: "saveshop_chatbot_bubble_pos",
+  chatbotPanelPos: "saveshop_chatbot_panel_pos",
+  fabPos: "saveshop_fab_pos",
 } as const;
 
 /**

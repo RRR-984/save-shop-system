@@ -97,11 +97,10 @@ export interface OwnerStats {
     shopStats: Array<ShopStats>;
     totalTransactions: bigint;
 }
-export interface SuperAdminChangeLog {
-    id: string;
-    fromMobile: string;
-    timestamp: bigint;
-    toMobile: string;
+export interface ActiveUserRecord {
+    userName: string;
+    userId: string;
+    lastSeen: bigint;
 }
 export interface BackupSnapshotMeta {
     id: string;
@@ -117,6 +116,40 @@ export interface ShopMeta {
     address: string;
     ownerMobile: string;
 }
+export interface UpdateShopResult {
+    error?: string;
+    success: boolean;
+}
+export interface AdminSettings {
+    createdAt: bigint;
+    superAdminMobile: string;
+    updatedAt: bigint;
+}
+export interface ShopStatsResult {
+    shopId: string;
+    totalSalesAmount: number;
+    lastActivity: bigint;
+    shopName: string;
+    sessionCount: bigint;
+    ownerMobile: string;
+}
+export interface SuperAdminChangeLog {
+    id: string;
+    fromMobile: string;
+    timestamp: bigint;
+    toMobile: string;
+}
+export type LockResult = {
+    __kind__: "conflict";
+    conflict: {
+        userName: string;
+        expiresInSeconds: bigint;
+        lockedBy: string;
+    };
+} | {
+    __kind__: "acquired";
+    acquired: null;
+};
 export interface DeleteShopResult {
     success: boolean;
 }
@@ -129,14 +162,10 @@ export interface ShopStats {
     products: bigint;
     customers: bigint;
 }
-export interface UpdateShopResult {
-    error?: string;
-    success: boolean;
-}
-export interface AdminSettings {
-    createdAt: bigint;
-    superAdminMobile: string;
-    updatedAt: bigint;
+export interface IdempotencyRecord {
+    shopId: string;
+    invoiceId: string;
+    processedAt: bigint;
 }
 export interface AddShopResult {
     shopId: string;
@@ -151,13 +180,14 @@ export interface ActivityRecord {
     userId: string;
     timestamp: bigint;
 }
-export interface ShopStatsResult {
+export interface LockRecord {
+    userName: string;
+    expiresAt: bigint;
     shopId: string;
-    totalSalesAmount: number;
-    lastActivity: bigint;
-    shopName: string;
-    sessionCount: bigint;
-    ownerMobile: string;
+    userId: string;
+    recordType: string;
+    acquiredAt: bigint;
+    recordId: string;
 }
 export interface UserProfile {
     name: string;
@@ -173,12 +203,20 @@ export interface UserStatsResult {
     salesCount: bigint;
 }
 export interface backendInterface {
+    acquireLock(recordId: string, recordType: string, shopId: string, userId: string, userName: string): Promise<LockResult>;
     addShop(ownerMobile: string, shopName: string, address: string, city: string): Promise<AddShopResult>;
+    checkIdempotency(idempotencyKey: string, shopId: string): Promise<IdempotencyRecord | null>;
     checkMobileExists(mobile: string): Promise<boolean>;
     clearShopData(shopId: string): Promise<void>;
     deleteBackupSnapshot(shopId: string, snapshotId: string): Promise<void>;
     deleteShop(shopId: string): Promise<DeleteShopResult>;
     findDuplicateUsers(): Promise<string>;
+    fullSystemReset(callerMobile: string): Promise<{
+        deletedShops: bigint;
+        message: string;
+        success: boolean;
+    }>;
+    getActiveUsersForShop(shopId: string): Promise<Array<ActiveUserRecord>>;
     getActivities(shopIdFilter: string | null, startTs: bigint | null, endTs: bigint | null): Promise<Array<ActivityRecord>>;
     getAdminSettings(): Promise<AdminSettings>;
     getAllUsersWithStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<UserStatsResult>>;
@@ -193,6 +231,7 @@ export interface backendInterface {
     getDrafts(shopId: string): Promise<string>;
     getFeedback(shopId: string): Promise<string>;
     getInvoices(shopId: string): Promise<string>;
+    getLockStatus(recordId: string, recordType: string, shopId: string): Promise<LockRecord | null>;
     getLowPriceAlertLogs(shopId: string): Promise<string>;
     getMergeAuditLog(): Promise<string>;
     getOwnerStats(mobile: string): Promise<OwnerStats>;
@@ -216,6 +255,7 @@ export interface backendInterface {
     getUsers(shopId: string): Promise<string>;
     getVendorRateHistory(shopId: string): Promise<string>;
     getVendors(shopId: string): Promise<string>;
+    heartbeatLock(recordId: string, recordType: string, shopId: string, userId: string): Promise<boolean>;
     initPermanentSuperAdmin(): Promise<void>;
     isPermanentSuperAdminQuery(mobile: string): Promise<boolean>;
     listShopsForOwner(mobile: string): Promise<Array<ShopMeta>>;
@@ -223,6 +263,9 @@ export interface backendInterface {
     pruneOldBackups(shopId: string, retainDays: bigint): Promise<bigint>;
     purgeOldActivities(beforeTs: bigint): Promise<bigint>;
     recordActivity(shopId: string, userId: string, activityType: string, metadata: string): Promise<void>;
+    registerIdempotency(idempotencyKey: string, invoiceId: string, shopId: string): Promise<boolean>;
+    releaseAllLocksForUser(shopId: string, userId: string): Promise<bigint>;
+    releaseLock(recordId: string, recordType: string, shopId: string, userId: string): Promise<boolean>;
     saveAdminSettings(settings: AdminSettings): Promise<boolean>;
     saveAuditLogs(shopId: string, data: string): Promise<void>;
     saveBackupSnapshot(shopId: string, snapshotId: string, tag: string, data: string): Promise<void>;
@@ -257,21 +300,49 @@ export interface backendInterface {
         message: string;
     }>;
 }
-import type { AddShopResult as _AddShopResult, ShopMeta as _ShopMeta, UpdateShopResult as _UpdateShopResult, UserProfile as _UserProfile } from "./declarations/backend.did.d.ts";
+import type { AddShopResult as _AddShopResult, IdempotencyRecord as _IdempotencyRecord, LockRecord as _LockRecord, LockResult as _LockResult, ShopMeta as _ShopMeta, UpdateShopResult as _UpdateShopResult, UserProfile as _UserProfile } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
+    async acquireLock(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string): Promise<LockResult> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.acquireLock(arg0, arg1, arg2, arg3, arg4);
+                return from_candid_LockResult_n1(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.acquireLock(arg0, arg1, arg2, arg3, arg4);
+            return from_candid_LockResult_n1(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async addShop(arg0: string, arg1: string, arg2: string, arg3: string): Promise<AddShopResult> {
         if (this.processError) {
             try {
                 const result = await this.actor.addShop(arg0, arg1, arg2, arg3);
-                return from_candid_AddShopResult_n1(this._uploadFile, this._downloadFile, result);
+                return from_candid_AddShopResult_n3(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.addShop(arg0, arg1, arg2, arg3);
-            return from_candid_AddShopResult_n1(this._uploadFile, this._downloadFile, result);
+            return from_candid_AddShopResult_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async checkIdempotency(arg0: string, arg1: string): Promise<IdempotencyRecord | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.checkIdempotency(arg0, arg1);
+                return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.checkIdempotency(arg0, arg1);
+            return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
         }
     }
     async checkMobileExists(arg0: string): Promise<boolean> {
@@ -344,17 +415,49 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getActivities(arg0: string | null, arg1: bigint | null, arg2: bigint | null): Promise<Array<ActivityRecord>> {
+    async fullSystemReset(arg0: string): Promise<{
+        deletedShops: bigint;
+        message: string;
+        success: boolean;
+    }> {
         if (this.processError) {
             try {
-                const result = await this.actor.getActivities(to_candid_opt_n4(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg2));
+                const result = await this.actor.fullSystemReset(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getActivities(to_candid_opt_n4(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg2));
+            const result = await this.actor.fullSystemReset(arg0);
+            return result;
+        }
+    }
+    async getActiveUsersForShop(arg0: string): Promise<Array<ActiveUserRecord>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getActiveUsersForShop(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getActiveUsersForShop(arg0);
+            return result;
+        }
+    }
+    async getActivities(arg0: string | null, arg1: bigint | null, arg2: bigint | null): Promise<Array<ActivityRecord>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getActivities(to_candid_opt_n7(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n8(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n8(this._uploadFile, this._downloadFile, arg2));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getActivities(to_candid_opt_n7(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n8(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n8(this._uploadFile, this._downloadFile, arg2));
             return result;
         }
     }
@@ -375,14 +478,14 @@ export class Backend implements backendInterface {
     async getAllUsersWithStats(arg0: bigint | null, arg1: bigint | null): Promise<Array<UserStatsResult>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getAllUsersWithStats(to_candid_opt_n5(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.getAllUsersWithStats(to_candid_opt_n8(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n8(this._uploadFile, this._downloadFile, arg1));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getAllUsersWithStats(to_candid_opt_n5(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.getAllUsersWithStats(to_candid_opt_n8(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n8(this._uploadFile, this._downloadFile, arg1));
             return result;
         }
     }
@@ -404,14 +507,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getBackupSnapshotData(arg0, arg1);
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n5(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getBackupSnapshotData(arg0, arg1);
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n5(this._uploadFile, this._downloadFile, result);
         }
     }
     async getBackupSnapshots(arg0: string): Promise<Array<BackupSnapshotMeta>> {
@@ -446,14 +549,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserProfile();
-                return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserProfile();
-            return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCategories(arg0: string): Promise<string> {
@@ -538,6 +641,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getInvoices(arg0);
             return result;
+        }
+    }
+    async getLockStatus(arg0: string, arg1: string, arg2: string): Promise<LockRecord | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getLockStatus(arg0, arg1, arg2);
+                return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getLockStatus(arg0, arg1, arg2);
+            return from_candid_opt_n10(this._uploadFile, this._downloadFile, result);
         }
     }
     async getLowPriceAlertLogs(arg0: string): Promise<string> {
@@ -712,27 +829,27 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getShop(arg0);
-                return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getShop(arg0);
-            return from_candid_opt_n7(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
         }
     }
     async getShopPerformanceStats(arg0: bigint | null, arg1: bigint | null): Promise<Array<ShopStatsResult>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getShopPerformanceStats(to_candid_opt_n5(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.getShopPerformanceStats(to_candid_opt_n8(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n8(this._uploadFile, this._downloadFile, arg1));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getShopPerformanceStats(to_candid_opt_n5(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.getShopPerformanceStats(to_candid_opt_n8(this._uploadFile, this._downloadFile, arg0), to_candid_opt_n8(this._uploadFile, this._downloadFile, arg1));
             return result;
         }
     }
@@ -810,14 +927,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n6(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n9(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUsers(arg0: string): Promise<string> {
@@ -859,6 +976,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getVendors(arg0);
+            return result;
+        }
+    }
+    async heartbeatLock(arg0: string, arg1: string, arg2: string, arg3: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.heartbeatLock(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.heartbeatLock(arg0, arg1, arg2, arg3);
             return result;
         }
     }
@@ -957,6 +1088,48 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.recordActivity(arg0, arg1, arg2, arg3);
+            return result;
+        }
+    }
+    async registerIdempotency(arg0: string, arg1: string, arg2: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.registerIdempotency(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.registerIdempotency(arg0, arg1, arg2);
+            return result;
+        }
+    }
+    async releaseAllLocksForUser(arg0: string, arg1: string): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.releaseAllLocksForUser(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.releaseAllLocksForUser(arg0, arg1);
+            return result;
+        }
+    }
+    async releaseLock(arg0: string, arg1: string, arg2: string, arg3: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.releaseLock(arg0, arg1, arg2, arg3);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.releaseLock(arg0, arg1, arg2, arg3);
             return result;
         }
     }
@@ -1356,14 +1529,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.updateShop(arg0, arg1, arg2, arg3);
-                return from_candid_UpdateShopResult_n8(this._uploadFile, this._downloadFile, result);
+                return from_candid_UpdateShopResult_n12(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.updateShop(arg0, arg1, arg2, arg3);
-            return from_candid_UpdateShopResult_n8(this._uploadFile, this._downloadFile, result);
+            return from_candid_UpdateShopResult_n12(this._uploadFile, this._downloadFile, result);
         }
     }
     async verifyAndChangeSuperAdmin(arg0: string, arg1: string): Promise<{
@@ -1384,22 +1557,43 @@ export class Backend implements backendInterface {
         }
     }
 }
-function from_candid_AddShopResult_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AddShopResult): AddShopResult {
-    return from_candid_record_n2(_uploadFile, _downloadFile, value);
+function from_candid_AddShopResult_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AddShopResult): AddShopResult {
+    return from_candid_record_n4(_uploadFile, _downloadFile, value);
 }
-function from_candid_UpdateShopResult_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UpdateShopResult): UpdateShopResult {
-    return from_candid_record_n9(_uploadFile, _downloadFile, value);
+function from_candid_LockResult_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _LockResult): LockResult {
+    return from_candid_variant_n2(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+function from_candid_UpdateShopResult_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UpdateShopResult): UpdateShopResult {
+    return from_candid_record_n13(_uploadFile, _downloadFile, value);
+}
+function from_candid_opt_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_LockRecord]): LockRecord | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+function from_candid_opt_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_ShopMeta]): ShopMeta | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_ShopMeta]): ShopMeta | null {
+function from_candid_opt_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_IdempotencyRecord]): IdempotencyRecord | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    error: [] | [string];
+    success: boolean;
+}): {
+    error?: string;
+    success: boolean;
+} {
+    return {
+        error: record_opt_to_undefined(from_candid_opt_n5(_uploadFile, _downloadFile, value.error)),
+        success: value.success
+    };
+}
+function from_candid_record_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     shopId: string;
     error: [] | [string];
     success: boolean;
@@ -1410,26 +1604,41 @@ function from_candid_record_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint
 } {
     return {
         shopId: value.shopId,
-        error: record_opt_to_undefined(from_candid_opt_n3(_uploadFile, _downloadFile, value.error)),
+        error: record_opt_to_undefined(from_candid_opt_n5(_uploadFile, _downloadFile, value.error)),
         success: value.success
     };
 }
-function from_candid_record_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
-    error: [] | [string];
-    success: boolean;
+function from_candid_variant_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    conflict: {
+        userName: string;
+        expiresInSeconds: bigint;
+        lockedBy: string;
+    };
+} | {
+    acquired: null;
 }): {
-    error?: string;
-    success: boolean;
-} {
-    return {
-        error: record_opt_to_undefined(from_candid_opt_n3(_uploadFile, _downloadFile, value.error)),
-        success: value.success
+    __kind__: "conflict";
+    conflict: {
+        userName: string;
+        expiresInSeconds: bigint;
+        lockedBy: string;
     };
+} | {
+    __kind__: "acquired";
+    acquired: null;
+} {
+    return "conflict" in value ? {
+        __kind__: "conflict",
+        conflict: value.conflict
+    } : "acquired" in value ? {
+        __kind__: "acquired",
+        acquired: value.acquired
+    } : value;
 }
-function to_candid_opt_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: string | null): [] | [string] {
+function to_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: bigint | null): [] | [bigint] {
+function to_candid_opt_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

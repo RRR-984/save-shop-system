@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { PartialDataBadge } from "../components/PartialDataBadge";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { PurchaseOrder, Vendor } from "../types/store";
@@ -895,7 +896,9 @@ export function PurchaseOrdersPage({
   reorderVendorId,
   reorderRate,
 }: PurchaseOrdersPageProps) {
-  const { vendors, products, purchaseOrders } = useStore();
+  const { vendors, products, purchaseOrders, isPhase2Loading } = useStore();
+  // Re-render when Phase2 finishes — vendors and purchaseOrders arrive then
+  void isPhase2Loading;
   const { currentUser } = useAuth();
   const role = currentUser?.role ?? "staff";
   const canManage = role === "owner" || role === "manager";
@@ -978,6 +981,9 @@ export function PurchaseOrdersPage({
 
   return (
     <div className="flex flex-col min-h-full bg-background page-fade-in">
+      {/* Partial data warning — shown on ALL pages when Phase1 had errors */}
+      <PartialDataBadge />
+
       {/* Header */}
       <div className="bg-card border-b shadow-card px-4 pt-4 pb-0">
         <div className="flex items-center justify-between mb-3">

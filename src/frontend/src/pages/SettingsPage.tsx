@@ -27,6 +27,7 @@ import {
   Package,
   Pencil,
   Plus,
+  Receipt,
   RefreshCw,
   Settings,
   Shield,
@@ -422,6 +423,10 @@ export function SettingsPage() {
   const [showPin, setShowPin] = useState(false);
   const [pinSaving, setPinSaving] = useState(false);
 
+  // GST Settings state
+  const [gstinValue, setGstinValue] = useState(appConfig.gstinNumber ?? "");
+  const [gstinSaving, setGstinSaving] = useState(false);
+
   const isCustomDeadStock = !DEAD_STOCK_OPTIONS.slice(0, 3).find(
     (o) => o.value === appConfig.deadStockThresholdDays,
   );
@@ -497,6 +502,26 @@ export function SettingsPage() {
     await saveAppConfig({ ownerPin: trimmed } as Partial<AppConfig>);
     setPinSaving(false);
     toast.success("Owner PIN saved");
+  }
+
+  async function handleSaveGstin() {
+    const trimmed = gstinValue.trim().toUpperCase();
+    if (
+      trimmed &&
+      !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(trimmed)
+    ) {
+      toast.error("GSTIN format invalid — must be like 22AAAAA0000A1Z5");
+      return;
+    }
+    setGstinSaving(true);
+    await saveAppConfig({
+      gstinNumber: trimmed || undefined,
+    } as Partial<AppConfig>);
+    setGstinValue(trimmed);
+    setGstinSaving(false);
+    toast.success(
+      trimmed ? "GSTIN saved — will appear on all invoices" : "GSTIN cleared",
+    );
   }
 
   function handleAddUnit() {
@@ -663,7 +688,65 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ── Section 2: Feature Control ── */}
+        {/* ── Section 2: GST Settings ── */}
+        <Card data-ocid="settings.gst_settings.panel">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-primary" />
+              <CardTitle className="text-base">GST Settings</CardTitle>
+            </div>
+            <CardDescription>
+              Shop GST Number — printed automatically on every bill
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="gstin-input" className="text-sm font-medium">
+                Shop GST Number (GSTIN)
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="gstin-input"
+                  data-ocid="settings.gstin.input"
+                  placeholder="e.g. 22AAAAA0000A1Z5"
+                  value={gstinValue}
+                  onChange={(e) => setGstinValue(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveGstin();
+                  }}
+                  maxLength={15}
+                  className="flex-1 h-9 text-sm font-mono uppercase"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveGstin}
+                  disabled={gstinSaving}
+                  data-ocid="settings.gstin.save_button"
+                >
+                  {gstinSaving ? (
+                    "Saving..."
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5 mr-1" /> Save
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This number will appear on every bill
+              </p>
+              {appConfig.gstinNumber && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <Check className="w-3 h-3" /> GSTIN saved:{" "}
+                  {appConfig.gstinNumber}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Section 3: Feature Control ── */}
         <Card data-ocid="settings.feature_control.panel">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
@@ -1411,6 +1494,64 @@ export function SettingsPage() {
             </p>
           </div>
         </div>
+
+        {/* ── Advanced: Multi-Device Sync ── */}
+        {isOwner && (
+          <Card data-ocid="settings.advanced.panel">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-primary" />
+                <CardTitle className="text-base">Advanced</CardTitle>
+              </div>
+              <CardDescription>
+                Multi-device and concurrency settings
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <Label className="text-sm font-medium">
+                    Enable Multi-Device Editing Lock
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Prevent two users from editing the same item at the same
+                    time. Also enables periodic background sync and 15-min
+                    session timeout.
+                  </p>
+                  <div className="mt-2">
+                    {(appConfig as { concurrencyEnabled?: boolean })
+                      .concurrencyEnabled ? (
+                      <Badge className="bg-green-100 text-green-700 border-green-300 border text-xs">
+                        ✅ Multi-Device Lock Enabled
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-muted text-muted-foreground text-xs">
+                        🔒 Multi-Device Lock Disabled
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <Switch
+                  data-ocid="settings.concurrency_enabled.switch"
+                  checked={
+                    !!(appConfig as { concurrencyEnabled?: boolean })
+                      .concurrencyEnabled
+                  }
+                  onCheckedChange={async (val) => {
+                    await saveAppConfig({
+                      concurrencyEnabled: val,
+                    } as Parameters<typeof saveAppConfig>[0]);
+                    toast.success(
+                      val
+                        ? "Multi-Device Editing Lock enabled"
+                        : "Multi-Device Editing Lock disabled",
+                    );
+                  }}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Danger Zone: Reset Shop Data ── */}
         {isOwner && (

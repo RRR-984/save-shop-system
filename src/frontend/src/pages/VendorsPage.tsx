@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { PartialDataBadge } from "../components/PartialDataBadge";
 import { useStore } from "../context/StoreContext";
 import { useAsyncAction } from "../hooks/useAsyncAction";
 import type { Vendor, VendorRateHistory } from "../types/store";
@@ -699,7 +700,14 @@ function VendorsPageInner() {
     vendorRateHistory,
     getVendorRateHistoryForVendor,
     shopId,
+    isPhase2Loading,
   } = useStore();
+
+  // Force re-render when Phase2 background load finishes so vendor/PO lists
+  // reflect freshly loaded data. The values themselves drive the useMemo below,
+  // but we need isPhase2Loading to trigger a new render cycle on completion.
+  const _phase2Key = `${isPhase2Loading}-${vendors.length}-${purchaseOrders.length}-${vendorRateHistory.length}`;
+  void _phase2Key; // consumed for side-effect only
 
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -749,6 +757,9 @@ function VendorsPageInner() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 page-fade-in">
+      {/* Partial data warning — shown on ALL pages when Phase1 had errors */}
+      <PartialDataBadge />
+
       {/* Page Header */}
       <div className="px-4 pt-4 pb-3 border-b border-border bg-card sticky top-0 z-10">
         <div className="flex items-center justify-between gap-3 mb-3">

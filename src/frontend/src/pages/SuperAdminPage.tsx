@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   ArrowUpDown,
   Bell,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -22,6 +23,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Store,
+  Trash2,
   TrendingUp,
   UserSearch,
   Users,
@@ -1728,10 +1730,450 @@ function DuplicatesTab({ adminMobile }: { adminMobile: string }) {
   );
 }
 
+// ─── Full System Reset Modal ──────────────────────────────────────────────────
+
+type ResetStep =
+  | "warn"
+  | "type-reset"
+  | "authorize"
+  | "progress"
+  | "success"
+  | "error";
+
+const RESET_PROGRESS_STEPS = [
+  "Deleting all shops...",
+  "Clearing products and inventory...",
+  "Removing customers and transactions...",
+  "Wiping reports and logs...",
+  "Clearing cache and local storage...",
+  "Finalizing reset...",
+];
+
+function FullSystemResetModal({
+  onClose,
+  onResetComplete,
+}: {
+  onClose: () => void;
+  onResetComplete: () => void;
+}) {
+  const [step, setStep] = useState<ResetStep>("warn");
+  const [resetText, setResetText] = useState("");
+  const [authMobile, setAuthMobile] = useState("");
+  const [progressIndex, setProgressIndex] = useState(-1);
+  const [completedSteps, setCompletedSteps] = useState<boolean[]>(
+    new Array(RESET_PROGRESS_STEPS.length).fill(false),
+  );
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleProceedToType = () => setStep("type-reset");
+  const handleBackToWarn = () => {
+    setStep("warn");
+    setResetText("");
+  };
+  const handleProceedToAuth = () => {
+    if (resetText === "RESET") setStep("authorize");
+  };
+  const handleBackToType = () => {
+    setStep("type-reset");
+    setAuthMobile("");
+  };
+
+  const handleFinalReset = async () => {
+    const cleanMobile = authMobile.replace(/\D/g, "");
+    if (cleanMobile !== PERMANENT_SUPER_ADMIN) return;
+
+    // Start progress screen immediately
+    setStep("progress");
+    setProgressIndex(0);
+    setCompletedSteps(new Array(RESET_PROGRESS_STEPS.length).fill(false));
+
+    // Call backend first
+    let backendOk = false;
+    try {
+      const actor = await createActorWithConfig();
+      const extActor = actor as unknown as Record<
+        string,
+        (
+          m: string,
+        ) => Promise<{
+          success: boolean;
+          deletedShops: bigint;
+          message: string;
+        }>
+      >;
+      const result = await extActor.fullSystemReset(cleanMobile);
+      backendOk = result.success;
+      if (!backendOk) {
+        setErrorMsg(
+          result.message || "Backend reset failed. Please try again.",
+        );
+        setStep("error");
+        return;
+      }
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to connect to backend.",
+      );
+      setStep("error");
+      return;
+    }
+
+    // Animate progress steps sequentially
+    for (let i = 0; i < RESET_PROGRESS_STEPS.length; i++) {
+      setProgressIndex(i);
+      await new Promise<void>((res) => setTimeout(res, 400));
+      setCompletedSteps((prev) => {
+        const next = [...prev];
+        next[i] = true;
+        return next;
+      });
+      await new Promise<void>((res) => setTimeout(res, 100));
+    }
+
+    // Clear all localStorage after backend reset
+    localStorage.clear();
+    setStep("success");
+  };
+
+  // ── Render overlay ────────────────────────────────────────────────────────
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      data-ocid="super_admin.reset.dialog"
+    >
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        {/* ── Step 1: Warning ─────────────────────────────────────────────── */}
+        {step === "warn" && (
+          <>
+            <div className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-border">
+              <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={18} className="text-destructive" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-bold text-foreground">
+                  Full System Reset
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  This action is permanent and irreversible.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                data-ocid="super_admin.reset.close_button"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/60 transition-colors flex-shrink-0"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 space-y-1.5">
+                <p className="text-sm font-semibold text-destructive">
+                  ⚠ This will permanently delete:
+                </p>
+                <ul className="text-xs text-destructive/80 space-y-0.5 list-disc list-inside">
+                  <li>ALL shops and shop data</li>
+                  <li>ALL products, customers, invoices</li>
+                  <li>ALL transactions, payments, returns</li>
+                  <li>ALL reports, audit logs, and admin data</li>
+                </ul>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The system will return to a completely clean state. This action{" "}
+                <strong className="text-foreground">CANNOT be undone.</strong>
+              </p>
+            </div>
+
+            <div className="flex gap-2 px-5 pb-5">
+              <Button
+                variant="outline"
+                onClick={onClose}
+                data-ocid="super_admin.reset.cancel_button"
+                className="flex-1 min-h-[44px]"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleProceedToType}
+                data-ocid="super_admin.reset.continue_button"
+                className="flex-1 min-h-[44px] gap-2"
+              >
+                <AlertTriangle size={14} />
+                Continue
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* ── Step 2: Type RESET ──────────────────────────────────────────── */}
+        {step === "type-reset" && (
+          <>
+            <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle
+                  size={15}
+                  className="text-amber-600 dark:text-amber-400"
+                />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-sm font-bold text-foreground">
+                  Confirm Reset
+                </h2>
+                <p className="text-xs text-muted-foreground">Step 2 of 3</p>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                To confirm, type{" "}
+                <code className="font-mono font-bold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded text-xs">
+                  RESET
+                </code>{" "}
+                in the field below:
+              </p>
+              <input
+                type="text"
+                value={resetText}
+                onChange={(e) => setResetText(e.target.value)}
+                placeholder="Type RESET to confirm"
+                data-ocid="super_admin.reset.type_reset_input"
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full h-11 px-3 rounded-xl border border-border bg-background text-foreground font-mono text-sm tracking-widest placeholder:text-muted-foreground/50 placeholder:font-normal placeholder:tracking-normal focus:outline-none focus:ring-2 focus:ring-destructive/40"
+              />
+            </div>
+
+            <div className="flex gap-2 px-5 pb-5">
+              <Button
+                variant="outline"
+                onClick={handleBackToWarn}
+                data-ocid="super_admin.reset.back_button"
+                className="flex-1 min-h-[44px]"
+              >
+                Back
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleProceedToAuth}
+                disabled={resetText !== "RESET"}
+                data-ocid="super_admin.reset.proceed_button"
+                className="flex-1 min-h-[44px]"
+              >
+                Proceed
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* ── Step 3: Enter admin mobile ──────────────────────────────────── */}
+        {step === "authorize" && (
+          <>
+            <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-border">
+              <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                <Lock size={15} className="text-destructive" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-sm font-bold text-foreground">
+                  Authorize Reset
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Step 3 of 3 — Final authorization
+                </p>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Enter your Super Admin mobile number to authorize this reset:
+              </p>
+              <input
+                type="tel"
+                value={authMobile}
+                onChange={(e) =>
+                  setAuthMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+                }
+                placeholder={`Enter ${PERMANENT_SUPER_ADMIN}`}
+                data-ocid="super_admin.reset.auth_mobile_input"
+                maxLength={10}
+                className="w-full h-11 px-3 rounded-xl border border-border bg-background text-foreground font-mono text-base tracking-widest placeholder:text-muted-foreground/50 placeholder:font-normal placeholder:tracking-normal focus:outline-none focus:ring-2 focus:ring-destructive/40"
+              />
+              {authMobile.length === 10 &&
+                authMobile !== PERMANENT_SUPER_ADMIN && (
+                  <p
+                    className="text-xs text-destructive"
+                    data-ocid="super_admin.reset.auth_error_state"
+                  >
+                    Mobile number does not match the Super Admin account.
+                  </p>
+                )}
+            </div>
+
+            <div className="flex gap-2 px-5 pb-5">
+              <Button
+                variant="outline"
+                onClick={handleBackToType}
+                data-ocid="super_admin.reset.back_button"
+                className="flex-1 min-h-[44px]"
+              >
+                Back
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleFinalReset}
+                disabled={authMobile !== PERMANENT_SUPER_ADMIN}
+                data-ocid="super_admin.reset.final_reset_button"
+                className="flex-1 min-h-[44px] gap-2"
+              >
+                <Trash2 size={14} />
+                Final Reset
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* ── Progress Screen ─────────────────────────────────────────────── */}
+        {step === "progress" && (
+          <div
+            className="px-5 py-6 space-y-5"
+            data-ocid="super_admin.reset.loading_state"
+          >
+            <div className="text-center space-y-1">
+              <div
+                className="w-12 h-12 border-3 border-destructive/30 border-t-destructive rounded-full animate-spin mx-auto"
+                style={{ borderWidth: 3 }}
+              />
+              <h2 className="text-sm font-bold text-foreground mt-3">
+                Resetting System...
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Please do not close this window.
+              </p>
+            </div>
+
+            <div className="space-y-2.5">
+              {RESET_PROGRESS_STEPS.map((label, i) => {
+                const isDone = completedSteps[i];
+                const isActive = progressIndex === i && !isDone;
+                return (
+                  <div
+                    key={label}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                      isDone
+                        ? "bg-green-500/8 border border-green-500/20"
+                        : isActive
+                          ? "bg-primary/5 border border-primary/20"
+                          : "opacity-40"
+                    }`}
+                    data-ocid={`super_admin.reset.progress_step.${i + 1}`}
+                  >
+                    <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
+                      {isDone ? (
+                        <CheckCircle2
+                          size={16}
+                          className="text-green-600 dark:text-green-400"
+                        />
+                      ) : isActive ? (
+                        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border-2 border-border" />
+                      )}
+                    </div>
+                    <span
+                      className={`text-xs font-medium ${
+                        isDone
+                          ? "text-green-700 dark:text-green-400"
+                          : isActive
+                            ? "text-foreground"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Success Screen ──────────────────────────────────────────────── */}
+        {step === "success" && (
+          <div
+            className="px-5 py-8 flex flex-col items-center gap-5 text-center"
+            data-ocid="super_admin.reset.success_state"
+          >
+            <div className="w-16 h-16 rounded-full bg-green-500/15 flex items-center justify-center">
+              <CheckCircle2
+                size={32}
+                className="text-green-600 dark:text-green-400"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <h2 className="text-lg font-bold text-foreground">
+                System Reset Complete
+              </h2>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                All data has been permanently deleted. The system is now clean
+                and ready for a fresh start.
+              </p>
+            </div>
+            <Button
+              onClick={onResetComplete}
+              data-ocid="super_admin.reset.create_owner_button"
+              className="w-full min-h-[44px] gap-2 bg-green-600 hover:bg-green-700 text-white border-0"
+            >
+              <Users size={15} />
+              Create New Owner Account
+            </Button>
+          </div>
+        )}
+
+        {/* ── Error Screen ────────────────────────────────────────────────── */}
+        {step === "error" && (
+          <div
+            className="px-5 py-8 flex flex-col items-center gap-5 text-center"
+            data-ocid="super_admin.reset.error_state"
+          >
+            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+              <AlertTriangle size={32} className="text-destructive" />
+            </div>
+            <div className="space-y-1.5">
+              <h2 className="text-base font-bold text-foreground">
+                Reset Failed
+              </h2>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                {errorMsg}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={onClose}
+              data-ocid="super_admin.reset.close_button"
+              className="w-full min-h-[44px]"
+            >
+              Close
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
   const { currentUser, logout } = useAuth();
+  const [showResetModal, setShowResetModal] = useState(false);
+
+  const handleResetComplete = () => {
+    // Clear all localStorage and logout — redirect to fresh login
+    localStorage.clear();
+    logout();
+  };
 
   // ── Access state ──────────────────────────────────────────────────────────
   const [authStatus, setAuthStatus] = useState<
@@ -2790,6 +3232,47 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
               </div>
             </section>
 
+            {/* Danger Zone — Full System Reset */}
+            <section
+              className="rounded-2xl border-2 border-destructive/30 bg-destructive/5 p-4 space-y-3"
+              data-ocid="super_admin.danger_zone_section"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-destructive/15 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle size={14} className="text-destructive" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-destructive">
+                    Danger Zone
+                  </h2>
+                  <p className="text-xs text-destructive/70">
+                    Irreversible system-level actions
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-background border border-destructive/20 rounded-xl px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    Full System Reset
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Permanently delete ALL shops, data, users, and admin
+                    settings. This cannot be undone.
+                  </p>
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowResetModal(true)}
+                  data-ocid="super_admin.danger_zone.reset_button"
+                  className="gap-2 flex-shrink-0 min-h-[44px] sm:min-w-[160px]"
+                >
+                  <Trash2 size={14} />
+                  Full System Reset
+                </Button>
+              </div>
+            </section>
+
             <p className="text-xs text-center text-muted-foreground/40 pb-2">
               Auto-refreshes every 30 seconds &bull; Data retention: 90 days
             </p>
@@ -2807,6 +3290,14 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
         {/* ── Change Log Tab ───────────────────────────────────────────────── */}
         {activeTab === "change-log" && <ChangeLogTab />}
       </main>
+
+      {/* ── Full System Reset Modal ──────────────────────────────────────────── */}
+      {showResetModal && (
+        <FullSystemResetModal
+          onClose={() => setShowResetModal(false)}
+          onResetComplete={handleResetComplete}
+        />
+      )}
     </div>
   );
 }

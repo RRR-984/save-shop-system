@@ -39,8 +39,10 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LockBadge } from "../components/LockBadge";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
+import { useLockManager } from "../hooks/useLockManager";
 import type { NavPage, Product, StockBatch } from "../types/store";
 import { ROLE_PERMISSIONS } from "../types/store";
 
@@ -287,10 +289,17 @@ export function InventoryPage({
     purchaseOrders,
     refreshCounter,
     isPhase1Loading,
+    isPhase2Loading,
     phase1HasPartialError,
     phase2HasPartialError,
+    appConfig,
+    autoMode,
   } = useStore();
   void refreshCounter; // ensures InventoryPage re-renders whenever a mutation fires
+  // Re-render when Phase2 background load finishes (purchaseOrders loaded)
+  void isPhase2Loading;
+  void appConfig; // ensures re-render when featureMode changes
+  void autoMode; // ensures re-render when mode switcher changes
   const { currentUser } = useAuth();
   const userRole = currentUser?.role ?? "staff";
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
@@ -320,7 +329,12 @@ export function InventoryPage({
   const filtered = useMemo(
     () =>
       products.filter((p) => {
-        const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
+        const q = search.toLowerCase();
+        const matchSearch =
+          p.name.toLowerCase().includes(q) ||
+          p.partNo?.toLowerCase().includes(q) ||
+          p.srNo?.toLowerCase().includes(q) ||
+          p.tnNo?.toLowerCase().includes(q);
         const matchCat =
           categoryFilter === "all" || p.categoryId === categoryFilter;
         return matchSearch && matchCat;
@@ -562,6 +576,11 @@ function ProductCard({
   onReorder,
 }: ProductCardProps) {
   const { categories } = useStore();
+  const { acquireLock, releaseLock } = useLockManager();
+  const [lockStatus, setLockStatus] = useState<"idle" | "mine" | "conflict">(
+    "idle",
+  );
+  const [conflictUser, setConflictUser] = useState("");
   const stock = getProductStock(p.id);
   const batches = getProductBatches(p.id);
   const isLow = stock < p.minStockAlert;
@@ -646,6 +665,46 @@ function ProductCard({
                     </span>
                   )}
                 </div>
+                {/* Spare Part Fields — auto-visible when any field is set */}
+                {(p.partNo ||
+                  p.srNo ||
+                  p.tnNo ||
+                  p.dd ||
+                  p.ed ||
+                  p.mrp != null) && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {p.partNo && (
+                      <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-700">
+                        Part No: {p.partNo}
+                      </span>
+                    )}
+                    {p.srNo && (
+                      <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-700">
+                        SR No: {p.srNo}
+                      </span>
+                    )}
+                    {p.tnNo && (
+                      <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 dark:bg-sky-900/40 dark:text-sky-300 dark:border-sky-700">
+                        TN No: {p.tnNo}
+                      </span>
+                    )}
+                    {p.dd && (
+                      <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-300 dark:border-indigo-700">
+                        DD: {p.dd}
+                      </span>
+                    )}
+                    {p.ed && (
+                      <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700">
+                        ED: {p.ed}
+                      </span>
+                    )}
+                    {p.mrp != null && (
+                      <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700">
+                        MRP: ₹{p.mrp.toLocaleString("en-IN")}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -899,15 +958,60 @@ function ProductCard({
 
               {/* Edit/Delete buttons — hidden for staff */}
               {(canEdit || canDelete) && (
-                <div className="mt-3 flex gap-2 justify-end">
-                  {/* Placeholder action triggers for future inline quick-edit */}
-                  {canEdit && (
-                    <Badge
+                <div className="mt-3 flex flex-wrap gap-2 items-center justify-end">
+                  {/* Lock badge — shown when another user is editing */}
+                  {lockStatus === "conflict" && (
+                    <LockBadge
+                      recordId={p.id}
+                      recordType="product"
+                      onLockConflict={(user) => {
+                        setConflictUser(user);
+                        setLockStatus("conflict");
+                      }}
+                    />
+                  )}
+                  {lockStatus === "mine" && (
+                    <LockBadge recordId={p.id} recordType="product" />
+                  )}
+                  {canEdit && lockStatus === "idle" && (
+                    <Button
                       variant="outline"
-                      className="text-xs text-muted-foreground"
+                      size="sm"
+                      className="h-7 text-xs px-2 gap-1"
+                      data-ocid={`inventory.item.edit_button.${idx + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const result = acquireLock(p.id, "product");
+                        if (result.status === "conflict") {
+                          setConflictUser(result.existingLock.userName);
+                          setLockStatus("conflict");
+                        } else {
+                          setLockStatus("mine");
+                        }
+                      }}
                     >
                       Edit in Admin Panel
-                    </Badge>
+                    </Button>
+                  )}
+                  {canEdit && lockStatus === "mine" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs px-2 gap-1 border-green-400 text-green-700 hover:bg-green-50"
+                      data-ocid={`inventory.item.cancel_edit_button.${idx + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        releaseLock(p.id, "product");
+                        setLockStatus("idle");
+                      }}
+                    >
+                      Release Edit Lock
+                    </Button>
+                  )}
+                  {canEdit && lockStatus === "conflict" && (
+                    <span className="text-xs text-amber-600 dark:text-amber-400">
+                      Locked by {conflictUser}
+                    </span>
                   )}
                 </div>
               )}

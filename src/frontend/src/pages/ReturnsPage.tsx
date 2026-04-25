@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { PartialDataBadge } from "../components/PartialDataBadge";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import type { ReturnReason } from "../types/store";
@@ -60,7 +61,10 @@ function fmtDate(iso: string) {
 }
 
 export function ReturnsPage() {
-  const { products, returns, addReturn, getReturnReport } = useStore();
+  const { products, returns, addReturn, getReturnReport, isPhase2Loading } =
+    useStore();
+  // Re-render when Phase2 finishes — returns data arrives in Phase2
+  void isPhase2Loading;
   const { session } = useAuth();
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -145,6 +149,8 @@ export function ReturnsPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8" data-ocid="returns.page">
+      {/* Partial data warning — shown on ALL pages when Phase1 had errors */}
+      <PartialDataBadge />
       <div className="px-4 md:px-6 space-y-5">
         {/* ─── Return Report Card ──────────────────── */}
         <Card

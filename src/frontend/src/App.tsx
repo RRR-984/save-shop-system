@@ -1,127 +1,54 @@
 import { Toaster } from "@/components/ui/sonner";
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ChatBot } from "./components/ChatBot";
 import { FirstTimeUserWelcomePopup } from "./components/FirstTimeUserWelcomePopup";
 import { PWAInstallModal } from "./components/PWAInstallModal";
+import { SessionExpiredToast } from "./components/SessionExpiredToast";
 import { MemoSidebar as Sidebar } from "./components/Sidebar";
 import { PageSkeleton, SkeletonLoader } from "./components/SkeletonLoader";
 import { SyncStatusBanner } from "./components/SyncStatusBanner";
+import { SyncStatusBar } from "./components/SyncStatusBar";
 import { TopBar } from "./components/TopBar";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import { StoreProvider, useStore } from "./context/StoreContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { useDraggable } from "./hooks/useDraggable";
+import { usePeriodicSync } from "./hooks/usePeriodicSync";
+import { useSessionHeartbeat } from "./hooks/useSessionHeartbeat";
 import { useSyncEngine } from "./hooks/useSyncEngine";
-// DashboardPage — eager-loaded (first render target)
+import { AdminPage } from "./pages/AdminPage";
+import { AuditLogPage } from "./pages/AuditLogPage";
+import { BillingPage } from "./pages/BillingPage";
+import { CashCounterPage } from "./pages/CashCounterPage";
+import { CustomerOrdersPage } from "./pages/CustomerOrdersPage";
+import { CustomersPage } from "./pages/CustomersPage";
 import { DashboardPage } from "./pages/DashboardPage";
-// LoginPage — eager-loaded (shown before auth, must be available immediately)
+import { DiamondRewardsPage } from "./pages/DiamondRewardsPage";
+import { DraftsPage } from "./pages/DraftsPage";
+import { FeedbackPage } from "./pages/FeedbackPage";
+import { HistoryPage } from "./pages/HistoryPage";
+import { InventoryPage } from "./pages/InventoryPage";
 import { LoginPage } from "./pages/LoginPage";
-// OwnerDashboardPage — eager-loaded (critical path for multi-shop owners)
+import { LowPriceAlertLogPage } from "./pages/LowPriceAlertLogPage";
 import { OwnerDashboardPage } from "./pages/OwnerDashboardPage";
+import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
+import { RankingsPage } from "./pages/RankingsPage";
+import { ReferralPage } from "./pages/ReferralPage";
+import { ReminderLogPage } from "./pages/ReminderLogPage";
+import { ReportsPage } from "./pages/ReportsPage";
+import { ReturnsPage } from "./pages/ReturnsPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { ShopBoardPage } from "./pages/ShopBoardPage";
+import { StaffAttendancePage } from "./pages/StaffAttendancePage";
+import { StaffCreditReportPage } from "./pages/StaffCreditReportPage";
+import { StaffManagementPage } from "./pages/StaffManagementPage";
+import { StaffPerformancePage } from "./pages/StaffPerformancePage";
+import { StockPage } from "./pages/StockPage";
+import { SuperAdminPage } from "./pages/SuperAdminPage";
+import { VendorsPage } from "./pages/VendorsPage";
 import type { NavPage } from "./types/store";
-
-// ── Lazy-loaded pages (code-split — only loaded when user navigates there) ──
-const AdminPage = lazy(() =>
-  import("./pages/AdminPage").then((m) => ({ default: m.AdminPage })),
-);
-const AuditLogPage = lazy(() =>
-  import("./pages/AuditLogPage").then((m) => ({ default: m.AuditLogPage })),
-);
-const BillingPage = lazy(() =>
-  import("./pages/BillingPage").then((m) => ({ default: m.BillingPage })),
-);
-const CashCounterPage = lazy(() =>
-  import("./pages/CashCounterPage").then((m) => ({
-    default: m.CashCounterPage,
-  })),
-);
-const CustomerOrdersPage = lazy(() =>
-  import("./pages/CustomerOrdersPage").then((m) => ({
-    default: m.CustomerOrdersPage,
-  })),
-);
-const CustomersPage = lazy(() =>
-  import("./pages/CustomersPage").then((m) => ({ default: m.CustomersPage })),
-);
-const DiamondRewardsPage = lazy(() =>
-  import("./pages/DiamondRewardsPage").then((m) => ({
-    default: m.DiamondRewardsPage,
-  })),
-);
-const DraftsPage = lazy(() =>
-  import("./pages/DraftsPage").then((m) => ({ default: m.DraftsPage })),
-);
-const FeedbackPage = lazy(() =>
-  import("./pages/FeedbackPage").then((m) => ({ default: m.FeedbackPage })),
-);
-const HistoryPage = lazy(() =>
-  import("./pages/HistoryPage").then((m) => ({ default: m.HistoryPage })),
-);
-const InventoryPage = lazy(() =>
-  import("./pages/InventoryPage").then((m) => ({ default: m.InventoryPage })),
-);
-const LowPriceAlertLogPage = lazy(() =>
-  import("./pages/LowPriceAlertLogPage").then((m) => ({
-    default: m.LowPriceAlertLogPage,
-  })),
-);
-const PurchaseOrdersPage = lazy(() =>
-  import("./pages/PurchaseOrdersPage").then((m) => ({
-    default: m.PurchaseOrdersPage,
-  })),
-);
-const RankingsPage = lazy(() =>
-  import("./pages/RankingsPage").then((m) => ({ default: m.RankingsPage })),
-);
-const ReferralPage = lazy(() =>
-  import("./pages/ReferralPage").then((m) => ({ default: m.ReferralPage })),
-);
-const ReminderLogPage = lazy(() =>
-  import("./pages/ReminderLogPage").then((m) => ({
-    default: m.ReminderLogPage,
-  })),
-);
-const ReportsPage = lazy(() =>
-  import("./pages/ReportsPage").then((m) => ({ default: m.ReportsPage })),
-);
-const ReturnsPage = lazy(() =>
-  import("./pages/ReturnsPage").then((m) => ({ default: m.ReturnsPage })),
-);
-const SettingsPage = lazy(() =>
-  import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
-);
-const ShopBoardPage = lazy(() =>
-  import("./pages/ShopBoardPage").then((m) => ({ default: m.ShopBoardPage })),
-);
-const StaffAttendancePage = lazy(() =>
-  import("./pages/StaffAttendancePage").then((m) => ({
-    default: m.StaffAttendancePage,
-  })),
-);
-const StaffCreditReportPage = lazy(() =>
-  import("./pages/StaffCreditReportPage").then((m) => ({
-    default: m.StaffCreditReportPage,
-  })),
-);
-const StaffManagementPage = lazy(() =>
-  import("./pages/StaffManagementPage").then((m) => ({
-    default: m.StaffManagementPage,
-  })),
-);
-const StaffPerformancePage = lazy(() =>
-  import("./pages/StaffPerformancePage").then((m) => ({
-    default: m.StaffPerformancePage,
-  })),
-);
-const StockPage = lazy(() =>
-  import("./pages/StockPage").then((m) => ({ default: m.StockPage })),
-);
-const VendorsPage = lazy(() =>
-  import("./pages/VendorsPage").then((m) => ({ default: m.VendorsPage })),
-);
-const SuperAdminPage = lazy(() =>
-  import("./pages/SuperAdminPage").then((m) => ({ default: m.SuperAdminPage })),
-);
+import { STORAGE_KEYS } from "./utils/localStorage";
 
 const NAV_STATE_KEY = "save_shop_nav_state";
 
@@ -207,13 +134,54 @@ function AppContent() {
     referralCodes,
     recordReferralSignup,
     shopId,
+    appConfig,
   } = useStore();
+  const { logout } = useAuth();
   const [loadingTooLong, setLoadingTooLong] = useState(false);
   // Auto-hide skeleton after 1.5s max even if Phase 1 hasn't resolved
   const [skeletonTimeout, setSkeletonTimeout] = useState(false);
+  // Session expired modal state
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Concurrency feature flag — derived from appConfig
+  const concurrencyEnabled = !!(appConfig as { concurrencyEnabled?: boolean })
+    .concurrencyEnabled;
+
+  // Session heartbeat — auto-logout on 15 min idle (only when concurrencyEnabled)
+  const handleSessionExpired = useCallback(() => {
+    setSessionExpired(true);
+  }, []);
+  useSessionHeartbeat({
+    enabled: concurrencyEnabled,
+    onExpired: handleSessionExpired,
+  });
+
+  // Periodic sync — pulls remote changes every 15s ± jitter
+  const periodicSync = usePeriodicSync(concurrencyEnabled && !isLoading);
 
   // Global background sync engine — runs silently, never blocks UI
   const syncEngine = useSyncEngine(shopId);
+
+  // ── Draggable FAB (New Sale button) ────────────────────────────────────
+  const FAB_W = 140; // approximate pill width
+  const FAB_H = 48;
+  const fabDefaultPos = () => {
+    const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 700;
+    return { x: vw - FAB_W - 20, y: vh - FAB_H - 20 };
+  };
+  const {
+    pos: fabPos,
+    isDragging: isFabDragging,
+    hasDragged: fabHasDragged,
+    onMouseDown: onFabMouseDown,
+    onTouchStart: onFabTouchStart,
+    style: fabDragStyle,
+  } = useDraggable({
+    storageKey: STORAGE_KEYS.fabPos,
+    defaultPos: fabDefaultPos(),
+    elementSize: { w: FAB_W, h: FAB_H },
+  });
 
   // Dispatch 'app-ready' once the store finishes loading so main.tsx can hide the splash
   useEffect(() => {
@@ -474,6 +442,11 @@ function AppContent() {
           isHome={currentPage === "dashboard"}
         />
         <SyncStatusBanner engine={syncEngine} />
+        {/* Compact multi-device sync status bar */}
+        <SyncStatusBar
+          isSyncing={periodicSync.isSyncing}
+          lastSyncAt={periodicSync.lastSyncAt}
+        />
 
         {/* Partial data warning badge — shown when Phase 1 had errors but app rendered anyway */}
         {phase1HasPartialError && currentPage === "dashboard" && (
@@ -500,12 +473,19 @@ function AppContent() {
         <button
           type="button"
           data-ocid="fab.new_sale.button"
-          onClick={() => handleNavigate("billing")}
-          className="new-sale-fab flex items-center gap-2 px-5 py-3.5 rounded-full font-bold text-sm text-white shadow-xl hover:opacity-90 active:scale-95 transition-all duration-150"
+          onMouseDown={onFabMouseDown}
+          onTouchStart={onFabTouchStart}
+          onClick={() => {
+            if (!fabHasDragged.current) handleNavigate("billing");
+          }}
+          className={`new-sale-fab flex items-center gap-2 px-5 py-3.5 rounded-full font-bold text-sm text-white shadow-xl hover:opacity-90 active:scale-95 transition-all duration-150${isFabDragging ? " is-dragging" : ""}`}
           style={{
+            left: fabPos.x,
+            top: fabPos.y,
             background: "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
             boxShadow:
               "0 8px 32px 0 rgba(37,99,235,0.45), 0 2px 8px 0 rgba(0,0,0,0.18)",
+            ...fabDragStyle,
           }}
           aria-label="New Sale"
         >
@@ -517,6 +497,14 @@ function AppContent() {
       <PWAInstallModal />
       <FirstTimeUserWelcomePopup />
       <ChatBot />
+      {/* Session expired modal — shown after 15 min idle when concurrencyEnabled */}
+      <SessionExpiredToast
+        open={sessionExpired}
+        onLogin={() => {
+          setSessionExpired(false);
+          logout();
+        }}
+      />
     </div>
   );
 }

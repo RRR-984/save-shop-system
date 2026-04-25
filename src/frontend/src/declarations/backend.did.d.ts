@@ -10,6 +10,11 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface ActiveUserRecord {
+  'userName' : string,
+  'userId' : string,
+  'lastSeen' : bigint,
+}
 export interface ActivityRecord {
   'id' : string,
   'activityType' : string,
@@ -34,6 +39,28 @@ export interface BackupSnapshotMeta {
   'timestamp' : bigint,
 }
 export interface DeleteShopResult { 'success' : boolean }
+export interface IdempotencyRecord {
+  'shopId' : string,
+  'invoiceId' : string,
+  'processedAt' : bigint,
+}
+export interface LockRecord {
+  'userName' : string,
+  'expiresAt' : bigint,
+  'shopId' : string,
+  'userId' : string,
+  'recordType' : string,
+  'acquiredAt' : bigint,
+  'recordId' : string,
+}
+export type LockResult = {
+    'conflict' : {
+      'userName' : string,
+      'expiresInSeconds' : bigint,
+      'lockedBy' : string,
+    }
+  } |
+  { 'acquired' : null };
 export interface OwnerStats {
   'totalProducts' : bigint,
   'totalProfit' : bigint,
@@ -90,12 +117,22 @@ export interface UserStatsResult {
   'salesCount' : bigint,
 }
 export interface _SERVICE {
+  'acquireLock' : ActorMethod<
+    [string, string, string, string, string],
+    LockResult
+  >,
   'addShop' : ActorMethod<[string, string, string, string], AddShopResult>,
+  'checkIdempotency' : ActorMethod<[string, string], [] | [IdempotencyRecord]>,
   'checkMobileExists' : ActorMethod<[string], boolean>,
   'clearShopData' : ActorMethod<[string], undefined>,
   'deleteBackupSnapshot' : ActorMethod<[string, string], undefined>,
   'deleteShop' : ActorMethod<[string], DeleteShopResult>,
   'findDuplicateUsers' : ActorMethod<[], string>,
+  'fullSystemReset' : ActorMethod<
+    [string],
+    { 'deletedShops' : bigint, 'message' : string, 'success' : boolean }
+  >,
+  'getActiveUsersForShop' : ActorMethod<[string], Array<ActiveUserRecord>>,
   'getActivities' : ActorMethod<
     [[] | [string], [] | [bigint], [] | [bigint]],
     Array<ActivityRecord>
@@ -116,6 +153,7 @@ export interface _SERVICE {
   'getDrafts' : ActorMethod<[string], string>,
   'getFeedback' : ActorMethod<[string], string>,
   'getInvoices' : ActorMethod<[string], string>,
+  'getLockStatus' : ActorMethod<[string, string, string], [] | [LockRecord]>,
   'getLowPriceAlertLogs' : ActorMethod<[string], string>,
   'getMergeAuditLog' : ActorMethod<[], string>,
   'getOwnerStats' : ActorMethod<[string], OwnerStats>,
@@ -142,6 +180,7 @@ export interface _SERVICE {
   'getUsers' : ActorMethod<[string], string>,
   'getVendorRateHistory' : ActorMethod<[string], string>,
   'getVendors' : ActorMethod<[string], string>,
+  'heartbeatLock' : ActorMethod<[string, string, string, string], boolean>,
   'initPermanentSuperAdmin' : ActorMethod<[], undefined>,
   'isPermanentSuperAdminQuery' : ActorMethod<[string], boolean>,
   'listShopsForOwner' : ActorMethod<[string], Array<ShopMeta>>,
@@ -149,6 +188,9 @@ export interface _SERVICE {
   'pruneOldBackups' : ActorMethod<[string, bigint], bigint>,
   'purgeOldActivities' : ActorMethod<[bigint], bigint>,
   'recordActivity' : ActorMethod<[string, string, string, string], undefined>,
+  'registerIdempotency' : ActorMethod<[string, string, string], boolean>,
+  'releaseAllLocksForUser' : ActorMethod<[string, string], bigint>,
+  'releaseLock' : ActorMethod<[string, string, string, string], boolean>,
   'saveAdminSettings' : ActorMethod<[AdminSettings], boolean>,
   'saveAuditLogs' : ActorMethod<[string, string], undefined>,
   'saveBackupSnapshot' : ActorMethod<

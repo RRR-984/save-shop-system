@@ -60,6 +60,31 @@ type OwnerStats =
    totalSales: nat;
    totalTransactions: nat;
  };
+type LockResult = 
+ variant {
+   acquired;
+   conflict: record {
+               expiresInSeconds: int;
+               lockedBy: text;
+               userName: text;
+             };
+ };
+type LockRecord = 
+ record {
+   acquiredAt: int;
+   expiresAt: int;
+   recordId: text;
+   recordType: text;
+   shopId: text;
+   userId: text;
+   userName: text;
+ };
+type IdempotencyRecord = 
+ record {
+   invoiceId: text;
+   processedAt: int;
+   shopId: text;
+ };
 type DeleteShopResult = record {success: bool;};
 type BackupSnapshotMeta = 
  record {
@@ -88,14 +113,31 @@ type ActivityRecord =
    timestamp: int;
    userId: text;
  };
+type ActiveUserRecord = 
+ record {
+   lastSeen: int;
+   userId: text;
+   userName: text;
+ };
 service : {
+  acquireLock: (recordId: text, recordType: text, shopId: text, userId: 
+   text, userName: text) -> (LockResult);
   addShop: (ownerMobile: text, shopName: text, address: text, city: text) ->
    (AddShopResult);
+  checkIdempotency: (idempotencyKey: text, shopId: text) ->
+   (opt IdempotencyRecord) query;
   checkMobileExists: (mobile: text) -> (bool) query;
   clearShopData: (shopId: text) -> ();
   deleteBackupSnapshot: (shopId: text, snapshotId: text) -> ();
   deleteShop: (shopId: text) -> (DeleteShopResult);
   findDuplicateUsers: () -> (text);
+  fullSystemReset: (callerMobile: text) ->
+   (record {
+      deletedShops: nat;
+      message: text;
+      success: bool;
+    });
+  getActiveUsersForShop: (shopId: text) -> (vec ActiveUserRecord) query;
   getActivities: (shopIdFilter: opt text, startTs: opt int, endTs:
    opt int) -> (vec ActivityRecord) query;
   getAdminSettings: () -> (AdminSettings) query;
@@ -112,6 +154,8 @@ service : {
   getDrafts: (shopId: text) -> (text) query;
   getFeedback: (shopId: text) -> (text) query;
   getInvoices: (shopId: text) -> (text) query;
+  getLockStatus: (recordId: text, recordType: text, shopId: text) ->
+   (opt LockRecord) query;
   getLowPriceAlertLogs: (shopId: text) -> (text) query;
   getMergeAuditLog: () -> (text) query;
   getOwnerStats: (mobile: text) -> (OwnerStats) query;
@@ -136,6 +180,8 @@ service : {
   getUsers: (shopId: text) -> (text) query;
   getVendorRateHistory: (shopId: text) -> (text) query;
   getVendors: (shopId: text) -> (text) query;
+  heartbeatLock: (recordId: text, recordType: text, shopId: text, userId:
+   text) -> (bool);
   initPermanentSuperAdmin: () -> ();
   isPermanentSuperAdminQuery: (mobile: text) -> (bool) query;
   listShopsForOwner: (mobile: text) -> (vec ShopMeta) query;
@@ -144,6 +190,11 @@ service : {
   purgeOldActivities: (beforeTs: int) -> (nat);
   recordActivity: (shopId: text, userId: text, activityType: text, metadata:
    text) -> ();
+  registerIdempotency: (idempotencyKey: text, invoiceId: text, shopId:
+   text) -> (bool);
+  releaseAllLocksForUser: (shopId: text, userId: text) -> (nat);
+  releaseLock: (recordId: text, recordType: text, shopId: text, userId:
+   text) -> (bool);
   saveAdminSettings: (settings: AdminSettings) -> (bool);
   saveAuditLogs: (shopId: text, data: text) -> ();
   saveBackupSnapshot: (shopId: text, snapshotId: text, tag: text, data:

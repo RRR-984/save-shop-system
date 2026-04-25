@@ -30,7 +30,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  Hash,
   Layers,
+  ListOrdered,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -171,6 +173,14 @@ export function StockPage({
   const [qaUnit, setQaUnit] = useState("");
   const [qaMinStock, setQaMinStock] = useState("");
   const [qaSellPrice, setQaSellPrice] = useState("");
+  // Spare part fields
+  const [qaPartNo, setQaPartNo] = useState("");
+  const [qaSrNo, setQaSrNo] = useState("");
+  const [qaTnNo, setQaTnNo] = useState("");
+  const [qaDd, setQaDd] = useState("");
+  const [qaEd, setQaEd] = useState("");
+  const [qaMrp, setQaMrp] = useState("");
+  const [showSparePartFields, setShowSparePartFields] = useState(false);
 
   const resetQuickAdd = () => {
     setQaName("");
@@ -178,6 +188,13 @@ export function StockPage({
     setQaUnit("");
     setQaMinStock("");
     setQaSellPrice("");
+    setQaPartNo("");
+    setQaSrNo("");
+    setQaTnNo("");
+    setQaDd("");
+    setQaEd("");
+    setQaMrp("");
+    setShowSparePartFields(false);
   };
 
   const handleQuickAddProduct = () => {
@@ -214,6 +231,12 @@ export function StockPage({
       minStockAlert: qaMinStock ? Number(qaMinStock) : 0,
       sellingPrice: qaSellPrice ? Number(qaSellPrice) : 0,
       unitMode: "single",
+      ...(qaPartNo.trim() ? { partNo: qaPartNo.trim() } : {}),
+      ...(qaSrNo.trim() ? { srNo: qaSrNo.trim() } : {}),
+      ...(qaTnNo.trim() ? { tnNo: qaTnNo.trim() } : {}),
+      ...(qaDd.trim() ? { dd: qaDd.trim() } : {}),
+      ...(qaEd.trim() ? { ed: qaEd.trim() } : {}),
+      ...(qaMrp && Number(qaMrp) > 0 ? { mrp: Number(qaMrp) } : {}),
     });
 
     // Auto-select the new product in Stock In dropdown
@@ -431,6 +454,15 @@ export function StockPage({
             </TabsTrigger>
             <TabsTrigger value="bulk">
               <Layers size={14} className="mr-2" /> Bulk Stock In
+            </TabsTrigger>
+            <TabsTrigger value="srrange" data-ocid="stock.srrange.tab">
+              <Hash size={14} className="mr-2" /> SR No Range
+            </TabsTrigger>
+            <TabsTrigger
+              value="srindividual"
+              data-ocid="stock.srindividual.tab"
+            >
+              <ListOrdered size={14} className="mr-2" /> Individual SR Nos
             </TabsTrigger>
             <TabsTrigger value="out">
               <ArrowUpFromLine size={14} className="mr-2" /> Stock Out
@@ -784,7 +816,7 @@ export function StockPage({
                           }
                         />
                         <p className="text-[10px] text-muted-foreground">
-                          दुकानदार price
+                          Retailer Price
                         </p>
                       </div>
                       <div className="space-y-1.5">
@@ -804,7 +836,7 @@ export function StockPage({
                           }
                         />
                         <p className="text-[10px] text-muted-foreground">
-                          थोक price
+                          Wholesaler Price
                         </p>
                       </div>
                     </div>
@@ -1159,6 +1191,16 @@ export function StockPage({
             <BulkStockIn />
           </TabsContent>
 
+          {/* ── SR No Range Bulk Entry ───────────────────────────────── */}
+          <TabsContent value="srrange">
+            <SrNoRangeBulkEntry />
+          </TabsContent>
+
+          {/* ── Individual SR Nos Bulk Entry ─────────────────────────── */}
+          <TabsContent value="srindividual">
+            <SrNoIndividualBulkEntry />
+          </TabsContent>
+
           {/* Stock Out */}
           <TabsContent value="out">
             <Card className="shadow-card border-border max-w-lg">
@@ -1461,6 +1503,88 @@ export function StockPage({
               * Required fields. Other details can be edited from Admin Panel
               later.
             </p>
+
+            {/* ── Spare Part / Auto Part Details ──────────────────── */}
+            <div className="border-t border-border pt-3">
+              <div className="flex items-center gap-2.5 mb-3">
+                <Switch
+                  id="qa-spare-part-toggle"
+                  checked={showSparePartFields}
+                  onCheckedChange={setShowSparePartFields}
+                />
+                <label
+                  htmlFor="qa-spare-part-toggle"
+                  className="text-sm font-medium text-cyan-700 cursor-pointer select-none"
+                >
+                  + Spare Part / Auto Part Details (Optional)
+                </label>
+              </div>
+              {showSparePartFields && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Part No</Label>
+                      <Input
+                        data-ocid="stock.quick_add.part_no.input"
+                        placeholder="e.g. AB1234"
+                        value={qaPartNo}
+                        onChange={(e) => setQaPartNo(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">SR No (Serial No)</Label>
+                      <Input
+                        data-ocid="stock.quick_add.sr_no.input"
+                        placeholder="e.g. SN-5678"
+                        value={qaSrNo}
+                        onChange={(e) => setQaSrNo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">TN No</Label>
+                      <Input
+                        data-ocid="stock.quick_add.tn_no.input"
+                        placeholder="e.g. TN-9012"
+                        value={qaTnNo}
+                        onChange={(e) => setQaTnNo(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">DD</Label>
+                      <Input
+                        data-ocid="stock.quick_add.dd.input"
+                        placeholder="e.g. DD-001"
+                        value={qaDd}
+                        onChange={(e) => setQaDd(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">ED</Label>
+                      <Input
+                        data-ocid="stock.quick_add.ed.input"
+                        placeholder="e.g. ED-002"
+                        value={qaEd}
+                        onChange={(e) => setQaEd(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">MRP (₹)</Label>
+                      <Input
+                        data-ocid="stock.quick_add.mrp.input"
+                        type="number"
+                        placeholder="e.g. 450"
+                        value={qaMrp}
+                        onChange={(e) => setQaMrp(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex gap-2 pt-1">
               <Button
@@ -2396,6 +2520,995 @@ function BulkRowMobile({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ─── SR No Range Bulk Entry Component ────────────────────────────────────────
+
+function SrNoRangeBulkEntry() {
+  const { products, categories, addStockIn, addProduct, addCategory } =
+    useStore();
+
+  // Common fields
+  const [baseName, setBaseName] = useState("");
+  const [tnNo, setTnNo] = useState("");
+  const [dd, setDd] = useState("");
+  const [ed, setEd] = useState("");
+  const [mrp, setMrp] = useState("");
+  const [purchaseRate, setPurchaseRate] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
+  const [retailerPrice, setRetailerPrice] = useState("");
+  const [wholesalerPrice, setWholesalerPrice] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [vendorName, setVendorName] = useState("");
+  const [entryDate, setEntryDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [qtyPerItem, setQtyPerItem] = useState("1");
+
+  // SR No range
+  const [srFrom, setSrFrom] = useState("");
+  const [srTo, setSrTo] = useState("");
+
+  // Progress state
+  const [isCreating, setIsCreating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const fromNum = Number.parseInt(srFrom, 10);
+  const toNum = Number.parseInt(srTo, 10);
+  const rangeCount =
+    !Number.isNaN(fromNum) && !Number.isNaN(toNum) && toNum >= fromNum
+      ? toNum - fromNum + 1
+      : 0;
+
+  const MAX_RANGE = 500;
+  const isRangeValid =
+    srFrom !== "" &&
+    srTo !== "" &&
+    !Number.isNaN(fromNum) &&
+    !Number.isNaN(toNum) &&
+    toNum >= fromNum &&
+    rangeCount <= MAX_RANGE;
+
+  const resetForm = () => {
+    setBaseName("");
+    setTnNo("");
+    setDd("");
+    setEd("");
+    setMrp("");
+    setPurchaseRate("");
+    setSellPrice("");
+    setRetailerPrice("");
+    setWholesalerPrice("");
+    setExpiryDate("");
+    setVendorName("");
+    setEntryDate(new Date().toISOString().slice(0, 10));
+    setQtyPerItem("1");
+    setSrFrom("");
+    setSrTo("");
+    setProgress(0);
+    setTotalCount(0);
+  };
+
+  const handleSaveAll = async () => {
+    if (!baseName.trim()) {
+      toast.error("Product Name is required");
+      return;
+    }
+    if (!purchaseRate || Number(purchaseRate) <= 0) {
+      toast.error("Purchase Rate is required and must be positive");
+      return;
+    }
+    if (srFrom === "" || srTo === "") {
+      toast.error("SR No From and To are required");
+      return;
+    }
+    if (Number.isNaN(fromNum) || Number.isNaN(toNum)) {
+      toast.error("SR No From and To must be valid numbers");
+      return;
+    }
+    if (toNum < fromNum) {
+      toast.error("SR No To must be greater than or equal to SR No From");
+      return;
+    }
+    if (rangeCount > MAX_RANGE) {
+      toast.error(
+        `Maximum ${MAX_RANGE} entries at once. Current range: ${rangeCount}`,
+      );
+      return;
+    }
+
+    setIsCreating(true);
+    setTotalCount(rangeCount);
+    setProgress(0);
+
+    let catId = categories.find(
+      (c) => c.name.toLowerCase() === "spare parts",
+    )?.id;
+    if (!catId) catId = addCategory("Spare Parts");
+
+    const dateIso = new Date(entryDate).toISOString();
+    const qty = Math.max(1, Number.parseInt(qtyPerItem, 10) || 1);
+
+    const CHUNK_SIZE = 10;
+    let created = 0;
+
+    for (let srNum = fromNum; srNum <= toNum; srNum += CHUNK_SIZE) {
+      const chunkEnd = Math.min(srNum + CHUNK_SIZE - 1, toNum);
+      for (let n = srNum; n <= chunkEnd; n++) {
+        const productName = `${baseName.trim()} - SR ${n}`;
+
+        const existingProduct = products.find(
+          (p) => p.name.trim().toLowerCase() === productName.toLowerCase(),
+        );
+
+        let productId: string;
+        if (existingProduct) {
+          productId = existingProduct.id;
+        } else {
+          productId = addProduct({
+            name: productName,
+            categoryId: catId!,
+            unit: "piece",
+            minStockAlert: 0,
+            sellingPrice: sellPrice ? Number(sellPrice) : 0,
+            unitMode: "single",
+            srNo: String(n),
+            ...(tnNo.trim() ? { tnNo: tnNo.trim() } : {}),
+            ...(dd.trim() ? { dd: dd.trim() } : {}),
+            ...(ed.trim() ? { ed: ed.trim() } : {}),
+            ...(mrp && Number(mrp) > 0 ? { mrp: Number(mrp) } : {}),
+            ...(retailerPrice && Number(retailerPrice) > 0
+              ? { retailerPrice: Number(retailerPrice) }
+              : {}),
+            ...(wholesalerPrice && Number(wholesalerPrice) > 0
+              ? { wholesalerPrice: Number(wholesalerPrice) }
+              : {}),
+            ...(vendorName.trim() ? { vendorName: vendorName.trim() } : {}),
+          });
+        }
+
+        addStockIn(
+          productId,
+          qty,
+          Number(purchaseRate),
+          dateIso,
+          `SR No Range Entry: ${baseName.trim()} SR ${n}`,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          expiryDate.trim() || undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        created++;
+      }
+
+      setProgress(created);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+
+    setIsCreating(false);
+    toast.success(`${rangeCount} entries created successfully!`);
+    resetForm();
+  };
+
+  return (
+    <div className="flex flex-col gap-4 max-w-2xl">
+      <Card className="shadow-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Hash size={16} className="text-primary" />
+            SR No Range Bulk Entry
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Enter common details once, then specify SR No range — the system
+            auto-creates one product entry per serial number.
+          </p>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          {/* Common Details */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Common Details (same for all entries)
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-sm">
+                  Product Name (Base){" "}
+                  <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  data-ocid="srrange.base_name.input"
+                  placeholder="e.g. Honda CBR Part"
+                  value={baseName}
+                  onChange={(e) => setBaseName(e.target.value)}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Each entry will be named: &ldquo;
+                  {baseName || "Product Name"} - SR [N]&rdquo;
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  Purchase Rate (₹) <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  data-ocid="srrange.purchase_rate.input"
+                  type="number"
+                  placeholder="e.g. 250"
+                  value={purchaseRate}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setPurchaseRate(clearLeadingZeros(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Sell Price (₹)</Label>
+                <Input
+                  data-ocid="srrange.sell_price.input"
+                  type="number"
+                  placeholder="e.g. 350"
+                  value={sellPrice}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setSellPrice(clearLeadingZeros(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">MRP (₹)</Label>
+                <Input
+                  data-ocid="srrange.mrp.input"
+                  type="number"
+                  placeholder="e.g. 400"
+                  value={mrp}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) => setMrp(clearLeadingZeros(e.target.value))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">TN No</Label>
+                <Input
+                  data-ocid="srrange.tn_no.input"
+                  placeholder="e.g. TN-9012"
+                  value={tnNo}
+                  onChange={(e) => setTnNo(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">DD</Label>
+                <Input
+                  data-ocid="srrange.dd.input"
+                  placeholder="e.g. DD-001"
+                  value={dd}
+                  onChange={(e) => setDd(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">ED</Label>
+                <Input
+                  data-ocid="srrange.ed.input"
+                  placeholder="e.g. ED-002"
+                  value={ed}
+                  onChange={(e) => setEd(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Retailer Price (₹)</Label>
+                <Input
+                  data-ocid="srrange.retailer_price.input"
+                  type="number"
+                  placeholder="e.g. 320"
+                  value={retailerPrice}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setRetailerPrice(clearLeadingZeros(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Wholesaler Price (₹)</Label>
+                <Input
+                  data-ocid="srrange.wholesaler_price.input"
+                  type="number"
+                  placeholder="e.g. 290"
+                  value={wholesalerPrice}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setWholesalerPrice(clearLeadingZeros(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Expiry Date</Label>
+                <Input
+                  data-ocid="srrange.expiry_date.input"
+                  type="date"
+                  value={expiryDate}
+                  onChange={(e) => setExpiryDate(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Vendor Name</Label>
+                <Input
+                  data-ocid="srrange.vendor_name.input"
+                  placeholder="e.g. Honda Spares Co."
+                  value={vendorName}
+                  onChange={(e) => setVendorName(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Purchase Date</Label>
+                <Input
+                  data-ocid="srrange.entry_date.input"
+                  type="date"
+                  value={entryDate}
+                  onChange={(e) => setEntryDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* SR No Range */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              SR No Range
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  SR No From <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  data-ocid="srrange.sr_from.input"
+                  type="number"
+                  placeholder="e.g. 1"
+                  value={srFrom}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) => setSrFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  SR No To <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  data-ocid="srrange.sr_to.input"
+                  type="number"
+                  placeholder="e.g. 100"
+                  value={srTo}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) => setSrTo(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Qty per Item</Label>
+                <Input
+                  data-ocid="srrange.qty_per_item.input"
+                  type="number"
+                  placeholder="1"
+                  value={qtyPerItem}
+                  min="1"
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setQtyPerItem(clearLeadingZeros(e.target.value) || "1")
+                  }
+                />
+              </div>
+            </div>
+
+            {srFrom !== "" &&
+              srTo !== "" &&
+              !Number.isNaN(fromNum) &&
+              !Number.isNaN(toNum) &&
+              toNum < fromNum && (
+                <p className="text-xs text-destructive mt-2">
+                  SR No To must be greater than or equal to SR No From.
+                </p>
+              )}
+            {rangeCount > MAX_RANGE && (
+              <p className="text-xs text-destructive mt-2">
+                Range exceeds maximum of {MAX_RANGE} entries. Please split into
+                smaller batches.
+              </p>
+            )}
+          </div>
+
+          {/* Preview info box */}
+          {rangeCount > 0 && rangeCount <= MAX_RANGE && (
+            <div
+              data-ocid="srrange.preview.panel"
+              className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
+            >
+              <p className="font-semibold text-primary">
+                Will create <span className="text-lg">{rangeCount}</span>{" "}
+                {rangeCount === 1 ? "entry" : "entries"} with SR No{" "}
+                <strong>{srFrom}</strong> to <strong>{srTo}</strong>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Products: &ldquo;{baseName || "Product Name"} - SR {srFrom}
+                &rdquo; &hellip; &ldquo;{baseName || "Product Name"} - SR {srTo}
+                &rdquo;
+              </p>
+            </div>
+          )}
+
+          {/* Progress bar */}
+          {isCreating && totalCount > 0 && (
+            <div
+              data-ocid="srrange.loading_state"
+              className="rounded-lg border border-border bg-muted/40 px-4 py-3 space-y-2"
+            >
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">Creating entries...</span>
+                <span className="text-muted-foreground">
+                  {progress} / {totalCount}
+                </span>
+              </div>
+              <div className="w-full bg-border rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-2 bg-primary rounded-full transition-all duration-200"
+                  style={{
+                    width: `${totalCount > 0 ? (progress / totalCount) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Save button */}
+          <Button
+            data-ocid="srrange.save_all.button"
+            className="w-full font-semibold"
+            disabled={
+              isCreating ||
+              !isRangeValid ||
+              !baseName.trim() ||
+              !purchaseRate ||
+              Number(purchaseRate) <= 0
+            }
+            onClick={() => void handleSaveAll()}
+          >
+            {isCreating ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                Creating... {progress}/{totalCount}
+              </>
+            ) : (
+              <>
+                <ArrowDownToLine size={16} className="mr-2" />
+                Save All
+                {rangeCount > 0 ? ` ${rangeCount} Entries` : " Entries"}
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Individual SR Nos Bulk Entry ──────────────────────────────────────────────
+function SrNoIndividualBulkEntry() {
+  const { products, categories, addStockIn, addProduct, addCategory } =
+    useStore();
+
+  // Common fields
+  const [baseName, setBaseName] = useState("");
+  const [tnNo, setTnNo] = useState("");
+  const [dd, setDd] = useState("");
+  const [ed, setEd] = useState("");
+  const [mrp, setMrp] = useState("");
+  const [purchaseRate, setPurchaseRate] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
+  const [retailerPrice, setRetailerPrice] = useState("");
+  const [wholesalerPrice, setWholesalerPrice] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [vendorName, setVendorName] = useState("");
+  const [entryDate, setEntryDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [qtyPerItem, setQtyPerItem] = useState("1");
+
+  // SR numbers textarea
+  const [srInput, setSrInput] = useState("");
+
+  // Progress state
+  const [isCreating, setIsCreating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Parse SR numbers: split by comma and/or newline, trim, deduplicate, filter empty
+  const parsedSrNos: string[] = (() => {
+    const raw = srInput
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    // Deduplicate while preserving order
+    return [...new Set(raw)];
+  })();
+
+  // Duplicate count for warning
+  const rawCount = srInput
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0).length;
+  const duplicateCount = rawCount - parsedSrNos.length;
+
+  const resetForm = () => {
+    setBaseName("");
+    setTnNo("");
+    setDd("");
+    setEd("");
+    setMrp("");
+    setPurchaseRate("");
+    setSellPrice("");
+    setRetailerPrice("");
+    setWholesalerPrice("");
+    setExpiryDate("");
+    setVendorName("");
+    setEntryDate(new Date().toISOString().slice(0, 10));
+    setQtyPerItem("1");
+    setSrInput("");
+    setProgress(0);
+    setTotalCount(0);
+  };
+
+  const handleSaveAll = async () => {
+    if (!baseName.trim()) {
+      toast.error("Product Name is required");
+      return;
+    }
+    if (!purchaseRate || Number(purchaseRate) <= 0) {
+      toast.error("Purchase Rate is required and must be positive");
+      return;
+    }
+    if (parsedSrNos.length === 0) {
+      toast.error("Please enter at least one SR number");
+      return;
+    }
+
+    setIsCreating(true);
+    setTotalCount(parsedSrNos.length);
+    setProgress(0);
+
+    let catId = categories.find(
+      (c) => c.name.toLowerCase() === "spare parts",
+    )?.id;
+    if (!catId) catId = addCategory("Spare Parts");
+
+    const dateIso = new Date(entryDate).toISOString();
+    const qty = Math.max(1, Number.parseInt(qtyPerItem, 10) || 1);
+
+    const CHUNK_SIZE = 10;
+    let created = 0;
+
+    for (let i = 0; i < parsedSrNos.length; i += CHUNK_SIZE) {
+      const chunk = parsedSrNos.slice(i, i + CHUNK_SIZE);
+      for (const srNum of chunk) {
+        const productName = `${baseName.trim()} - SR ${srNum}`;
+
+        const existingProduct = products.find(
+          (p) => p.name.trim().toLowerCase() === productName.toLowerCase(),
+        );
+
+        let productId: string;
+        if (existingProduct) {
+          productId = existingProduct.id;
+        } else {
+          productId = addProduct({
+            name: productName,
+            categoryId: catId!,
+            unit: "piece",
+            minStockAlert: 0,
+            sellingPrice: sellPrice ? Number(sellPrice) : 0,
+            unitMode: "single",
+            srNo: srNum,
+            ...(tnNo.trim() ? { tnNo: tnNo.trim() } : {}),
+            ...(dd.trim() ? { dd: dd.trim() } : {}),
+            ...(ed.trim() ? { ed: ed.trim() } : {}),
+            ...(mrp && Number(mrp) > 0 ? { mrp: Number(mrp) } : {}),
+            ...(retailerPrice && Number(retailerPrice) > 0
+              ? { retailerPrice: Number(retailerPrice) }
+              : {}),
+            ...(wholesalerPrice && Number(wholesalerPrice) > 0
+              ? { wholesalerPrice: Number(wholesalerPrice) }
+              : {}),
+            ...(vendorName.trim() ? { vendorName: vendorName.trim() } : {}),
+          });
+        }
+
+        addStockIn(
+          productId,
+          qty,
+          Number(purchaseRate),
+          dateIso,
+          `Individual SR Entry: ${baseName.trim()} SR ${srNum}`,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          expiryDate.trim() || undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
+
+        created++;
+      }
+
+      setProgress(created);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+
+    setIsCreating(false);
+    toast.success(
+      `${parsedSrNos.length} ${parsedSrNos.length === 1 ? "entry" : "entries"} created successfully!`,
+    );
+    resetForm();
+  };
+
+  return (
+    <div className="flex flex-col gap-4 max-w-2xl">
+      <Card className="shadow-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ListOrdered size={16} className="text-primary" />
+            Individual SR Nos Bulk Entry
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Enter common details once, then paste or type SR numbers
+            (comma-separated or one per line) — the system auto-creates one
+            product entry per serial number.
+          </p>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          {/* Common Details */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Common Details (same for all entries)
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-sm">
+                  Product Name (Base){" "}
+                  <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  data-ocid="srindividual.base_name.input"
+                  placeholder="e.g. Honda CBR Part"
+                  value={baseName}
+                  onChange={(e) => setBaseName(e.target.value)}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Each entry will be named: &ldquo;
+                  {baseName || "Product Name"} - SR [number]&rdquo;
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  Purchase Rate (₹) <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  data-ocid="srindividual.purchase_rate.input"
+                  type="number"
+                  placeholder="e.g. 250"
+                  value={purchaseRate}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setPurchaseRate(clearLeadingZeros(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Sell Price (₹)</Label>
+                <Input
+                  data-ocid="srindividual.sell_price.input"
+                  type="number"
+                  placeholder="e.g. 350"
+                  value={sellPrice}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setSellPrice(clearLeadingZeros(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">MRP (₹)</Label>
+                <Input
+                  data-ocid="srindividual.mrp.input"
+                  type="number"
+                  placeholder="e.g. 400"
+                  value={mrp}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) => setMrp(clearLeadingZeros(e.target.value))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">
+                  TN No{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (Optional)
+                  </span>
+                </Label>
+                <Input
+                  data-ocid="srindividual.tn_no.input"
+                  placeholder="e.g. TN-9012 (leave blank if not applicable)"
+                  value={tnNo}
+                  onChange={(e) => setTnNo(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">DD</Label>
+                <Input
+                  data-ocid="srindividual.dd.input"
+                  placeholder="e.g. DD-001"
+                  value={dd}
+                  onChange={(e) => setDd(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">ED</Label>
+                <Input
+                  data-ocid="srindividual.ed.input"
+                  placeholder="e.g. ED-002"
+                  value={ed}
+                  onChange={(e) => setEd(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Retailer Price (₹)</Label>
+                <Input
+                  data-ocid="srindividual.retailer_price.input"
+                  type="number"
+                  placeholder="e.g. 320"
+                  value={retailerPrice}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setRetailerPrice(clearLeadingZeros(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Wholesaler Price (₹)</Label>
+                <Input
+                  data-ocid="srindividual.wholesaler_price.input"
+                  type="number"
+                  placeholder="e.g. 290"
+                  value={wholesalerPrice}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setWholesalerPrice(clearLeadingZeros(e.target.value))
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Expiry Date</Label>
+                <Input
+                  data-ocid="srindividual.expiry_date.input"
+                  type="date"
+                  value={expiryDate}
+                  onChange={(e) => setExpiryDate(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Vendor Name</Label>
+                <Input
+                  data-ocid="srindividual.vendor_name.input"
+                  placeholder="e.g. Honda Spares Co."
+                  value={vendorName}
+                  onChange={(e) => setVendorName(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Purchase Date</Label>
+                <Input
+                  data-ocid="srindividual.entry_date.input"
+                  type="date"
+                  value={entryDate}
+                  onChange={(e) => setEntryDate(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm">Qty per Item</Label>
+                <Input
+                  data-ocid="srindividual.qty_per_item.input"
+                  type="number"
+                  placeholder="1"
+                  value={qtyPerItem}
+                  min="1"
+                  onFocus={(e) => {
+                    if (e.target.value === "0") e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setQtyPerItem(clearLeadingZeros(e.target.value) || "1")
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* SR Numbers Input */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              SR Numbers
+            </p>
+            <Label className="text-sm">
+              Enter SR Numbers <span className="text-destructive">*</span>
+            </Label>
+            <textarea
+              data-ocid="srindividual.sr_input.textarea"
+              className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
+              placeholder={
+                "Comma-separated: 5952, 176092, 188321\nOr one per line:\n5952\n176092\n188321"
+              }
+              value={srInput}
+              onChange={(e) => setSrInput(e.target.value)}
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              {parsedSrNos.length > 0 ? (
+                <p className="text-xs font-medium text-primary">
+                  {parsedSrNos.length} SR{" "}
+                  {parsedSrNos.length === 1 ? "number" : "numbers"} entered
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No SR numbers entered yet
+                </p>
+              )}
+              {duplicateCount > 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  — {duplicateCount} duplicate{duplicateCount > 1 ? "s" : ""}{" "}
+                  removed automatically
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Preview section */}
+          {parsedSrNos.length > 0 && (
+            <div
+              data-ocid="srindividual.preview.panel"
+              className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 space-y-2"
+            >
+              <p className="text-sm font-semibold text-primary">
+                Preview: <span className="text-lg">{parsedSrNos.length}</span>{" "}
+                {parsedSrNos.length === 1 ? "entry" : "entries"} will be created
+              </p>
+              <div className="max-h-28 overflow-y-auto">
+                <p className="text-xs text-muted-foreground break-all leading-relaxed">
+                  {parsedSrNos.slice(0, 20).map((sr, i) => (
+                    <span key={sr}>
+                      <span className="inline-block bg-muted rounded px-1 py-0.5 mr-1 mb-1 font-mono">
+                        {baseName ? `${baseName} - SR ${sr}` : `SR ${sr}`}
+                      </span>
+                      {i === 19 && parsedSrNos.length > 20 && (
+                        <span className="text-muted-foreground italic">
+                          … and {parsedSrNos.length - 20} more
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Progress bar */}
+          {isCreating && totalCount > 0 && (
+            <div
+              data-ocid="srindividual.loading_state"
+              className="rounded-lg border border-border bg-muted/40 px-4 py-3 space-y-2"
+            >
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">Creating entries...</span>
+                <span className="text-muted-foreground">
+                  {progress} / {totalCount}
+                </span>
+              </div>
+              <div className="w-full bg-border rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-2 bg-primary rounded-full transition-all duration-200"
+                  style={{
+                    width: `${totalCount > 0 ? (progress / totalCount) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Save button */}
+          <Button
+            data-ocid="srindividual.save_all.button"
+            className="w-full font-semibold"
+            disabled={
+              isCreating ||
+              parsedSrNos.length === 0 ||
+              !baseName.trim() ||
+              !purchaseRate ||
+              Number(purchaseRate) <= 0
+            }
+            onClick={() => void handleSaveAll()}
+          >
+            {isCreating ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                Creating... {progress}/{totalCount}
+              </>
+            ) : (
+              <>
+                <ArrowDownToLine size={16} className="mr-2" />
+                Save All
+                {parsedSrNos.length > 0
+                  ? ` ${parsedSrNos.length} Entries`
+                  : " Entries"}
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

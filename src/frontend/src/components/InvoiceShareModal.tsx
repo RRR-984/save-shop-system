@@ -9,6 +9,7 @@ function buildInvoiceHTML(
   invoice: Invoice,
   shopName: string,
   dateStr: string,
+  gstinNumber?: string,
 ): string {
   const due = invoice.dueAmount ?? invoice.totalAmount - invoice.paidAmount;
   const subtotal = invoice.items.reduce(
@@ -18,7 +19,8 @@ function buildInvoiceHTML(
   const hasCharges =
     (invoice.transportCharge ?? 0) > 0 ||
     (invoice.labourCharge ?? 0) > 0 ||
-    (invoice.otherCharges ?? 0) > 0;
+    (invoice.otherCharges ?? 0) > 0 ||
+    (invoice.gstAmount ?? 0) > 0;
 
   const itemRows = invoice.items
     .map(
@@ -48,6 +50,12 @@ function buildInvoiceHTML(
     ${
       (invoice.otherCharges ?? 0) > 0
         ? `<div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span>Other Charges</span><span>Rs.${invoice.otherCharges}</span></div>`
+        : ""
+    }
+    ${
+      (invoice.gstAmount ?? 0) > 0
+        ? `<div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span>CGST (${invoice.cgstRate ?? (invoice.gstRate ?? 0) / 2}%)</span><span>₹${invoice.cgstAmount ?? Math.round((invoice.gstAmount ?? 0) / 2)}</span></div>
+           <div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span>SGST (${invoice.sgstRate ?? (invoice.gstRate ?? 0) / 2}%)</span><span>₹${invoice.sgstAmount ?? Math.round((invoice.gstAmount ?? 0) / 2)}</span></div>`
         : ""
     }
     <div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span>Subtotal (items)</span><span>Rs.${subtotal}</span></div>
@@ -101,6 +109,7 @@ function buildInvoiceHTML(
 <body>
   <div class="header">
     <div class="shop-name">${shopName}</div>
+    ${gstinNumber ? `<div style="font-size:10px;margin-top:1px;">GSTIN: ${gstinNumber}</div>` : ""}
     <div class="tax-invoice">TAX INVOICE</div>
   </div>
   <hr class="divider" />
@@ -179,7 +188,8 @@ export function InvoiceShareModal({
   const hasCharges =
     (invoice.transportCharge ?? 0) > 0 ||
     (invoice.labourCharge ?? 0) > 0 ||
-    (invoice.otherCharges ?? 0) > 0;
+    (invoice.otherCharges ?? 0) > 0 ||
+    (invoice.gstAmount ?? 0) > 0;
 
   // Close on Escape key
   useEffect(() => {
@@ -210,6 +220,16 @@ export function InvoiceShareModal({
       chargeLines.push(`  👷 Labour: ₹${invoice.labourCharge}`);
     if ((invoice.otherCharges ?? 0) > 0)
       chargeLines.push(`  📦 Other: ₹${invoice.otherCharges}`);
+    if ((invoice.gstAmount ?? 0) > 0) {
+      const cgstR = invoice.cgstRate ?? (invoice.gstRate ?? 0) / 2;
+      const sgstR = invoice.sgstRate ?? (invoice.gstRate ?? 0) / 2;
+      const cgstAmt =
+        invoice.cgstAmount ?? Math.round((invoice.gstAmount ?? 0) / 2);
+      const sgstAmt =
+        invoice.sgstAmount ?? Math.round((invoice.gstAmount ?? 0) / 2);
+      chargeLines.push(`  CGST (${cgstR}%): ₹${cgstAmt}`);
+      chargeLines.push(`  SGST (${sgstR}%): ₹${sgstAmt}`);
+    }
 
     const lines = [
       `🧾 *Invoice #${invoice.invoiceNumber}*`,
@@ -245,7 +265,12 @@ export function InvoiceShareModal({
   }
 
   function openInvoiceWindow() {
-    const html = buildInvoiceHTML(invoice, shopName, dateStr);
+    const html = buildInvoiceHTML(
+      invoice,
+      shopName,
+      dateStr,
+      appConfig.gstinNumber,
+    );
     const printWin = window.open("", "_blank", "width=420,height=650");
     if (!printWin) {
       alert("Please allow popups for this site to print/download the invoice.");
@@ -308,6 +333,11 @@ export function InvoiceShareModal({
               <div className="font-bold text-sm text-foreground">
                 {shopName}
               </div>
+              {appConfig.gstinNumber && (
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  GSTIN: {appConfig.gstinNumber}
+                </div>
+              )}
               <div className="text-xs text-muted-foreground mt-0.5">
                 Invoice #{invoice.invoiceNumber}
               </div>
@@ -397,8 +427,41 @@ export function InvoiceShareModal({
                   </span>
                 </div>
               )}
+              {(invoice.gstAmount ?? 0) > 0 &&
+                (() => {
+                  const cgstR = invoice.cgstRate ?? (invoice.gstRate ?? 0) / 2;
+                  const sgstR = invoice.sgstRate ?? (invoice.gstRate ?? 0) / 2;
+                  const cgstAmt =
+                    invoice.cgstAmount ??
+                    Math.round((invoice.gstAmount ?? 0) / 2);
+                  const sgstAmt =
+                    invoice.sgstAmount ??
+                    Math.round((invoice.gstAmount ?? 0) / 2);
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          CGST ({cgstR}%)
+                        </span>
+                        <span className="text-purple-700">+₹{cgstAmt}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          SGST ({sgstR}%)
+                        </span>
+                        <span className="text-purple-700">+₹{sgstAmt}</span>
+                      </div>
+                    </>
+                  );
+                })()}
               <div className="flex justify-between font-bold text-base text-foreground">
-                <span>{hasCharges ? "Grand Total" : "Total"}</span>
+                <span>
+                  {hasCharges
+                    ? (invoice.gstAmount ?? 0) > 0
+                      ? "Grand Total (incl. GST)"
+                      : "Grand Total"
+                    : "Grand Total"}
+                </span>
                 <span>₹{invoice.totalAmount}</span>
               </div>
               <div className="flex justify-between text-sm">

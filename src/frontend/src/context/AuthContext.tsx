@@ -56,6 +56,8 @@ export interface CurrentUser {
 interface AuthContextValue {
   session: MobileSession | null;
   isInitializing: boolean;
+  /** True once loadOwnerShops has resolved for the current session — StoreContext waits for this */
+  shopsLoaded: boolean;
 
   // OTP flow (Owner login via mobile OTP)
   sendOtp: (mobile: string) => {
@@ -136,6 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Multi-shop state ──────────────────────────────────────────────────────
   const [allShops, setAllShops] = useState<ShopMeta[]>([]);
   const [selectedShop, setSelectedShop] = useState<ShopMeta | null>(null);
+  /** Becomes true once loadOwnerShops resolves — StoreContext must not load data before this */
+  const [shopsLoaded, setShopsLoaded] = useState(false);
 
   // Actor for backend calls (shared, created once)
   const actorRef = useRef<backendInterface | null>(null);
@@ -212,7 +216,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Load shops for owner from backend ────────────────────────────────────
   const loadOwnerShops = useCallback(async (mobile: string): Promise<void> => {
     const actor = actorRef.current;
-    if (!actor) return;
+    if (!actor) {
+      setShopsLoaded(true);
+      return;
+    }
     try {
       const shops = await actor.listShopsForOwner(mobile);
       const active = shops.filter((s) => !s.isDeleted);
@@ -254,6 +261,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         setAllShops([converted]);
       }
+    } finally {
+      // Always mark shops as loaded so StoreContext can proceed
+      setShopsLoaded(true);
     }
   }, []);
 
@@ -271,10 +281,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mobile: saved.mobile,
         isOwner: (saved.userRole ?? "owner") === "owner",
       });
-      // Populate allShops once actor is ready — defer slightly
+      // Populate allShops once actor is ready — defer slightly.
+      // loadOwnerShops always calls setShopsLoaded(true) in its finally block.
       setTimeout(() => {
         loadOwnerShops(saved.mobile);
       }, 500);
+    } else {
+      // No session — nothing to load; mark shops as loaded so StoreContext doesn't block
+      setShopsLoaded(true);
     }
     setIsInitializing(false);
   }, []);
@@ -328,7 +342,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         selectedShopId: shopId,
         shopName: targetName,
       };
+      // Update localStorage AND both session/shop states in one synchronous batch
+      // so StoreContext sees the new shopId immediately on the same tick
       lsSet("mobile_auth_session", updatedSession);
+      localStorage.setItem("last_shop_id", shopId);
       setSession(updatedSession);
       if (target) setSelectedShop(target);
     },
@@ -720,6 +737,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         session,
         isInitializing,
+        shopsLoaded,
         sendOtp,
         verifyOtp,
         loginWithPin,

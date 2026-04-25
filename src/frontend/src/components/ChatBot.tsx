@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
+import { useDraggable } from "../hooks/useDraggable";
 import type {
   AppConfig,
   AutoModeType,
@@ -8,6 +9,7 @@ import type {
   Invoice,
   Product,
 } from "../types/store";
+import { STORAGE_KEYS } from "../utils/localStorage";
 
 interface Message {
   id: string;
@@ -1362,34 +1364,23 @@ function generateResponse(
   }
 }
 
-// ── Draggable panel hook ─────────────────────────────────────────────────────
-interface PanelPos {
-  x: number;
-  y: number;
-}
-
+// ── Panel + bubble constants ─────────────────────────────────────────────────
 const PANEL_W = 320;
 const PANEL_H = 480;
+const BUBBLE_SIZE = 56; // w-14 h-14
 
-function getDefaultPos(): PanelPos {
-  // Bottom-left, mirroring the bubble position (left: 16px, above bubble)
+function getDefaultPanelPos() {
   const vh = typeof window !== "undefined" ? window.innerHeight : 700;
-  // Clamp so the panel fits within viewport
   const panelH = Math.min(PANEL_H, vh - 120);
-  return {
-    x: 16,
-    y: Math.max(8, vh - panelH - 80),
-  };
+  return { x: 16, y: Math.max(8, vh - panelH - 80) };
 }
 
-function clampPos(x: number, y: number): PanelPos {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const panelW = Math.min(PANEL_W, vw * 0.9);
-  return {
-    x: Math.max(0, Math.min(x, vw - panelW)),
-    y: Math.max(0, Math.min(y, vh - 60)), // keep header always visible
-  };
+function getDefaultBubblePos() {
+  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 700;
+  // Default bottom-left: bottom 80px on mobile, bottom 24px on large screens
+  const isMd = vw >= 768;
+  return { x: 16, y: vh - BUBBLE_SIZE - (isMd ? 24 : 80) };
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -1403,13 +1394,34 @@ export function ChatBot() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ── Drag state ──────────────────────────────────────────────────────────
-  const [panelPos, setPanelPos] = useState<PanelPos>(getDefaultPos);
-  const dragging = useRef(false);
-  const dragOffset = useRef({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-
   const isHi = language === "hi";
+
+  // ── Draggable: chat panel ────────────────────────────────────────────────
+  const {
+    pos: panelPos,
+    isDragging: isPanelDragging,
+    onMouseDown: onPanelMouseDown,
+    onTouchStart: onPanelTouchStart,
+    style: panelDragStyle,
+  } = useDraggable({
+    storageKey: STORAGE_KEYS.chatbotPanelPos,
+    defaultPos: getDefaultPanelPos(),
+    elementSize: { w: PANEL_W, h: PANEL_H },
+  });
+
+  // ── Draggable: bubble ────────────────────────────────────────────────────
+  const {
+    pos: bubblePos,
+    isDragging: isBubbleDragging,
+    hasDragged: bubbleHasDragged,
+    onMouseDown: onBubbleMouseDown,
+    onTouchStart: onBubbleTouchStart,
+    style: bubbleDragStyle,
+  } = useDraggable({
+    storageKey: STORAGE_KEYS.chatbotBubblePos,
+    defaultPos: getDefaultBubblePos(),
+    elementSize: { w: BUBBLE_SIZE, h: BUBBLE_SIZE },
+  });
 
   // Auto-scroll on new message
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1499,86 +1511,23 @@ export function ChatBot() {
     if (e.key === "Enter") handleSend();
   };
 
-  // ── Drag handlers ────────────────────────────────────────────────────────
-  const startDrag = useCallback(
-    (clientX: number, clientY: number) => {
-      dragging.current = true;
-      setIsDragging(true);
-      dragOffset.current = {
-        x: clientX - panelPos.x,
-        y: clientY - panelPos.y,
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    },
-    [panelPos.x, panelPos.y],
-  );
-
-  const onMouseDown = useCallback(
+  // ── Panel drag handlers (wrap to ignore close button clicks) ───────────
+  const handlePanelMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      // Only drag from header, ignore close button clicks
       if ((e.target as HTMLElement).closest("button")) return;
       e.preventDefault();
-      startDrag(e.clientX, e.clientY);
+      onPanelMouseDown(e);
     },
-    [startDrag],
+    [onPanelMouseDown],
   );
 
-  const onTouchStart = useCallback(
+  const handlePanelTouchStart = useCallback(
     (e: React.TouchEvent<HTMLDivElement>) => {
       if ((e.target as HTMLElement).closest("button")) return;
-      const touch = e.touches[0];
-      startDrag(touch.clientX, touch.clientY);
+      onPanelTouchStart(e);
     },
-    [startDrag],
+    [onPanelTouchStart],
   );
-
-  useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      if (!dragging.current) return;
-      const newPos = clampPos(
-        e.clientX - dragOffset.current.x,
-        e.clientY - dragOffset.current.y,
-      );
-      setPanelPos(newPos);
-    };
-
-    const onMouseUp = () => {
-      if (dragging.current) {
-        dragging.current = false;
-        setIsDragging(false);
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!dragging.current) return;
-      e.preventDefault();
-      const touch = e.touches[0];
-      const newPos = clampPos(
-        touch.clientX - dragOffset.current.x,
-        touch.clientY - dragOffset.current.y,
-      );
-      setPanelPos(newPos);
-    };
-
-    const onTouchEnd = () => {
-      if (dragging.current) {
-        dragging.current = false;
-        setIsDragging(false);
-      }
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
-    window.addEventListener("touchend", onTouchEnd);
-
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("touchend", onTouchEnd);
-    };
-  }, []);
 
   // Quick chips: updated to include birthday + best selling
   const hiChips = [
@@ -1628,16 +1577,26 @@ export function ChatBot() {
         .dot-3 { animation: dot-bounce 1.2s infinite 0.4s; }
       `}</style>
 
-      {/* Floating bubble — stays fixed, never moves */}
+      {/* Floating bubble — draggable */}
       <button
         type="button"
         aria-label="Open Shop Assistant"
         data-ocid="chatbot.open_modal_button"
-        onClick={() => setOpen((v) => !v)}
-        className="chatbot-bubble fixed bottom-20 left-4 z-[9998] w-14 h-14 rounded-full flex items-center justify-center text-white select-none transition-transform duration-150 active:scale-90 md:bottom-6 overflow-hidden p-0"
+        onMouseDown={onBubbleMouseDown}
+        onTouchStart={onBubbleTouchStart}
+        onClick={() => {
+          // Only toggle open if this was a tap (not a drag)
+          if (!bubbleHasDragged.current) setOpen((v) => !v);
+        }}
+        className="chatbot-bubble z-[9998] w-14 h-14 rounded-full flex items-center justify-center text-white select-none transition-transform duration-150 active:scale-90 overflow-hidden p-0"
         style={{
+          position: "fixed",
+          left: bubblePos.x,
+          top: bubblePos.y,
           background:
             "linear-gradient(135deg, #7c3aed 0%, #4f46e5 55%, #6d28d9 100%)",
+          cursor: isBubbleDragging ? "grabbing" : "grab",
+          ...bubbleDragStyle,
         }}
       >
         <img
@@ -1648,9 +1607,9 @@ export function ChatBot() {
             height: 56,
             objectFit: "cover",
             borderRadius: "50%",
+            pointerEvents: "none",
           }}
           onError={(e) => {
-            // Fallback to emoji if image fails to load
             const parent = (e.target as HTMLImageElement).parentElement;
             if (parent) parent.innerHTML = "🤖";
           }}
@@ -1669,21 +1628,21 @@ export function ChatBot() {
             position: "fixed",
             left: panelPos.x,
             top: panelPos.y,
-            width: `min(${PANEL_W}px, 90vw)`,
-            height: `min(${PANEL_H}px, calc(100vh - 120px))`,
-            maxHeight: `min(${PANEL_H}px, calc(100vh - 120px))`,
-            userSelect: isDragging ? "none" : undefined,
+            width: `min(${PANEL_W}px, 95vw)`,
+            height: "min(70vh, calc(100vh - 100px))",
+            maxHeight: `min(${PANEL_H}px, calc(100vh - 100px))`,
+            userSelect: isPanelDragging ? "none" : undefined,
           }}
         >
           {/* Drag handle header */}
           <div
-            onMouseDown={onMouseDown}
-            onTouchStart={onTouchStart}
+            onMouseDown={handlePanelMouseDown}
+            onTouchStart={handlePanelTouchStart}
             className="flex items-center justify-between px-4 py-3 border-b border-border"
             style={{
               background: "linear-gradient(90deg, #7c3aed 0%, #4f46e5 100%)",
-              cursor: isDragging ? "grabbing" : "grab",
-              touchAction: "none",
+              cursor: isPanelDragging ? "grabbing" : "grab",
+              ...panelDragStyle,
             }}
           >
             <div className="flex items-center gap-2">

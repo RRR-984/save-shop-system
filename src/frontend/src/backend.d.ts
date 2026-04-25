@@ -15,11 +15,10 @@ export interface OwnerStats {
     shopStats: Array<ShopStats>;
     totalTransactions: bigint;
 }
-export interface SuperAdminChangeLog {
-    id: string;
-    fromMobile: string;
-    timestamp: bigint;
-    toMobile: string;
+export interface ActiveUserRecord {
+    userName: string;
+    userId: string;
+    lastSeen: bigint;
 }
 export interface BackupSnapshotMeta {
     id: string;
@@ -35,6 +34,40 @@ export interface ShopMeta {
     address: string;
     ownerMobile: string;
 }
+export interface UpdateShopResult {
+    error?: string;
+    success: boolean;
+}
+export interface AdminSettings {
+    createdAt: bigint;
+    superAdminMobile: string;
+    updatedAt: bigint;
+}
+export interface ShopStatsResult {
+    shopId: string;
+    totalSalesAmount: number;
+    lastActivity: bigint;
+    shopName: string;
+    sessionCount: bigint;
+    ownerMobile: string;
+}
+export interface SuperAdminChangeLog {
+    id: string;
+    fromMobile: string;
+    timestamp: bigint;
+    toMobile: string;
+}
+export type LockResult = {
+    __kind__: "conflict";
+    conflict: {
+        userName: string;
+        expiresInSeconds: bigint;
+        lockedBy: string;
+    };
+} | {
+    __kind__: "acquired";
+    acquired: null;
+};
 export interface DeleteShopResult {
     success: boolean;
 }
@@ -47,14 +80,10 @@ export interface ShopStats {
     products: bigint;
     customers: bigint;
 }
-export interface UpdateShopResult {
-    error?: string;
-    success: boolean;
-}
-export interface AdminSettings {
-    createdAt: bigint;
-    superAdminMobile: string;
-    updatedAt: bigint;
+export interface IdempotencyRecord {
+    shopId: string;
+    invoiceId: string;
+    processedAt: bigint;
 }
 export interface AddShopResult {
     shopId: string;
@@ -69,13 +98,14 @@ export interface ActivityRecord {
     userId: string;
     timestamp: bigint;
 }
-export interface ShopStatsResult {
+export interface LockRecord {
+    userName: string;
+    expiresAt: bigint;
     shopId: string;
-    totalSalesAmount: number;
-    lastActivity: bigint;
-    shopName: string;
-    sessionCount: bigint;
-    ownerMobile: string;
+    userId: string;
+    recordType: string;
+    acquiredAt: bigint;
+    recordId: string;
 }
 export interface UserProfile {
     name: string;
@@ -91,12 +121,20 @@ export interface UserStatsResult {
     salesCount: bigint;
 }
 export interface backendInterface {
+    acquireLock(recordId: string, recordType: string, shopId: string, userId: string, userName: string): Promise<LockResult>;
     addShop(ownerMobile: string, shopName: string, address: string, city: string): Promise<AddShopResult>;
+    checkIdempotency(idempotencyKey: string, shopId: string): Promise<IdempotencyRecord | null>;
     checkMobileExists(mobile: string): Promise<boolean>;
     clearShopData(shopId: string): Promise<void>;
     deleteBackupSnapshot(shopId: string, snapshotId: string): Promise<void>;
     deleteShop(shopId: string): Promise<DeleteShopResult>;
     findDuplicateUsers(): Promise<string>;
+    fullSystemReset(callerMobile: string): Promise<{
+        deletedShops: bigint;
+        message: string;
+        success: boolean;
+    }>;
+    getActiveUsersForShop(shopId: string): Promise<Array<ActiveUserRecord>>;
     getActivities(shopIdFilter: string | null, startTs: bigint | null, endTs: bigint | null): Promise<Array<ActivityRecord>>;
     getAdminSettings(): Promise<AdminSettings>;
     getAllUsersWithStats(startTs: bigint | null, endTs: bigint | null): Promise<Array<UserStatsResult>>;
@@ -111,6 +149,7 @@ export interface backendInterface {
     getDrafts(shopId: string): Promise<string>;
     getFeedback(shopId: string): Promise<string>;
     getInvoices(shopId: string): Promise<string>;
+    getLockStatus(recordId: string, recordType: string, shopId: string): Promise<LockRecord | null>;
     getLowPriceAlertLogs(shopId: string): Promise<string>;
     getMergeAuditLog(): Promise<string>;
     getOwnerStats(mobile: string): Promise<OwnerStats>;
@@ -134,6 +173,7 @@ export interface backendInterface {
     getUsers(shopId: string): Promise<string>;
     getVendorRateHistory(shopId: string): Promise<string>;
     getVendors(shopId: string): Promise<string>;
+    heartbeatLock(recordId: string, recordType: string, shopId: string, userId: string): Promise<boolean>;
     initPermanentSuperAdmin(): Promise<void>;
     isPermanentSuperAdminQuery(mobile: string): Promise<boolean>;
     listShopsForOwner(mobile: string): Promise<Array<ShopMeta>>;
@@ -141,6 +181,9 @@ export interface backendInterface {
     pruneOldBackups(shopId: string, retainDays: bigint): Promise<bigint>;
     purgeOldActivities(beforeTs: bigint): Promise<bigint>;
     recordActivity(shopId: string, userId: string, activityType: string, metadata: string): Promise<void>;
+    registerIdempotency(idempotencyKey: string, invoiceId: string, shopId: string): Promise<boolean>;
+    releaseAllLocksForUser(shopId: string, userId: string): Promise<bigint>;
+    releaseLock(recordId: string, recordType: string, shopId: string, userId: string): Promise<boolean>;
     saveAdminSettings(settings: AdminSettings): Promise<boolean>;
     saveAuditLogs(shopId: string, data: string): Promise<void>;
     saveBackupSnapshot(shopId: string, snapshotId: string, tag: string, data: string): Promise<void>;

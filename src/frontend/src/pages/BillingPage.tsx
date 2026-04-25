@@ -66,6 +66,10 @@ import {
   getActivityStatus,
   getCustomerTier,
 } from "../utils/customerTracking";
+import {
+  checkAndRegisterKey,
+  generateIdempotencyKey,
+} from "../utils/idempotency";
 import { clearLeadingZeros } from "../utils/numberInput";
 import type { ParsedVoiceCommand } from "../utils/voiceParser";
 
@@ -110,6 +114,8 @@ interface AutoDraft {
   labourAmt?: number;
   otherEnabled?: boolean;
   otherAmt?: number;
+  gstEnabled?: boolean;
+  gstRate?: number;
 }
 
 // ─── Smart Pricing Helpers ────────────────────────────────────────────────────
@@ -469,6 +475,7 @@ export function BillingPage({
     customers,
     updateCustomer,
     addCustomer,
+    shopId,
   } = useStore();
   const { currentUser } = useAuth();
   const { t, language } = useLanguage();
@@ -520,6 +527,8 @@ export function BillingPage({
   const [labourAmt, setLabourAmt] = useState("");
   const [otherEnabled, setOtherEnabled] = useState(false);
   const [otherAmt, setOtherAmt] = useState("");
+  const [gstEnabled, setGstEnabled] = useState(false);
+  const [gstRate, setGstRate] = useState(18);
 
   // ── Customer Tracking state (Pro mode only) ───────────────────────────────
   const [linkedCustomerId, setLinkedCustomerId] = useState<string | null>(null);
@@ -582,6 +591,8 @@ export function BillingPage({
             setLabourAmt(auto.labourAmt ? String(auto.labourAmt) : "");
             setOtherEnabled(!!auto.otherEnabled);
             setOtherAmt(auto.otherAmt ? String(auto.otherAmt) : "");
+            setGstEnabled(!!auto.gstEnabled);
+            if (auto.gstRate) setGstRate(auto.gstRate);
           }
           setAutoDraftActive(true);
           toast.info("Previous sale restored — continue or discard", {
@@ -613,6 +624,8 @@ export function BillingPage({
           labourAmt: Number(labourAmt) || 0,
           otherEnabled,
           otherAmt: Number(otherAmt) || 0,
+          gstEnabled,
+          gstRate,
         };
         sessionStorage.setItem(AUTO_DRAFT_KEY, JSON.stringify(autoDraft));
         const now = new Date();
@@ -636,6 +649,8 @@ export function BillingPage({
     labourAmt,
     otherEnabled,
     otherAmt,
+    gstEnabled,
+    gstRate,
   ]);
 
   function restoreFromDraft(draft: DraftSale) {
@@ -926,7 +941,18 @@ export function BillingPage({
   const activeOther =
     chargesEnabled && otherEnabled ? Number(otherAmt) || 0 : 0;
   const totalCharges = activeTransport + activeLabour + activeOther;
-  const total = itemsSubtotal + totalCharges;
+  const gstAmount =
+    chargesEnabled && gstEnabled
+      ? Math.round((((itemsSubtotal + totalCharges) * gstRate) / 100) * 100) /
+        100
+      : 0;
+  const activeGST = chargesEnabled && gstEnabled ? gstAmount : 0;
+  // CGST / SGST split (each half of the total GST)
+  const cgstRate = gstRate / 2;
+  const sgstRate = gstRate / 2;
+  const cgstAmount = Math.round((activeGST / 2) * 100) / 100;
+  const sgstAmount = Math.round((activeGST / 2) * 100) / 100;
+  const total = itemsSubtotal + totalCharges + activeGST;
 
   const computedPaid = (() => {
     if (paymentMode === "credit") return 0;
@@ -1386,6 +1412,16 @@ export function BillingPage({
       ...(activeTransport > 0 ? { transportCharge: activeTransport } : {}),
       ...(activeLabour > 0 ? { labourCharge: activeLabour } : {}),
       ...(activeOther > 0 ? { otherCharges: activeOther } : {}),
+      ...(activeGST > 0
+        ? {
+            gstRate,
+            gstAmount,
+            cgstRate,
+            sgstRate,
+            cgstAmount,
+            sgstAmount,
+          }
+        : {}),
     };
 
     if (lowPriceItems.length > 0) {
@@ -1452,6 +1488,19 @@ export function BillingPage({
     }
 
     if (wasBlocked) return;
+
+    // ── Idempotency guard: prevent duplicate bills on double-tap ──────────
+    const idemKey = generateIdempotencyKey(shopId, "invoice", {
+      customerMobile: invoiceData.customerMobile ?? "",
+      totalAmount: invoiceData.totalAmount,
+      timestamp: Date.now(),
+    });
+    const { isNew } = checkAndRegisterKey(shopId, "invoice", idemKey);
+    if (!isNew) {
+      toast.info("This bill was already saved.", { duration: 3500 });
+      clearForm();
+      return;
+    }
 
     const { invoice, mergedExisting } = createInvoice(invoiceData);
 
@@ -2027,7 +2076,7 @@ export function BillingPage({
                         {
                           key: "retailer" as CustomerType,
                           label: "Retailer",
-                          hint: "दुकानदार",
+                          hint: "Retailer",
                           cls: "border-green-400 bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300",
                           activeCls:
                             "ring-2 ring-green-500 ring-offset-1 font-semibold",
@@ -2035,7 +2084,7 @@ export function BillingPage({
                         {
                           key: "wholesaler" as CustomerType,
                           label: "Wholesaler",
-                          hint: "थोक",
+                          hint: "Wholesale",
                           cls: "border-purple-400 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300",
                           activeCls:
                             "ring-2 ring-purple-500 ring-offset-1 font-semibold",
@@ -2111,7 +2160,9 @@ export function BillingPage({
                             <SelectItem key={p.id} value={p.id}>
                               <span className={isZero ? "text-orange-500" : ""}>
                                 {isZero ? "⚠️ " : ""}
-                                {p.name} — Stock: {stock} {p.unit}
+                                {p.name}
+                                {p.partNo ? ` (Part No: ${p.partNo})` : ""} —
+                                Stock: {stock} {p.unit}
                               </span>
                             </SelectItem>
                           );
@@ -2288,6 +2339,31 @@ export function BillingPage({
                                       Over Sell — {available} available
                                     </span>
                                   )}
+                                  {/* Spare part details in cart */}
+                                  {(() => {
+                                    const prod = products.find(
+                                      (p) => p.id === item.productId,
+                                    );
+                                    if (!prod) return null;
+                                    const parts = [
+                                      prod.partNo
+                                        ? `Part No: ${prod.partNo}`
+                                        : null,
+                                      prod.srNo ? `SR No: ${prod.srNo}` : null,
+                                      prod.tnNo ? `TN No: ${prod.tnNo}` : null,
+                                      prod.dd ? `DD: ${prod.dd}` : null,
+                                      prod.ed ? `ED: ${prod.ed}` : null,
+                                      prod.mrp != null
+                                        ? `MRP: ₹${prod.mrp.toLocaleString("en-IN")}`
+                                        : null,
+                                    ].filter(Boolean);
+                                    if (parts.length === 0) return null;
+                                    return (
+                                      <span className="text-[10px] text-muted-foreground leading-tight">
+                                        {parts.join(" | ")}
+                                      </span>
+                                    );
+                                  })()}
                                   {/* Price mode pills */}
                                   {(() => {
                                     const prod = products.find(
@@ -2609,7 +2685,8 @@ export function BillingPage({
                 </div>
                 {!chargesEnabled && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Toggle ON to add transportation, labour, or other charges
+                    Toggle ON to add transportation, labour, other charges, or
+                    GST
                   </p>
                 )}
               </CardHeader>
@@ -2745,10 +2822,93 @@ export function BillingPage({
                     )}
                   </div>
 
-                  {totalCharges > 0 && (
+                  {/* GST */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      data-ocid="billing.gst.toggle"
+                      aria-label="Toggle GST"
+                      onClick={() => setGstEnabled((v) => !v)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                        gstEnabled ? "bg-purple-500" : "bg-muted-foreground/30"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          gstEnabled ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                    <span className="text-sm text-foreground flex-1 font-medium">
+                      GST
+                    </span>
+                    {!gstEnabled && (
+                      <span className="text-xs text-muted-foreground">Off</span>
+                    )}
+                  </div>
+                  {gstEnabled && (
+                    <div className="ml-12 space-y-2">
+                      <p className="text-xs text-green-700 dark:text-green-400 font-medium">
+                        GST is ON — GST will be automatically added to the bill
+                      </p>
+                      {/* Preset rate buttons */}
+                      <div className="flex gap-1.5 flex-wrap">
+                        {[5, 12, 18, 28].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            data-ocid={`billing.gst_preset_${preset}.button`}
+                            onClick={() => setGstRate(preset)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${
+                              gstRate === preset
+                                ? "bg-purple-600 text-white border-purple-600"
+                                : "bg-background border-border text-muted-foreground hover:border-purple-400"
+                            }`}
+                          >
+                            {preset}%
+                          </button>
+                        ))}
+                      </div>
+                      {/* Custom rate input */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          GST Rate (%)
+                        </span>
+                        <Input
+                          data-ocid="billing.gst_rate.input"
+                          type="number"
+                          placeholder="Rate %"
+                          value={gstRate}
+                          onChange={(e) => {
+                            const v =
+                              Number(clearLeadingZeros(e.target.value)) || 0;
+                            setGstRate(Math.min(100, Math.max(0, v)));
+                          }}
+                          onFocus={(e) => e.target.select()}
+                          className="w-20 h-7 text-sm"
+                          min="0"
+                          max="100"
+                        />
+                      </div>
+                      {gstAmount > 0 && (
+                        <div className="text-xs text-muted-foreground space-y-0.5">
+                          <div className="flex gap-3">
+                            <span>
+                              CGST ({cgstRate}%): {fmt(cgstAmount)}
+                            </span>
+                            <span>
+                              SGST ({sgstRate}%): {fmt(sgstAmount)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {(totalCharges > 0 || activeGST > 0) && (
                     <div className="flex justify-between items-center pt-2 border-t border-purple-200 dark:border-purple-800 text-sm font-medium text-purple-700 dark:text-purple-300">
                       <span>Total Extra Charges</span>
-                      <span>{fmt(totalCharges)}</span>
+                      <span>{fmt(totalCharges + activeGST)}</span>
                     </div>
                   )}
                 </CardContent>
@@ -2813,9 +2973,33 @@ export function BillingPage({
                       </span>
                     </div>
                   )}
-                  {totalCharges > 0 && <Separator />}
+                  {activeGST > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          CGST ({cgstRate}%)
+                        </span>
+                        <span className="text-purple-700">
+                          +{fmt(cgstAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          SGST ({sgstRate}%)
+                        </span>
+                        <span className="text-purple-700">
+                          +{fmt(sgstAmount)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {(totalCharges > 0 || activeGST > 0) && <Separator />}
                   <div className="flex justify-between font-bold text-lg">
-                    <span>Grand Total</span>
+                    <span>
+                      {activeGST > 0
+                        ? "Grand Total (incl. GST)"
+                        : "Grand Total"}
+                    </span>
                     <span className="text-brand-blue">{fmt(total)}</span>
                   </div>
                 </div>
@@ -2969,9 +3153,31 @@ export function BillingPage({
                       </span>
                     </div>
                   )}
+                  {activeGST > 0 && (
+                    <>
+                      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/60 text-xs">
+                        <span className="text-muted-foreground">
+                          CGST ({cgstRate}%)
+                        </span>
+                        <span className="text-purple-700">
+                          +{fmt(cgstAmount)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/60 text-xs">
+                        <span className="text-muted-foreground">
+                          SGST ({sgstRate}%)
+                        </span>
+                        <span className="text-purple-700">
+                          +{fmt(sgstAmount)}
+                        </span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60">
                     <span className="font-semibold text-foreground">
-                      Grand Total
+                      {activeGST > 0
+                        ? "Grand Total (incl. GST)"
+                        : "Grand Total"}
                     </span>
                     <span className="font-bold text-foreground">
                       {fmt(total)}

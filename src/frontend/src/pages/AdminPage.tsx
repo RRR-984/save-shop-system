@@ -1526,7 +1526,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                     className="h-9"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Retailer (दुकानदार) ke liye price
+                    Retailer Price
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -1550,7 +1550,7 @@ function ProductsManager({ canDelete }: { canDelete: boolean }) {
                     className="h-9"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Wholesaler (थोक) ke liye price
+                    Wholesaler Price
                   </p>
                 </div>
               </div>

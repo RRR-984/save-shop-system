@@ -1,0 +1,112 @@
+// Version: 1.0.0
+type ActivityRecord__625445840 =
+  {
+    activityType : Text;
+    id : Text;
+    metadata : Text;
+    shopId : Text;
+    timestamp : Int;
+    userId : Text
+  };
+type AdminSettings__819383327 =
+  {createdAt : Int; superAdminMobile : Text; updatedAt : Int};
+type BackupEntry__821971064 =
+  {data : Text; id : Text; tag : Text; timestamp : Int};
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type IdempotencyRecord__1073704331 =
+  {invoiceId : Text; processedAt : Int; shopId : Text};
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type List__415060402<T> = List__790383201<T>;
+type List__790383201<T> =
+  {
+    var blockIndex : Nat__490723111;
+    var blocks : [var [var ?T]];
+    var elementIndex : Nat__490723111
+  };
+type LockRecord__433240996 =
+  {
+    acquiredAt : Int;
+    expiresAt : Int;
+    recordId : Text;
+    recordType : Text;
+    shopId : Text;
+    userId : Text;
+    userName : Text
+  };
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type ShopMeta__216240044 =
+  {
+    address : Text;
+    city : Text;
+    createdAt : Text;
+    id : Text;
+    isDeleted : Bool;
+    name : Text;
+    ownerMobile : Text
+  };
+type SuperAdminChangeLog__469178578 =
+  {fromMobile : Text; id : Text; timestamp : Int; toMobile : Text};
+type UserProfile__491224006 = {name : Text};
+actor {
+  stable PERMANENT_SUPER_ADMIN : Text;
+  stable activityStore :
+    {
+      var root : Node__46230540<Text, ActivityRecord__625445840>;
+      var size : Nat__490723111
+    };
+  stable adminSettingsBox : {var value : ?AdminSettings__819383327};
+  stable backupSnapshots :
+    {
+      var root : Node__46230540<Text, List__415060402<BackupEntry__821971064>>;
+      var size : Nat__490723111
+    };
+  stable idempotencyTable :
+    {
+      var root : Node__46230540<Text, IdempotencyRecord__1073704331>;
+      var size : Nat__490723111
+    };
+  stable lockTable :
+    {
+      var root : Node__46230540<Text, LockRecord__433240996>;
+      var size : Nat__490723111
+    };
+  stable mergeAuditLog :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?Text]];
+      var elementIndex : Nat__490723111
+    };
+  stable paidUsersStore :
+    {var root : Node__46230540<Text, Bool>; var size : Nat__490723111};
+  stable shopData :
+    {
+      var root : Node__46230540<Text, Map__605269027<Text, Text>>;
+      var size : Nat__490723111
+    };
+  stable shopRegistry :
+    {
+      var root : Node__46230540<Text, List__415060402<ShopMeta__216240044>>;
+      var size : Nat__490723111
+    };
+  stable superAdminChangeLog :
+    {
+      var blockIndex : Nat__490723111;
+      var blocks : [var [var ?SuperAdminChangeLog__469178578]];
+      var elementIndex : Nat__490723111
+    };
+  stable userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfile__491224006>;
+      var size : Nat__490723111
+    }
+};

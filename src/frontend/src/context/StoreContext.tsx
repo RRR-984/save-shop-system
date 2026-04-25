@@ -48,6 +48,10 @@ import type {
   VendorRateHistory,
 } from "../types/store";
 import {
+  checkAndRegisterKey,
+  generateIdempotencyKey,
+} from "../utils/idempotency";
+import {
   STORAGE_KEYS,
   clearShopScopedData,
   getShopKey,
@@ -96,6 +100,13 @@ function setDeviceUsedReferralCode(code: string): void {
 
 // Walk-in customer identifier — never added to ledger
 const WALK_IN_NAME = "Walk-in Customer";
+
+/** Derive featureMode from autoMode — single source of truth mapping */
+function autoModeToFeatureMode(m: AutoModeType): 1 | 2 | 3 | 4 {
+  if (m === "pro") return 4;
+  if (m === "smart") return 2;
+  return 1; // simple
+}
 
 function isWalkIn(name: string): boolean {
   return (
@@ -161,6 +172,8 @@ interface StoreContextValue {
   isPhase1Loading: boolean;
   /** Phase 2 in-flight: invoices, customers, payments, returns, vendors, etc. — silent background */
   isPhase2Loading: boolean;
+  /** true while a shop switch is in progress — gate renders to prevent stale data flash */
+  isShopSwitching: boolean;
   /** true if some Phase 1 collections failed — dashboard shows partial data badge */
   phase1HasPartialError: boolean;
   /** true if any Phase 2 collection (invoices, customers, payments, vendors) failed */
@@ -172,9 +185,14 @@ interface StoreContextValue {
   // Refresh system
   refreshCounter: number;
   triggerRefresh: () => void;
+  /** Full reload of Phase1+Phase2 — called by usePeriodicSync when it detects new remote data */
+  triggerFullRefresh: () => void;
 
   // ICP sync indicator
   isSyncing: boolean;
+
+  // Concurrency feature flag
+  concurrencyEnabled: boolean;
 
   // Shop Settings
   shopSettings: ShopSettings;
@@ -428,7 +446,7 @@ interface StoreContextValue {
 const StoreContext = createContext<StoreContextValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { currentShop, currentUser } = useAuth();
+  const { currentShop, currentUser, shopsLoaded } = useAuth();
   const syncUsersToAuth = useAuthUserSync();
   const shopId =
     currentShop?.id ?? localStorage.getItem("last_shop_id") ?? "shop-default";
@@ -475,8 +493,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ── Track previous shopId to detect shop switches ─────────────────────────
   const prevShopIdRef = useRef<string | null>(null);
+  /** Set to true during a shop switch to gate renders and prevent stale data flash */
+  const [isShopSwitching, setIsShopSwitching] = useState(false);
 
-  // ── Refresh counter — incremented after every mutation so consumers can react ─
+  // ── Refresh counter — incremented only on user-initiated actions (never on internal state resets) ─
   const [refreshCounter, setRefreshCounter] = useState(0);
   const triggerRefresh = useCallback(() => {
     setRefreshCounter((c) => c + 1);
@@ -673,10 +693,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       const sid = localStorage.getItem("last_shop_id") ?? "shop-default";
       const raw = localStorage.getItem(`appConfig_${sid}`);
-      const modeRaw = localStorage.getItem(`feature_mode_${sid}`);
-      // Migrate: old mode 3 (Super) maps to new mode 4; default for new users is 1 (Basic)
-      const rawMode = modeRaw ? Number(modeRaw) : null;
-      const featureMode = (rawMode === 3 ? 4 : (rawMode ?? 1)) as 1 | 2 | 3 | 4;
+      const savedMode = loadAutoMode(sid);
+      const featureMode = autoModeToFeatureMode(savedMode);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<AppConfig>;
         return { ...DEFAULT_APP_CONFIG, ...parsed, featureMode } as AppConfig;
@@ -691,10 +709,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`appConfig_${shopId}`);
-      const modeRaw = localStorage.getItem(`feature_mode_${shopId}`);
-      // Migrate: old mode 3 (Super) maps to new mode 4; default for new users is 1 (Basic)
-      const rawMode = modeRaw ? Number(modeRaw) : null;
-      const featureMode = (rawMode === 3 ? 4 : (rawMode ?? 1)) as 1 | 2 | 3 | 4;
+      const savedMode = loadAutoMode(shopId);
+      const featureMode = autoModeToFeatureMode(savedMode);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<AppConfig>;
         setAppConfig({
@@ -755,7 +771,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setFeatureMode = useCallback(
     (mode: 1 | 2 | 3 | 4): void => {
-      localStorage.setItem(`feature_mode_${shopId}`, String(mode));
       setAppConfig((prev) => {
         const updated: AppConfig = { ...prev, featureMode: mode };
         localStorage.setItem(`appConfig_${shopId}`, JSON.stringify(updated));
@@ -766,19 +781,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   // ── Auto Mode (3-mode abstraction: simple | smart | pro) ─────────────────
-  // Maps: simple→featureMode 1, smart→featureMode 3, pro→featureMode 4
+  // Maps: simple→featureMode 1 (Basic), smart→featureMode 2 (Normal), pro→featureMode 4 (Super)
+  // auto_mode_ is the ONLY persisted key. featureMode is always derived from autoMode.
   const [autoMode, setAutoModeState] = useState<AutoModeType>(() =>
     loadAutoMode(localStorage.getItem("last_shop_id") ?? "shop-default"),
   );
 
-  // Re-load autoMode when shopId changes
+  // Re-load autoMode when shopId changes; derive and sync featureMode atomically
   useEffect(() => {
     const saved = loadAutoMode(shopId);
+    const mapped = autoModeToFeatureMode(saved);
     setAutoModeState(saved);
-    // Sync featureMode to match the loaded autoMode
-    const mapped: 1 | 2 | 3 | 4 =
-      saved === "pro" ? 4 : saved === "smart" ? 3 : 1;
-    localStorage.setItem(`feature_mode_${shopId}`, String(mapped));
     setAppConfig((prev) => {
       const updated: AppConfig = {
         ...prev,
@@ -791,13 +804,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shopId]);
 
+  /**
+   * setAutoMode is the single source of truth for mode switching.
+   * It atomically:
+   *   1. Persists autoMode via saveAutoMode (auto_mode_ key)
+   *   2. Updates autoMode state
+   *   3. Derives featureMode and updates appConfig (featureMode + autoMode fields)
+   * No separate feature_mode_ localStorage key is written.
+   */
   const setAutoMode = useCallback(
     (mode: AutoModeType): void => {
-      const mapped: 1 | 2 | 3 | 4 =
-        mode === "pro" ? 4 : mode === "smart" ? 3 : 1;
+      const mapped = autoModeToFeatureMode(mode);
       saveAutoMode(shopId, mode);
       setAutoModeState(mode);
-      localStorage.setItem(`feature_mode_${shopId}`, String(mapped));
       setAppConfig((prev) => {
         const updated: AppConfig = {
           ...prev,
@@ -850,27 +869,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setBulkReminderSentAt(sentAt);
   }, [shopId]);
 
-  // ── Auto-trigger refresh when key data arrays change (post-mutation sync) ──
-  // This is intentionally using individual change tracking via a combined ref
-  const _prevDataSig = useRef("");
-  useEffect(() => {
-    const sig = [
-      products.length,
-      batches.length,
-      invoices.length,
-      customers.length,
-      payments.length,
-      returns.length,
-    ].join(",");
-    if (sig !== _prevDataSig.current) {
-      _prevDataSig.current = sig;
-      triggerRefresh();
-    }
-  });
+  // ── REMOVED: Auto-trigger refresh on data-length change ──────────────────
+  // triggerRefresh must only be called on user-initiated actions (button press,
+  // navigation), never on internal state resets like setProducts([]).
+  // Each mutation callback calls triggerRefresh() explicitly after the action.
 
-  // ── Load all data from ICP backend when shopId & actor are ready ─────────
+  // ── Network online status ref — used to gate Phase2 on offline ────────────
+  const isOnlineRef = useRef<boolean>(navigator.onLine);
   useEffect(() => {
-    if (!shopId || !actor) return;
+    const setOnline = () => {
+      isOnlineRef.current = true;
+    };
+    const setOffline = () => {
+      isOnlineRef.current = false;
+    };
+    window.addEventListener("online", setOnline);
+    window.addEventListener("offline", setOffline);
+    return () => {
+      window.removeEventListener("online", setOnline);
+      window.removeEventListener("offline", setOffline);
+    };
+  }, []);
+
+  // ── Load all data from ICP backend when shopId, actor & shopsLoaded are ready ─
+  useEffect(() => {
+    // Wait for AuthContext to finish loading shops before reading shop data.
+    // This prevents StoreContext from loading with a stale shopId.
+    if (!shopId || !actor || !shopsLoaded) return;
 
     // ── Detect shop switch vs initial load ───────────────────────────────────
     const isShopSwitch =
@@ -880,38 +905,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       console.log(
         `[StoreContext] === Shop switch detected: ${prevShopIdRef.current} → ${shopId} ===`,
       );
-      // Clear old shop's scoped localStorage data immediately to prevent stale data
+
+      // ── STEP 1: Set switching flag to gate renders ───────────────────────
+      setIsShopSwitching(true);
+
+      // ── STEP 2: Clear OLD shop's localStorage BEFORE any state resets ───
+      // Must happen before setState to avoid stale data race
       clearShopScopedData(prevShopIdRef.current!);
-      // Immediately clear all state arrays — never show previous shop's data
+
+      // ── STEP 3: Update ALL refs BEFORE setState calls to prevent race conditions
+      // on rapid shop switch — stale closures will read new ref values
+      shopIdRef.current = shopId;
+      batchesRef.current = [];
+      invoicesRef.current = [];
+      returnsRef.current = [];
+      vendorsRef.current = [];
+      purchaseOrdersRef.current = [];
+      customerOrdersRef.current = [];
+      vendorRateHistoryRef.current = [];
+      lowPriceAlertLogsRef.current = [];
+      auditLogsRef.current = [];
+      reminderLogsRef.current = [];
+      reminderRequestsRef.current = [];
+
+      // ── STEP 4: Clear draft sales for old shop BEFORE new shop loads ─────
+      draftSalesRef.current = [];
+      setDraftSales([]);
+
+      // ── STEP 5: Clear attendance records for old shop ────────────────────
+      attendanceRecordsRef.current = [];
+      setAttendanceRecords([]);
+
+      // ── STEP 6: Reset state arrays (refs already cleared above) ─────────
       setProducts([]);
       setCategories([]);
       setBatches([]);
-      batchesRef.current = [];
       setTransactions([]);
       setUsers([]);
       setShopUnits([]);
       setInvoices([]);
-      invoicesRef.current = [];
       setCustomers([]);
       setPayments([]);
       setReturns([]);
-      returnsRef.current = [];
       setVendors([]);
-      vendorsRef.current = [];
       setPurchaseOrders([]);
-      purchaseOrdersRef.current = [];
       setCustomerOrders([]);
-      customerOrdersRef.current = [];
       setVendorRateHistory([]);
-      vendorRateHistoryRef.current = [];
       setLowPriceAlertLogs([]);
-      lowPriceAlertLogsRef.current = [];
       setAuditLogs([]);
-      auditLogsRef.current = [];
       setReminderLogs([]);
-      reminderLogsRef.current = [];
       setReminderRequests([]);
-      reminderRequestsRef.current = [];
+
       // Reset error states
       setPhase1HasPartialError(false);
       setPhase2HasPartialError(false);
@@ -1104,11 +1148,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Phase 1 complete — mark loading done so dashboard renders
           setIsPhase1Loading(false);
           setIsLoading(false);
+          // Clear shop-switching gate — new shop data is now rendered
+          setIsShopSwitching(false);
 
           // ── PHASE 2: Heavy collections — silent background fetch ────────────
           // Never blocks user interaction. Runs after Phase 1 renders.
           setIsPhase2Loading(true);
           setPhase2HasPartialError(false);
+
+          // Cancellation token — set to true on network drop to abort Phase 2 setState calls
+          const phase2Cancel = { cancelled: false };
+          const phase2OfflineHandler = () => {
+            phase2Cancel.cancelled = true;
+          };
+          window.addEventListener("offline", phase2OfflineHandler, {
+            once: true,
+          });
 
           // Track which Phase 2 items failed
           let phase2AnyFailed = false;
@@ -1176,7 +1231,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             actor
               .getVendors(shopId)
               .then((raw) => {
-                if (!raw) return;
+                if (phase2Cancel.cancelled || !raw) return;
                 const data = JSON.parse(raw) as Vendor[];
                 setVendors(data);
                 vendorsRef.current = data;
@@ -1192,7 +1247,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             actor
               .getPurchaseOrders(shopId)
               .then((raw) => {
-                if (!raw) return;
+                if (phase2Cancel.cancelled || !raw) return;
                 const data = JSON.parse(raw) as PurchaseOrder[];
                 setPurchaseOrders(data);
                 purchaseOrdersRef.current = data;
@@ -1208,7 +1263,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             actor
               .getCustomerOrders(shopId)
               .then((raw) => {
-                if (!raw) return;
+                if (phase2Cancel.cancelled || !raw) return;
                 const data = JSON.parse(raw) as CustomerOrder[];
                 setCustomerOrders(data);
                 customerOrdersRef.current = data;
@@ -1224,7 +1279,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             actor
               .getVendorRateHistory(shopId)
               .then((raw) => {
-                if (!raw) return;
+                if (phase2Cancel.cancelled || !raw) return;
                 const data = JSON.parse(raw) as VendorRateHistory[];
                 setVendorRateHistory(data);
                 vendorRateHistoryRef.current = data;
@@ -1240,7 +1295,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             actor
               .getLowPriceAlertLogs(shopId)
               .then((raw) => {
-                if (!raw) return;
+                if (phase2Cancel.cancelled || !raw) return;
                 const logs = JSON.parse(raw) as LowPriceAlertLog[];
                 setLowPriceAlertLogs(logs);
                 lowPriceAlertLogsRef.current = logs;
@@ -1251,7 +1306,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             actor
               .getAuditLogs(shopId)
               .then((raw) => {
-                if (!raw) return;
+                if (phase2Cancel.cancelled || !raw) return;
                 const logs = JSON.parse(raw) as AuditLog[];
                 setAuditLogs(logs);
                 auditLogsRef.current = logs;
@@ -1262,7 +1317,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             actor
               .getReminderLogs(shopId)
               .then((raw) => {
-                if (!raw) return;
+                if (phase2Cancel.cancelled || !raw) return;
                 const logs = JSON.parse(raw) as ReminderLog[];
                 setReminderLogs(logs);
                 reminderLogsRef.current = logs;
@@ -1273,7 +1328,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             actor
               .getReminderRequests(shopId)
               .then((raw) => {
-                if (!raw) return;
+                if (phase2Cancel.cancelled || !raw) return;
                 const reqs = JSON.parse(raw) as ReminderRequest[];
                 setReminderRequests(reqs);
                 reminderRequestsRef.current = reqs;
@@ -1281,8 +1336,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               .catch(() => {}),
           ];
 
-          // After all Phase 2 complete — update cache timestamp and clear loading flag
+          // After all Phase 2 settled — remove offline listener and update state
           Promise.allSettled(phase2).then(() => {
+            window.removeEventListener("offline", phase2OfflineHandler);
+            if (phase2Cancel.cancelled) {
+              // Network dropped mid-Phase2 — mark partial error so pages show warning
+              setIsPhase2Loading(false);
+              setPhase2HasPartialError(true);
+              console.warn(
+                "[StoreContext] Phase2 settled after cancel — partial data",
+              );
+              return;
+            }
             localStorage.setItem(cacheTimestampKey, String(Date.now()));
             setIsPhase2Loading(false);
             if (phase2AnyFailed) setPhase2HasPartialError(true);
@@ -1298,7 +1363,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     // No cleanup needed (no timers active)
     return () => {};
-  }, [shopId, actor, syncUsersToAuth]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shopId, actor, syncUsersToAuth, shopsLoaded]);
 
   // ── Draft / Snapshot helper (stable via ref pattern) ──────────────────────────────────────────
   const saveDraftBeforeChangeRef = useRef(
@@ -1758,6 +1824,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const createInvoice = useCallback(
     (data: Omit<Invoice, "id" | "invoiceNumber">): CreateInvoiceResult => {
+      // ── Idempotency guard: prevent duplicate bills on double-tap or retry ──
+      const idemKey = generateIdempotencyKey(shopIdRef.current, "invoice", {
+        customerMobile: data.customerMobile ?? "",
+        totalAmount: data.totalAmount,
+        timestamp: Date.now(),
+      });
+      const { isNew } = checkAndRegisterKey(
+        shopIdRef.current,
+        "invoice",
+        idemKey,
+      );
+      if (!isNew) {
+        // Duplicate detected — return the most recent invoice for this customer
+        const existingInvoice = invoicesRef.current[0];
+        if (existingInvoice) {
+          toast.info("Duplicate bill prevented", { duration: 3000 });
+          return { invoice: existingInvoice, mergedExisting: false };
+        }
+      }
+
       // Enforce payment logic
       let paidAmount = data.paidAmount;
       let dueAmount = data.dueAmount;
@@ -1898,19 +1984,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      // ── Save invoice and update invoicesRef immediately for real-time sync ──
+      // ── Save invoice: ICP first, then localStorage, then setState ──────────
+      // Rule: await ICP save before localStorage; if ICP fails, roll back and do NOT persist.
       const updatedInvoices = [invoice, ...invoicesRef.current];
+      // Update ref immediately so concurrent reads within this tick see new data
       invoicesRef.current = updatedInvoices;
-      actorRef.current?.saveInvoices(
-        shopIdRef.current,
-        JSON.stringify(updatedInvoices),
-      );
-      saveData(
-        getShopKey(STORAGE_KEYS.sales, shopIdRef.current),
-        updatedInvoices,
-      );
-      setInvoices(updatedInvoices);
-      toast.success("Data saved ✓", { duration: 2500 });
+
+      const icpActor = actorRef.current;
+      const currentShopId = shopIdRef.current;
+
+      if (icpActor) {
+        // Attempt ICP save; on success persist to localStorage and commit state
+        icpActor
+          .saveInvoices(currentShopId, JSON.stringify(updatedInvoices))
+          .then(() => {
+            // ICP succeeded — now safe to persist locally and update state
+            saveData(
+              getShopKey(STORAGE_KEYS.sales, currentShopId),
+              updatedInvoices,
+            );
+            setInvoices(updatedInvoices);
+            toast.success("Data saved ✓", { duration: 2500 });
+          })
+          .catch((err) => {
+            // ICP failed — roll back ref to avoid stale optimistic state
+            console.error(
+              "[StoreContext] createInvoice ICP save failed — rolling back",
+              err,
+            );
+            invoicesRef.current = invoicesRef.current.filter(
+              (inv) => inv.id !== invoice.id,
+            );
+            toast.error("Save failed. Please try again.", { duration: 4000 });
+          });
+      } else {
+        // No actor (offline / actor not yet ready) — write to localStorage only as offline buffer
+        saveData(
+          getShopKey(STORAGE_KEYS.sales, currentShopId),
+          updatedInvoices,
+        );
+        setInvoices(updatedInvoices);
+        toast.success("Saved locally (offline)", { duration: 2500 });
+      }
 
       // ── Diamond Reward: 1 diamond per 10 completed transactions ──────────────
       // Increment per-shop transaction counter and award 1 diamond every 10th tx
@@ -3840,11 +3955,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     isLoading,
     isPhase1Loading,
     isPhase2Loading,
+    isShopSwitching,
     phase1HasPartialError,
     phase2HasPartialError,
     refreshCounter,
     triggerRefresh,
+    triggerFullRefresh: triggerRefresh,
     isSyncing,
+    concurrencyEnabled: !!(appConfig as { concurrencyEnabled?: boolean })
+      .concurrencyEnabled,
     shopSettings,
     updateShopSettings,
     addCategory,
