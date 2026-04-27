@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
-import { useDraggable } from "../hooks/useDraggable";
 import type {
   AppConfig,
   AutoModeType,
@@ -9,7 +8,6 @@ import type {
   Invoice,
   Product,
 } from "../types/store";
-import { STORAGE_KEYS } from "../utils/localStorage";
 
 interface Message {
   id: string;
@@ -61,24 +59,17 @@ type QueryType =
   | "help_diamonds"
   | "help_backup"
   | "help_settings"
-  // ── Pro customer insight queries ─────────────────────────────────────────
   | "inactive_customers"
   | "lost_customers"
   | "top_customers"
   | "pending_customers"
   | "unknown";
 
-// Keyword map: each topic has an array of keywords (English + Hinglish).
-// If ANY keyword from the array appears as a substring in the cleaned query,
-// that topic is matched. Order matters — more specific topics are checked first.
 const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
-  // Greetings — checked first so "hi" alone doesn't match "history" topics
   {
     type: "greeting",
     keywords: ["hello", "namaste", "hey", "hii", "helllo", "helo", "namaskar"],
   },
-
-  // Birthday today — very specific, checked early
   {
     type: "birthday_today",
     keywords: [
@@ -97,8 +88,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "janmdin today",
     ],
   },
-
-  // Dead stock time/settings — more specific, must come before generic "dead stock"
   {
     type: "help_dead_stock_time",
     keywords: [
@@ -113,8 +102,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "dead time change",
     ],
   },
-
-  // Dead stock data query
   {
     type: "dead_stock",
     keywords: [
@@ -128,8 +115,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "nahi bika",
     ],
   },
-
-  // Low stock
   {
     type: "low_stock",
     keywords: [
@@ -144,8 +129,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "stock khatam hone",
     ],
   },
-
-  // Out of stock — checked before khatam product to avoid ambiguity
   {
     type: "out_of_stock",
     keywords: [
@@ -159,8 +142,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "stock nahi hai",
     ],
   },
-
-  // Best selling — before today_profit/total_profit
   {
     type: "best_selling",
     keywords: [
@@ -179,8 +160,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "sabse popular",
     ],
   },
-
-  // Total profit (all time) — before today_profit
   {
     type: "total_profit",
     keywords: [
@@ -194,8 +173,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "total munafa",
     ],
   },
-
-  // Today profit
   {
     type: "today_profit",
     keywords: [
@@ -208,8 +185,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "profit kitna",
     ],
   },
-
-  // Recent / weekly / monthly sales — checked before today_sales
   {
     type: "recent_sales",
     keywords: [
@@ -229,8 +204,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "pichle mahine",
     ],
   },
-
-  // Today sales
   {
     type: "today_sales",
     keywords: [
@@ -248,8 +221,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "aaj ki bikri",
     ],
   },
-
-  // Customer count — before pending_due so "customer" doesn't match wrong
   {
     type: "customer_count",
     keywords: [
@@ -263,8 +234,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "customers hain",
     ],
   },
-
-  // Vendor due / outstanding — checked before pending_due
   {
     type: "vendor_due",
     keywords: [
@@ -279,8 +248,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "vendor paise",
     ],
   },
-
-  // Pending due / credit
   {
     type: "pending_due",
     keywords: [
@@ -301,8 +268,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "customer due",
     ],
   },
-
-  // Staff performance
   {
     type: "staff_performance",
     keywords: [
@@ -319,8 +284,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "staff sales report",
     ],
   },
-
-  // Stock value
   {
     type: "stock_value",
     keywords: [
@@ -332,8 +295,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "maal ki value",
     ],
   },
-
-  // Total products
   {
     type: "total_products",
     keywords: [
@@ -348,8 +309,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "stock mein kya",
     ],
   },
-
-  // Help: add shop — more specific before generic shop queries
   {
     type: "help_add_shop",
     keywords: [
@@ -370,8 +329,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "multi shop",
     ],
   },
-
-  // Help: add vendor — must match vender/vendor variations
   {
     type: "help_add_vendor",
     keywords: [
@@ -400,8 +357,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "vender management",
     ],
   },
-
-  // Help: add stock / material
   {
     type: "help_add_stock",
     keywords: [
@@ -429,8 +384,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "stock in",
     ],
   },
-
-  // Help: sell / billing
   {
     type: "help_sell",
     keywords: [
@@ -464,8 +417,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "payment receive",
     ],
   },
-
-  // Help: add customer
   {
     type: "help_add_customer",
     keywords: [
@@ -483,8 +434,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "ग्राहक कैसे",
     ],
   },
-
-  // Help: staff
   {
     type: "help_staff",
     keywords: [
@@ -506,8 +455,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "स्टाफ कैसे",
     ],
   },
-
-  // Help: reports
   {
     type: "help_reports",
     keywords: [
@@ -525,8 +472,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "रिपोर्ट देखें",
     ],
   },
-
-  // Help: mode change
   {
     type: "help_mode",
     keywords: [
@@ -543,8 +488,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "मोड कैसे",
     ],
   },
-
-  // Help: invoice print/share
   {
     type: "help_invoice",
     keywords: [
@@ -560,8 +503,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "invoice download",
     ],
   },
-
-  // Help: diamonds
   {
     type: "help_diamonds",
     keywords: [
@@ -576,8 +517,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "diamond level",
     ],
   },
-
-  // Help: backup
   {
     type: "help_backup",
     keywords: [
@@ -590,8 +529,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "data copy",
     ],
   },
-
-  // Help: settings
   {
     type: "help_settings",
     keywords: [
@@ -605,9 +542,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "सेटिंग कैसे",
     ],
   },
-
-  // ── Pro customer insight queries ──────────────────────────────────────────
-  // top_customers — checked before inactive/lost so "top" doesn't match others
   {
     type: "top_customers",
     keywords: [
@@ -624,8 +558,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "sabse bada customer",
     ],
   },
-
-  // inactive_customers
   {
     type: "inactive_customers",
     keywords: [
@@ -641,8 +573,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "180 dino se",
     ],
   },
-
-  // lost_customers
   {
     type: "lost_customers",
     keywords: [
@@ -658,8 +588,6 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
       "chale gaye customer",
     ],
   },
-
-  // pending_customers
   {
     type: "pending_customers",
     keywords: [
@@ -677,12 +605,9 @@ const KEYWORD_MAP: Array<{ type: QueryType; keywords: string[] }> = [
   },
 ];
 
-// Standalone greeting words that must match at word start/boundary to avoid
-// false positives (e.g. "hi" inside "history")
 const GREETING_WORDS = new Set(["hi", "help"]);
 
 function normaliseQuery(text: string): string {
-  // Lowercase, strip punctuation, collapse whitespace
   return text
     .toLowerCase()
     .replace(/[.,!?;:'"()]/g, " ")
@@ -692,29 +617,20 @@ function normaliseQuery(text: string): string {
 
 function detectQuery(text: string): QueryType {
   const norm = normaliseQuery(text);
-
-  // Single-word greeting check with word-boundary awareness
   const firstWord = norm.split(" ")[0];
   if (GREETING_WORDS.has(firstWord)) return "greeting";
-
-  // Iterate keyword map in order — first match wins
   for (const entry of KEYWORD_MAP) {
     for (const kw of entry.keywords) {
       if (norm.includes(kw)) return entry.type;
     }
   }
-
   return "unknown";
 }
 
-// ── Bullet list helper ──────────────────────────────────────────────────────
 function steps(items: string[]): string {
   return items.map((item, i) => `${i + 1}. ${item}`).join("\n");
 }
 
-// ── Response generator ──────────────────────────────────────────────────────
-
-/** Days since a date string (ISO). Returns Number.POSITIVE_INFINITY if date is null/undefined. */
 function daysSince(dateStr: string | undefined | null): number {
   if (!dateStr) return Number.POSITIVE_INFINITY;
   return Math.floor(
@@ -722,15 +638,13 @@ function daysSince(dateStr: string | undefined | null): number {
   );
 }
 
-/** Customer tier label based on totalPurchase */
-function tierLabel(totalPurchase: number, isHi: boolean): string {
-  if (totalPurchase >= 50000) return isHi ? "👑 VIP" : "👑 VIP";
-  if (totalPurchase >= 20000) return isHi ? "🥇 Gold" : "🥇 Gold";
-  if (totalPurchase >= 5000) return isHi ? "🥈 Silver" : "🥈 Silver";
-  return isHi ? "Normal" : "Normal";
+function tierLabel(totalPurchase: number): string {
+  if (totalPurchase >= 50000) return "👑 VIP";
+  if (totalPurchase >= 20000) return "🥇 Gold";
+  if (totalPurchase >= 5000) return "🥈 Silver";
+  return "Normal";
 }
 
-/** Get today's month-day in MM-DD format */
 function todayMMDD(): string {
   const now = new Date();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -753,7 +667,6 @@ function generateResponse(
   },
 ): string {
   const isHi = lang === "hi";
-
   const todayStr = new Date().toDateString();
   const now = Date.now();
 
@@ -768,13 +681,11 @@ function generateResponse(
         ? "Namaste! 🙏 Main aapka Shop Assistant hoon.\n\nAap mujhse pooch sakte hain:\n• Low stock batao\n• Aaj ki sale kitni hai\n• Aaj birthday kaun?\n• Dead stock kya hai\n• Pending due kitna hai\n• Best selling product\n• New shop kaise banaye\n• Vendor kese add kare\n• Billing kaise kare\n• Staff kese add kare"
         : "Hello! 👋 I'm your Shop Assistant.\n\nYou can ask me:\n• Low stock products\n• Today's sales\n• Today's birthdays\n• Dead stock\n• Pending due\n• Best selling products\n• How to add a new shop\n• How to add stock\n• How to do billing";
 
-    // ── Birthday today ────────────────────────────────────────────────────
     case "birthday_today": {
       const mmdd = todayMMDD();
       const birthdays = store.customers.filter((c) => {
         if (!c.birthday) return false;
-        // birthday format: YYYY-MM-DD — extract MM-DD
-        const bmmdd = c.birthday.slice(5); // "MM-DD"
+        const bmmdd = c.birthday.slice(5);
         return bmmdd === mmdd;
       });
       if (!birthdays.length) {
@@ -844,7 +755,6 @@ function generateResponse(
         ? `📊 Aaj ${todayInvoices.length} bill bane hain.\nTotal sale: ${formatCurrency(todayTotal)}`
         : `📊 ${todayInvoices.length} bills made today.\nTotal: ${formatCurrency(todayTotal)}`;
 
-    // ── Recent / weekly / monthly sales ──────────────────────────────────
     case "recent_sales": {
       const weekMs = 7 * 24 * 60 * 60 * 1000;
       const monthMs = 30 * 24 * 60 * 60 * 1000;
@@ -930,7 +840,6 @@ function generateResponse(
         : `💹 Estimated profit today: ${formatCurrency(Math.max(0, profit))}`;
     }
 
-    // ── Total profit (all time) ───────────────────────────────────────────
     case "total_profit": {
       let totalProfit = 0;
       for (const inv of store.invoices) {
@@ -946,14 +855,12 @@ function generateResponse(
         : `💹 Total estimated profit (all invoices): ${formatCurrency(Math.max(0, totalProfit))}`;
     }
 
-    // ── Best selling products ─────────────────────────────────────────────
     case "best_selling": {
       if (!store.invoices.length) {
         return isHi
           ? "📊 Abhi koi bhi sale record nahi hai. Pehle kuch bill banao!"
           : "📊 No sales records yet. Create some bills first!";
       }
-      // Aggregate qty sold per product
       const qtySold: Record<string, { name: string; qty: number }> = {};
       for (const inv of store.invoices) {
         for (const item of inv.items ?? []) {
@@ -979,15 +886,11 @@ function generateResponse(
         : `🏆 Top 5 Best Selling Products:\n${list}`;
     }
 
-    // ── Vendor due ────────────────────────────────────────────────────────
-    case "vendor_due": {
-      // Vendor due is typically managed via purchase orders — surface known pending data
+    case "vendor_due":
       return isHi
         ? "🏭 Vendor due check karne ke liye:\n\n1. Sidebar mein 'Vendors' pe jaao\n2. 'Purchase Orders' mein dekho — pending orders mein vendor ka due milega\n3. Ya 'Reports' mein Purchase Report dekho\n\nAbhi real-time vendor outstanding data chatbot mein available nahi hai — directly Purchase Orders page check karein."
         : "🏭 To check vendor dues:\n\n1. Go to 'Vendors' in the sidebar\n2. Check 'Purchase Orders' — pending orders show vendor dues\n3. Or view Purchase Report in Reports\n\nReal-time vendor outstanding isn't available in chat yet — check the Purchase Orders page directly.";
-    }
 
-    // ── Staff performance ─────────────────────────────────────────────────
     case "staff_performance": {
       if (!store.invoices.length) {
         return isHi
@@ -1029,7 +932,6 @@ function generateResponse(
         : `🏅 Staff Performance (by sales):\n${list}`;
     }
 
-    // ── Help guides ───────────────────────────────────────────────────────────
     case "help_add_shop":
       return isHi
         ? `🏪 New shop add karne ka tarika:\n${steps([
@@ -1235,7 +1137,6 @@ function generateResponse(
             "Disabling a feature hides it, data is never deleted",
           ])}`;
 
-    // ── Pro customer insight responses ─────────────────────────────────────
     case "inactive_customers": {
       const isProMode = store.autoMode === "pro";
       const trackingOn = store.appConfig.featureFlags?.customerTracking;
@@ -1317,7 +1218,7 @@ function generateResponse(
       }
       const list = sorted
         .map((c, i) => {
-          const tier = tierLabel(c.totalPurchase || 0, isHi);
+          const tier = tierLabel(c.totalPurchase || 0);
           return `${i + 1}. ${c.name} — ${tier} — ${formatCurrency(c.totalPurchase || 0)}`;
         })
         .join("\n");
@@ -1356,38 +1257,22 @@ function generateResponse(
         : `💰 ${withPending.length} customer(s) have pending payments:\n${list}\n\nTop 5 total: ${formatCurrency(totalPending)}`;
     }
 
-    default: {
+    default:
       return isHi
         ? `Samajh nahi aaya. 🤔 Ye try karein:\n• "Aaj birthday kaun?"\n• "Low stock batao"\n• "Aaj ki sale kitni hai"\n• "Best selling product"\n• "Pending payment kiska"\n• "Vendor kaise add karein"\n• "Billing kaise kare"\n• "Naya shop kaise banaye"`
         : `Sorry, I didn't understand that. 🤔\n\nTry asking:\n• "Today's birthdays"\n• "Low stock products"\n• "Today's sales"\n• "Best selling product"\n• "Pending payments"\n• "How to add vendor"\n• "How to do billing"`;
-    }
   }
 }
 
-// ── Panel + bubble constants ─────────────────────────────────────────────────
-const PANEL_W = 320;
-const PANEL_H = 480;
-const BUBBLE_SIZE = 56; // w-14 h-14
-
-function getDefaultPanelPos() {
-  const vh = typeof window !== "undefined" ? window.innerHeight : 700;
-  const panelH = Math.min(PANEL_H, vh - 120);
-  return { x: 16, y: Math.max(8, vh - panelH - 80) };
+// ── ChatBot Panel component (anchor-based, no draggable) ─────────────────────
+interface ChatBotPanelProps {
+  open: boolean;
+  onClose: () => void;
 }
 
-function getDefaultBubblePos() {
-  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
-  const vh = typeof window !== "undefined" ? window.innerHeight : 700;
-  // Default bottom-left: bottom 80px on mobile, bottom 24px on large screens
-  const isMd = vw >= 768;
-  return { x: 16, y: vh - BUBBLE_SIZE - (isMd ? 24 : 80) };
-}
-
-// ── Component ───────────────────────────────────────────────────────────────
-export function ChatBot() {
+export function ChatBotPanel({ open, onClose }: ChatBotPanelProps) {
   const { language } = useLanguage();
   const store = useStore();
-  const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [thinking, setThinking] = useState(false);
@@ -1395,33 +1280,6 @@ export function ChatBot() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isHi = language === "hi";
-
-  // ── Draggable: chat panel ────────────────────────────────────────────────
-  const {
-    pos: panelPos,
-    isDragging: isPanelDragging,
-    onMouseDown: onPanelMouseDown,
-    onTouchStart: onPanelTouchStart,
-    style: panelDragStyle,
-  } = useDraggable({
-    storageKey: STORAGE_KEYS.chatbotPanelPos,
-    defaultPos: getDefaultPanelPos(),
-    elementSize: { w: PANEL_W, h: PANEL_H },
-  });
-
-  // ── Draggable: bubble ────────────────────────────────────────────────────
-  const {
-    pos: bubblePos,
-    isDragging: isBubbleDragging,
-    hasDragged: bubbleHasDragged,
-    onMouseDown: onBubbleMouseDown,
-    onTouchStart: onBubbleTouchStart,
-    style: bubbleDragStyle,
-  } = useDraggable({
-    storageKey: STORAGE_KEYS.chatbotBubblePos,
-    defaultPos: getDefaultBubblePos(),
-    elementSize: { w: BUBBLE_SIZE, h: BUBBLE_SIZE },
-  });
 
   // Auto-scroll on new message
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1479,7 +1337,7 @@ export function ChatBot() {
     ],
   );
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text || thinking) return;
     setInput("");
@@ -1505,31 +1363,35 @@ export function ChatBot() {
       setMessages((prev) => [...prev, botMsg]);
       setThinking(false);
     }, 320);
-  };
+  }, [input, thinking, language, storeSnapshot]);
+
+  const handleChipClick = useCallback(
+    (chip: string) => {
+      const type = detectQuery(chip);
+      const userMsg: Message = {
+        id: `u-${Date.now()}`,
+        from: "user",
+        text: chip,
+        time: getTime(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setThinking(true);
+      setTimeout(() => {
+        const reply = generateResponse(type, language, storeSnapshot);
+        setMessages((prev) => [
+          ...prev,
+          { id: `b-${Date.now()}`, from: "bot", text: reply, time: getTime() },
+        ]);
+        setThinking(false);
+      }, 320);
+    },
+    [language, storeSnapshot],
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") handleSend();
   };
 
-  // ── Panel drag handlers (wrap to ignore close button clicks) ───────────
-  const handlePanelMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if ((e.target as HTMLElement).closest("button")) return;
-      e.preventDefault();
-      onPanelMouseDown(e);
-    },
-    [onPanelMouseDown],
-  );
-
-  const handlePanelTouchStart = useCallback(
-    (e: React.TouchEvent<HTMLDivElement>) => {
-      if ((e.target as HTMLElement).closest("button")) return;
-      onPanelTouchStart(e);
-    },
-    [onPanelTouchStart],
-  );
-
-  // Quick chips: updated to include birthday + best selling
   const hiChips = [
     "🎂 Aaj birthday?",
     "Low stock batao",
@@ -1553,21 +1415,42 @@ export function ChatBot() {
     "Add vendor",
   ];
 
+  if (!open) return null;
+
   return (
     <>
-      {/* Pulse glow animation */}
       <style>{`
-        @keyframes chatbot-pulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(124,58,237,0.5), 0 4px 16px rgba(124,58,237,0.35); }
-          50% { box-shadow: 0 0 0 8px rgba(124,58,237,0), 0 4px 24px rgba(124,58,237,0.5); }
-        }
-        .chatbot-bubble { animation: chatbot-pulse 2.4s ease-in-out infinite; }
-        .chatbot-bubble:hover { animation: none; }
         @keyframes chatbot-panel-in {
-          from { opacity: 0; transform: translateY(12px) scale(0.96); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
+          from { opacity: 0; transform: scale(0.97) translateY(8px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
         }
         .chatbot-panel { animation: chatbot-panel-in 0.22s cubic-bezier(0.16,1,0.3,1) both; }
+        /* Desktop: panel anchored right of the 224px sidebar */
+        @media (min-width: 768px) {
+          .chatbot-panel-positioned {
+            position: fixed;
+            left: calc(224px + 8px);
+            top: 12px;
+            width: min(320px, calc(100vw - 248px));
+            height: min(480px, calc(100vh - 24px));
+          }
+        }
+        /* Mobile: panel sits at bottom-center of screen */
+        @media (max-width: 767px) {
+          .chatbot-panel-positioned {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: 96px;
+            top: auto;
+            width: auto;
+            max-width: 360px;
+            margin-left: auto;
+            margin-right: auto;
+            height: min(420px, calc(100vh - 120px));
+            overflow-x: hidden;
+          }
+        }
         @keyframes dot-bounce {
           0%, 80%, 100% { transform: translateY(0); }
           40% { transform: translateY(-5px); }
@@ -1577,251 +1460,183 @@ export function ChatBot() {
         .dot-3 { animation: dot-bounce 1.2s infinite 0.4s; }
       `}</style>
 
-      {/* Floating bubble — draggable */}
-      <button
-        type="button"
-        aria-label="Open Shop Assistant"
-        data-ocid="chatbot.open_modal_button"
-        onMouseDown={onBubbleMouseDown}
-        onTouchStart={onBubbleTouchStart}
-        onClick={() => {
-          // Only toggle open if this was a tap (not a drag)
-          if (!bubbleHasDragged.current) setOpen((v) => !v);
-        }}
-        className="chatbot-bubble z-[9998] w-14 h-14 rounded-full flex items-center justify-center text-white select-none transition-transform duration-150 active:scale-90 overflow-hidden p-0"
-        style={{
-          position: "fixed",
-          left: bubblePos.x,
-          top: bubblePos.y,
-          background:
-            "linear-gradient(135deg, #7c3aed 0%, #4f46e5 55%, #6d28d9 100%)",
-          cursor: isBubbleDragging ? "grabbing" : "grab",
-          ...bubbleDragStyle,
-        }}
-      >
-        <img
-          src="/assets/chatbot-robot.jpg"
-          alt="Shop Assistant"
-          style={{
-            width: 56,
-            height: 56,
-            objectFit: "cover",
-            borderRadius: "50%",
-            pointerEvents: "none",
-          }}
-          onError={(e) => {
-            const parent = (e.target as HTMLImageElement).parentElement;
-            if (parent) parent.innerHTML = "🤖";
-          }}
-        />
-        {!open && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-white" />
-        )}
-      </button>
+      {/* Backdrop for mobile — tap outside to close */}
+      <div
+        className="fixed inset-0 z-[9998] md:hidden"
+        onClick={onClose}
+        onKeyDown={(e) => e.key === "Escape" && onClose()}
+        role="button"
+        tabIndex={-1}
+        aria-label="Close chat"
+      />
 
-      {/* Chat panel — draggable, position controlled by state */}
-      {open && (
+      {/* Panel — fixed position: right of sidebar on desktop, bottom-center on mobile */}
+      <div
+        data-ocid="chatbot.dialog"
+        className="chatbot-panel chatbot-panel-positioned z-[9999] flex flex-col rounded-2xl overflow-hidden shadow-2xl border border-border bg-card"
+        style={{ overflow: "hidden" }}
+      >
+        {/* Header */}
         <div
-          data-ocid="chatbot.dialog"
-          className="chatbot-panel z-[9999] flex flex-col rounded-2xl overflow-hidden shadow-2xl border border-border bg-card"
+          className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0"
           style={{
-            position: "fixed",
-            left: panelPos.x,
-            top: panelPos.y,
-            width: `min(${PANEL_W}px, 95vw)`,
-            height: "min(70vh, calc(100vh - 100px))",
-            maxHeight: `min(${PANEL_H}px, calc(100vh - 100px))`,
-            userSelect: isPanelDragging ? "none" : undefined,
+            background: "linear-gradient(90deg, #7c3aed 0%, #4f46e5 100%)",
           }}
         >
-          {/* Drag handle header */}
-          <div
-            onMouseDown={handlePanelMouseDown}
-            onTouchStart={handlePanelTouchStart}
-            className="flex items-center justify-between px-4 py-3 border-b border-border"
-            style={{
-              background: "linear-gradient(90deg, #7c3aed 0%, #4f46e5 100%)",
-              cursor: isPanelDragging ? "grabbing" : "grab",
-              ...panelDragStyle,
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <img
-                src="/assets/chatbot-robot.jpg"
-                alt="Shop Assistant"
-                style={{
-                  width: 32,
-                  height: 32,
-                  objectFit: "cover",
-                  borderRadius: "50%",
-                  border: "2px solid rgba(255,255,255,0.4)",
-                  flexShrink: 0,
-                }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-              <div>
-                <p className="text-white font-semibold text-sm leading-tight">
-                  Shop Assistant
-                </p>
-                <p className="text-purple-200 text-xs leading-tight">
-                  {isHi ? "Data aur guide dono" : "Data & guide queries"}
-                </p>
-              </div>
+          <div className="flex items-center gap-2">
+            <img
+              src="/assets/chatbot-robot.jpg"
+              alt="Shop Assistant"
+              style={{
+                width: 32,
+                height: 32,
+                objectFit: "cover",
+                borderRadius: "50%",
+                border: "2px solid rgba(255,255,255,0.4)",
+                flexShrink: 0,
+              }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+            <div>
+              <p className="text-white font-semibold text-sm leading-tight">
+                Shop Assistant
+              </p>
+              <p className="text-purple-200 text-xs leading-tight">
+                Data &amp; guide queries
+              </p>
             </div>
-            <button
-              type="button"
-              aria-label="Close chat"
-              data-ocid="chatbot.close_button"
-              onClick={() => setOpen(false)}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-              style={{ cursor: "pointer" }}
-            >
-              ✕
-            </button>
           </div>
-
-          {/* Messages */}
-          <div
-            className="flex-1 overflow-y-auto p-3 space-y-3 bg-muted/20"
-            style={{ minHeight: 0, overscrollBehavior: "contain" }}
+          <button
+            type="button"
+            aria-label="Close chat"
+            data-ocid="chatbot.close_button"
+            onClick={onClose}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
           >
-            {messages.map((msg) => (
+            ✕
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div
+          className="flex-1 overflow-y-auto p-3 space-y-3 bg-muted/20"
+          style={{ minHeight: 0, overscrollBehavior: "contain" }}
+        >
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"}`}
+            >
               <div
-                key={msg.id}
-                className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"}`}
+                className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                  msg.from === "user"
+                    ? "bg-primary text-primary-foreground rounded-tr-sm"
+                    : "bg-card border border-border text-foreground rounded-tl-sm shadow-sm"
+                }`}
               >
+                {msg.text}
                 <div
-                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                  className={`text-[10px] mt-1 ${
                     msg.from === "user"
-                      ? "bg-primary text-primary-foreground rounded-tr-sm"
-                      : "bg-card border border-border text-foreground rounded-tl-sm shadow-sm"
+                      ? "text-primary-foreground/60 text-right"
+                      : "text-muted-foreground text-right"
                   }`}
                 >
-                  {msg.text}
-                  <div
-                    className={`text-[10px] mt-1 ${
-                      msg.from === "user"
-                        ? "text-primary-foreground/60 text-right"
-                        : "text-muted-foreground text-right"
-                    }`}
-                  >
-                    {msg.time}
-                  </div>
+                  {msg.time}
                 </div>
               </div>
-            ))}
+            </div>
+          ))}
 
-            {/* Thinking indicator */}
-            {thinking && (
-              <div className="flex justify-start">
-                <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-1.5">
-                  <span className="dot-1 w-1.5 h-1.5 rounded-full bg-muted-foreground inline-block" />
-                  <span className="dot-2 w-1.5 h-1.5 rounded-full bg-muted-foreground inline-block" />
-                  <span className="dot-3 w-1.5 h-1.5 rounded-full bg-muted-foreground inline-block" />
-                </div>
+          {thinking && (
+            <div className="flex justify-start">
+              <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-1.5">
+                <span className="dot-1 w-1.5 h-1.5 rounded-full bg-muted-foreground inline-block" />
+                <span className="dot-2 w-1.5 h-1.5 rounded-full bg-muted-foreground inline-block" />
+                <span className="dot-3 w-1.5 h-1.5 rounded-full bg-muted-foreground inline-block" />
               </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Quick chips */}
-          <div
-            className="flex gap-1.5 px-3 py-2 overflow-x-auto border-t border-border bg-card scrollbar-none flex-shrink-0"
-            style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
-          >
-            {(isHi ? hiChips : enChips).map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                data-ocid={`chatbot.${chip
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, "_")
-                  .replace(/^_|_$/g, "")}_chip`}
-                onClick={() => {
-                  setInput(chip);
-                  setTimeout(() => {
-                    setInput("");
-                    const type = detectQuery(chip);
-                    const userMsg: Message = {
-                      id: `u-${Date.now()}`,
-                      from: "user",
-                      text: chip,
-                      time: getTime(),
-                    };
-                    setMessages((prev) => [...prev, userMsg]);
-                    setThinking(true);
-                    setTimeout(() => {
-                      const reply = generateResponse(
-                        type,
-                        language,
-                        storeSnapshot,
-                      );
-                      setMessages((prev) => [
-                        ...prev,
-                        {
-                          id: `b-${Date.now()}`,
-                          from: "bot",
-                          text: reply,
-                          time: getTime(),
-                        },
-                      ]);
-                      setThinking(false);
-                    }, 320);
-                  }, 0);
-                }}
-                className="flex-shrink-0 text-xs px-2.5 py-1 rounded-full bg-accent text-accent-foreground border border-border hover:bg-primary hover:text-primary-foreground transition-colors duration-150 whitespace-nowrap"
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-
-          {/* Input */}
-          <div
-            className="flex items-center gap-2 px-3 py-2.5 border-t border-border bg-card flex-shrink-0"
-            style={{
-              paddingBottom: "max(10px, env(safe-area-inset-bottom, 10px))",
-            }}
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isHi ? "Kuch bhi poochho..." : "Ask anything..."}
-              data-ocid="chatbot.input"
-              disabled={thinking}
-              className="flex-1 text-sm bg-muted/40 border border-input rounded-full px-3.5 py-2 outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary placeholder:text-muted-foreground text-foreground disabled:opacity-50 transition-colors"
-            />
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!input.trim() || thinking}
-              data-ocid="chatbot.submit_button"
-              aria-label="Send message"
-              className="w-9 h-9 rounded-full flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-40 hover:opacity-90 active:scale-90 transition-all duration-150 flex-shrink-0"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-            </button>
-          </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
         </div>
-      )}
+
+        {/* Quick chips */}
+        <div
+          className="flex gap-1.5 px-3 py-2 border-t border-border bg-card flex-shrink-0"
+          style={{
+            overflowX: "auto",
+            overflowY: "hidden",
+            scrollbarWidth: "none",
+            WebkitOverflowScrolling: "touch",
+            minWidth: 0,
+          }}
+        >
+          {(isHi ? hiChips : enChips).map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              data-ocid={`chatbot.${chip
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_|_$/g, "")}_chip`}
+              onClick={() => handleChipClick(chip)}
+              className="flex-shrink-0 text-xs px-2.5 py-1 rounded-full bg-accent text-accent-foreground border border-border hover:bg-primary hover:text-primary-foreground transition-colors duration-150 whitespace-nowrap"
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+
+        {/* Input */}
+        <div
+          className="flex items-center gap-2 px-3 py-2.5 border-t border-border bg-card flex-shrink-0"
+          style={{
+            paddingBottom: "max(10px, env(safe-area-inset-bottom, 10px))",
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={isHi ? "Kuch bhi poochho..." : "Ask anything..."}
+            data-ocid="chatbot.input"
+            disabled={thinking}
+            className="flex-1 min-w-0 text-sm bg-muted/40 border border-input rounded-full px-3.5 py-2 outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary placeholder:text-muted-foreground text-foreground disabled:opacity-50 transition-colors"
+          />
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!input.trim() || thinking}
+            data-ocid="chatbot.submit_button"
+            aria-label="Send message"
+            className="w-9 h-9 rounded-full flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-40 hover:opacity-90 active:scale-90 transition-all duration-150 flex-shrink-0"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </>
   );
+}
+
+// Keep the old ChatBot export as a no-op so any stale import doesn't crash
+export function ChatBot() {
+  return null;
 }

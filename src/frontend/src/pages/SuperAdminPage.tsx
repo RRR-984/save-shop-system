@@ -1793,9 +1793,7 @@ function FullSystemResetModal({
       const actor = await createActorWithConfig();
       const extActor = actor as unknown as Record<
         string,
-        (
-          m: string,
-        ) => Promise<{
+        (m: string) => Promise<{
           success: boolean;
           deletedShops: bigint;
           message: string;

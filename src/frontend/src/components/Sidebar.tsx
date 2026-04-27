@@ -37,6 +37,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import type { NavPage, UserRole } from "../types/store";
+import { ChatBotPanel } from "./ChatBot";
 
 // Role badge component
 function RoleBadge({ role }: { role: UserRole }) {
@@ -58,7 +59,6 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  // Owner Dashboard — multi-shop only
   {
     id: "owner-dashboard",
     label: "Owner Overview",
@@ -190,7 +190,6 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 // ─── Auto Mode page sets ──────────────────────────────────────────────────────
-// Simple: clean minimal UI — just the basics a beginner needs
 const SIMPLE_PAGES = new Set<NavPage>([
   "dashboard",
   "owner-dashboard",
@@ -200,7 +199,6 @@ const SIMPLE_PAGES = new Set<NavPage>([
   "settings",
 ]);
 
-// Smart: balanced — adds inventory, basic reports, credit tracking
 const SMART_PAGES = new Set<NavPage>([
   "dashboard",
   "owner-dashboard",
@@ -215,9 +213,6 @@ const SMART_PAGES = new Set<NavPage>([
   "settings",
 ]);
 
-// Pro: all features (same as featureMode 4 / Super)
-// — uses full NAV_ITEMS list, no filtering needed
-
 interface SidebarProps {
   currentPage: NavPage;
   onNavigate: (page: NavPage) => void;
@@ -225,6 +220,7 @@ interface SidebarProps {
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const { currentUser, currentShop, logout, allShops } = useAuth();
   const { t } = useLanguage();
   const { appConfig } = useStore();
@@ -233,10 +229,6 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const role = currentUser?.role ?? "staff";
   const multiShopOwner = role === "owner" && allShops.length >= 2;
 
-  // Filter nav items:
-  // 1. By role/multi-shop condition
-  // 2. By auto mode (autoMode drives featureMode, but we also apply the
-  //    auto-mode page sets directly for accurate Simple/Smart filtering)
   const autoModeFromCtx = appConfig.autoMode ?? "simple";
 
   const roleFiltered = NAV_ITEMS.filter((item) => {
@@ -247,12 +239,10 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
   let visibleItems: NavItem[];
   if (autoModeFromCtx === "pro" || featureMode === 4) {
-    // Pro / Super — all nav items
     visibleItems = roleFiltered;
   } else if (autoModeFromCtx === "smart") {
     visibleItems = roleFiltered.filter((item) => SMART_PAGES.has(item.id));
   } else {
-    // simple
     visibleItems = roleFiltered.filter((item) => SIMPLE_PAGES.has(item.id));
   }
 
@@ -266,22 +256,81 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     logout();
   };
 
+  const handleChatToggle = () => {
+    setChatOpen((v) => !v);
+  };
+
+  const handleChatClose = () => {
+    setChatOpen(false);
+  };
+
   function SidebarContent() {
     return (
       <div className="flex flex-col h-full">
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border">
+        {/* Logo + Chat trigger */}
+        <div className="flex items-center gap-2 px-4 py-5 border-b border-sidebar-border">
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
             <Store className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <div className="text-sidebar-foreground font-bold text-base leading-tight">
+          <div className="flex-1 min-w-0">
+            <div className="text-sidebar-foreground font-bold text-base leading-tight truncate">
               Save Shop
             </div>
             <div className="text-sidebar-foreground/60 text-xs">
               System v2.0
             </div>
           </div>
+          {/* ChatBot trigger — robot image icon */}
+          <button
+            type="button"
+            aria-label="Open Shop Assistant"
+            data-ocid="chatbot.open_modal_button"
+            onClick={handleChatToggle}
+            title="Shop Assistant"
+            className={cn(
+              "relative flex-shrink-0 w-9 h-9 rounded-full border-2 transition-all duration-150 hover:scale-105 active:scale-95 flex items-center justify-center",
+              chatOpen
+                ? "border-purple-400 shadow-[0_0_0_2px_rgba(124,58,237,0.4)]"
+                : "border-sidebar-border hover:border-purple-400/60",
+            )}
+            style={{
+              background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+            }}
+          >
+            <img
+              src="/assets/chatbot-robot.jpg"
+              alt="Shop Assistant"
+              className="rounded-full"
+              style={{
+                width: 36,
+                height: 36,
+                objectFit: "cover",
+                pointerEvents: "none",
+              }}
+              onError={(e) => {
+                // fallback: show emoji in parent
+                const el = e.target as HTMLImageElement;
+                el.style.display = "none";
+                const parent = el.parentElement;
+                if (parent) parent.textContent = "🤖";
+              }}
+            />
+            {/* Green online dot */}
+            {!chatOpen && (
+              <span
+                style={{
+                  position: "absolute",
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: "#34d399",
+                  border: "1.5px solid white",
+                  bottom: 0,
+                  right: 0,
+                }}
+              />
+            )}
+          </button>
         </div>
 
         {/* Nav Items */}
@@ -397,6 +446,9 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         <SidebarContent />
       </aside>
 
+      {/* ChatBot panel — anchored to sidebar right on desktop, bottom-center on mobile */}
+      <ChatBotPanel open={chatOpen} onClose={handleChatClose} />
+
       {/* Mobile hamburger */}
       <button
         type="button"
@@ -406,6 +458,39 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       >
         <Menu size={18} />
       </button>
+
+      {/* Mobile chat FAB — bottom-left when sidebar is closed */}
+      {!mobileOpen && (
+        <button
+          type="button"
+          aria-label="Open Shop Assistant"
+          data-ocid="chatbot.mobile_open_button"
+          onClick={handleChatToggle}
+          className="md:hidden fixed bottom-24 left-4 z-40 w-12 h-12 rounded-full overflow-hidden border-2 shadow-lg transition-all duration-150 active:scale-95"
+          style={{
+            background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
+            borderColor: chatOpen ? "#a78bfa" : "rgba(124,58,237,0.4)",
+          }}
+        >
+          <img
+            src="/assets/chatbot-robot.jpg"
+            alt="Shop Assistant"
+            style={{
+              width: 48,
+              height: 48,
+              objectFit: "cover",
+              pointerEvents: "none",
+            }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+              const parent = (e.target as HTMLImageElement).parentElement;
+              if (parent) parent.textContent = "🤖";
+            }}
+          />
+        </button>
+      )}
+
+      {/* Mobile chat panel — handled by ChatBotPanel's responsive CSS */}
 
       {/* Mobile overlay */}
       {mobileOpen && (

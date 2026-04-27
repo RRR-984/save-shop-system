@@ -2184,21 +2184,17 @@ export function BillingPage({
                     }}
                     className="w-28"
                   />
-                  {(appConfig.featureMode ?? 3) === 3 && (
-                    <>
-                      <VoiceInputButton
-                        compact
-                        onParsed={handleBillingVoiceParsed}
-                        lang={language === "hi" ? "hi-IN" : "en-IN"}
-                        data-ocid="billing.voice_input.button"
-                      />
-                      <QRScannerToggle
-                        products={products}
-                        onProductScanned={handleProductScanned}
-                        qtyInputRef={qtyInputRef}
-                      />
-                    </>
-                  )}
+                  <VoiceInputButton
+                    compact
+                    onParsed={handleBillingVoiceParsed}
+                    lang={language === "hi" ? "hi-IN" : "en-IN"}
+                    data-ocid="billing.voice_input.button"
+                  />
+                  <QRScannerToggle
+                    products={products}
+                    onProductScanned={handleProductScanned}
+                    qtyInputRef={qtyInputRef}
+                  />
                   <Button
                     data-ocid="billing.add_item.button"
                     onClick={handleAddToCart}

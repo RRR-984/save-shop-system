@@ -1,6 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { ChatBot } from "./components/ChatBot";
 import { FirstTimeUserWelcomePopup } from "./components/FirstTimeUserWelcomePopup";
 import { PWAInstallModal } from "./components/PWAInstallModal";
 import { SessionExpiredToast } from "./components/SessionExpiredToast";
@@ -496,7 +495,6 @@ function AppContent() {
       <Toaster position="bottom-right" richColors />
       <PWAInstallModal />
       <FirstTimeUserWelcomePopup />
-      <ChatBot />
       {/* Session expired modal — shown after 15 min idle when concurrencyEnabled */}
       <SessionExpiredToast
         open={sessionExpired}
