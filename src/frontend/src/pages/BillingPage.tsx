@@ -43,6 +43,11 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  AttrsDisplay,
+  CartItemAttrs,
+  type SelectedAttrs,
+} from "../components/CartItemAttrs";
 import { InvoiceShareModal } from "../components/InvoiceShareModal";
 import { QRScannerToggle } from "../components/QRScannerToggle";
 import { VoiceInputButton } from "../components/VoiceInputButton";
@@ -96,6 +101,8 @@ interface CartItem {
   /** Actual purchase/batch cost per unit — used for correct profit display in cart */
   costPrice?: number;
   priceMode?: PriceMode;
+  /** Category-specific attributes captured at sale time */
+  selectedAttrs?: SelectedAttrs;
 }
 
 const AUTO_DRAFT_KEY = "billing_auto_draft";
@@ -477,10 +484,12 @@ export function BillingPage({
     addCustomer,
     shopId,
   } = useStore();
-  const { currentUser } = useAuth();
+  const { currentUser, selectedShop } = useAuth();
   const { t, language } = useLanguage();
   const userRole = currentUser?.role ?? "staff";
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
+  /** Shop category drives which cart item attrs are shown */
+  const shopCategory = selectedShop?.category ?? "";
 
   // ── Pro Mode + Customer Tracking feature gate ─────────────────────────────
   const isProMode = autoMode === "pro";
@@ -504,6 +513,7 @@ export function BillingPage({
   const [customerAddress, setCustomerAddress] = useState("");
   const [customerType, setCustomerType] = useState<CustomerType>("regular");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartAttrs, setCartAttrs] = useState<Record<string, SelectedAttrs>>({});
   const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({});
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
@@ -776,6 +786,7 @@ export function BillingPage({
     setCustomerAddress("");
     setCustomerType("regular");
     setCart([]);
+    setCartAttrs({});
     setQtyInputs({});
     setItemErrors({});
     setPaidAmountStr("");
@@ -1126,6 +1137,11 @@ export function BillingPage({
       delete next[cartKey];
       return next;
     });
+    setCartAttrs((prev) => {
+      const next = { ...prev };
+      delete next[cartKey];
+      return next;
+    });
   };
 
   const handleQtyInputChange = (
@@ -1336,6 +1352,8 @@ export function BillingPage({
         product?.costPrice ?? product?.purchasePrice ?? purchaseCostPerUnit;
       const profitPerUnit = item.sellingRate - costPrice;
       const totalProfit = profitPerUnit * item.quantity;
+      const cartKey = item.selectedBatchId ?? item.productId;
+      const itemAttrs = cartAttrs[cartKey];
       return {
         productId: item.productId,
         productName: item.productName,
@@ -1349,6 +1367,9 @@ export function BillingPage({
         priceModeUsed: item.priceMode ?? "standard",
         ...(item.selectedBatchId
           ? { selectedBatchId: item.selectedBatchId }
+          : {}),
+        ...(itemAttrs && Object.values(itemAttrs).some(Boolean)
+          ? { selectedAttrs: itemAttrs }
           : {}),
       };
     });
@@ -2153,20 +2174,24 @@ export function BillingPage({
                         <SelectValue placeholder="Search & select product..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {products.map((p) => {
-                          const stock = getProductStock(p.id);
-                          const isZero = stock <= 0;
-                          return (
-                            <SelectItem key={p.id} value={p.id}>
-                              <span className={isZero ? "text-orange-500" : ""}>
-                                {isZero ? "⚠️ " : ""}
-                                {p.name}
-                                {p.partNo ? ` (Part No: ${p.partNo})` : ""} —
-                                Stock: {stock} {p.unit}
-                              </span>
-                            </SelectItem>
-                          );
-                        })}
+                        {[...products]
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((p) => {
+                            const stock = getProductStock(p.id);
+                            const isZero = stock <= 0;
+                            return (
+                              <SelectItem key={p.id} value={p.id}>
+                                <span
+                                  className={isZero ? "text-orange-500" : ""}
+                                >
+                                  {isZero ? "⚠️ " : ""}
+                                  {p.name}
+                                  {p.partNo ? ` (Part No: ${p.partNo})` : ""} —
+                                  Stock: {stock} {p.unit}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -2448,6 +2473,35 @@ export function BillingPage({
                                       </div>
                                     );
                                   })()}
+                                  {/* Category-specific attribute selectors */}
+                                  {shopCategory && (
+                                    <CartItemAttrs
+                                      shopCategory={shopCategory}
+                                      productId={item.productId}
+                                      batches={getProductBatches(
+                                        item.productId,
+                                      )}
+                                      attrs={cartAttrs[cartKey] ?? {}}
+                                      onChange={(attrs) =>
+                                        setCartAttrs((prev) => ({
+                                          ...prev,
+                                          [cartKey]: attrs,
+                                        }))
+                                      }
+                                      ocidPrefix="billing.cart"
+                                      idx={idx + 1}
+                                    />
+                                  )}
+                                  {/* Show saved attrs as chips (when no shopCategory override) */}
+                                  {!shopCategory &&
+                                    cartAttrs[cartKey] &&
+                                    Object.values(cartAttrs[cartKey]).some(
+                                      Boolean,
+                                    ) && (
+                                      <AttrsDisplay
+                                        attrs={cartAttrs[cartKey]}
+                                      />
+                                    )}
                                 </div>
                               </TableCell>
                               <TableCell>

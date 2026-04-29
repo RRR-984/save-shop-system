@@ -5,12 +5,14 @@ import {
   Bell,
   Building2,
   CalendarCheck,
+  ChefHat,
   ClipboardList,
   CreditCard,
   FileText,
   Gem,
   Gift,
   History,
+  Key,
   LayoutDashboard,
   LayoutGrid,
   LogOut,
@@ -26,10 +28,13 @@ import {
   SlidersHorizontal,
   Smartphone,
   Store,
+  Table2,
   TrendingUp,
   Trophy,
   UserCog,
   Users,
+  UtensilsCrossed,
+  Wrench,
   X,
 } from "lucide-react";
 import React, { useState } from "react";
@@ -182,10 +187,42 @@ const NAV_ITEMS: NavItem[] = [
   { id: "feedback-page", label: "Feedback", icon: MessageCircle },
   { id: "referral-page", label: "Refer & Earn", icon: Gift },
   {
+    id: "service-repair",
+    label: "Service/Repair",
+    icon: Wrench,
+    roles: ["owner", "manager"],
+  },
+  {
+    id: "rental",
+    label: "Rental / Lending",
+    icon: Key,
+    roles: ["owner", "manager"],
+  },
+  {
     id: "super-admin",
     label: "Super Admin",
     icon: ShieldCheck,
     roles: ["owner"],
+  },
+];
+
+// ─── Restaurant nav items (separate section) ──────────────────────────────────
+const RESTAURANT_NAV_ITEMS: NavItem[] = [
+  { id: "restaurant-menu", label: "Menu", icon: ChefHat },
+  { id: "restaurant-tables", label: "Tables", icon: Table2 },
+  { id: "restaurant-order", label: "New Order", icon: UtensilsCrossed },
+  {
+    id: "restaurant-kitchen",
+    label: "Kitchen Display",
+    icon: ChefHat,
+    roles: ["owner", "manager"],
+  },
+  { id: "restaurant-billing", label: "Billing", icon: Receipt },
+  {
+    id: "restaurant-reports",
+    label: "Reports",
+    icon: BarChart2,
+    roles: ["owner", "manager"],
   },
 ];
 
@@ -197,6 +234,14 @@ const SIMPLE_PAGES = new Set<NavPage>([
   "billing",
   "customers",
   "settings",
+  "service-repair",
+  "rental",
+  "restaurant-menu",
+  "restaurant-tables",
+  "restaurant-order",
+  "restaurant-kitchen",
+  "restaurant-billing",
+  "restaurant-reports",
 ]);
 
 const SMART_PAGES = new Set<NavPage>([
@@ -211,6 +256,14 @@ const SMART_PAGES = new Set<NavPage>([
   "reports",
   "returns",
   "settings",
+  "service-repair",
+  "rental",
+  "restaurant-menu",
+  "restaurant-tables",
+  "restaurant-order",
+  "restaurant-kitchen",
+  "restaurant-billing",
+  "restaurant-reports",
 ]);
 
 interface SidebarProps {
@@ -234,6 +287,10 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const roleFiltered = NAV_ITEMS.filter((item) => {
     if (item.roles && !item.roles.includes(role)) return false;
     if (item.multiShopOnly && !multiShopOwner) return false;
+    // Feature-flag gated pages
+    if (item.id === "service-repair" && !appConfig.featureFlags?.service)
+      return false;
+    if (item.id === "rental" && !appConfig.featureFlags?.rental) return false;
     return true;
   });
 
@@ -245,6 +302,12 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   } else {
     visibleItems = roleFiltered.filter((item) => SIMPLE_PAGES.has(item.id));
   }
+
+  // Restaurant section — always visible, filtered by role
+  const visibleRestaurantItems = RESTAURANT_NAV_ITEMS.filter((item) => {
+    if (item.roles && !item.roles.includes(role)) return false;
+    return true;
+  });
 
   const handleNav = (page: NavPage) => {
     onNavigate(page);
@@ -378,6 +441,48 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               </button>
             );
           })}
+
+          {/* ── Restaurant Section ─────────────────────────────────────────── */}
+          {visibleRestaurantItems.length > 0 && (
+            <>
+              <div className="pt-3 pb-1 px-3">
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground/40">
+                  <UtensilsCrossed size={12} />
+                  Restaurant
+                </div>
+              </div>
+              {visibleRestaurantItems.map((item) => {
+                const Icon = item.icon;
+                const active = currentPage === item.id;
+                return (
+                  <button
+                    type="button"
+                    key={item.id}
+                    data-ocid={`nav.${item.id}.link`}
+                    onClick={() => handleNav(item.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "flex-shrink-0",
+                        active ? "text-primary" : "",
+                      )}
+                      size={17}
+                    />
+                    <span className="truncate">{item.label}</span>
+                    {active && (
+                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         {/* User Info + Logout */}

@@ -69,6 +69,7 @@ interface AuthContextValue {
     mobile: string,
     otp: string,
     shopName: string,
+    shopCategory?: string,
   ) => Promise<{ success: boolean; error?: string }>;
 
   // PIN flow (Manager / Staff login via mobile + PIN)
@@ -95,6 +96,7 @@ interface AuthContextValue {
     name: string,
     address: string,
     city: string,
+    category?: string,
   ) => Promise<{ success: boolean; error?: string; shopId?: string }>;
   /** Re-fetch all shops for an owner mobile from backend */
   loadOwnerShops: (mobile: string) => Promise<void>;
@@ -104,6 +106,7 @@ interface AuthContextValue {
     name: string,
     address: string,
     city: string,
+    category?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   /** Soft-delete a shop from the list */
   deleteShopFromList: (
@@ -358,6 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: string,
       address: string,
       city: string,
+      category = "",
     ): Promise<{ success: boolean; error?: string; shopId?: string }> => {
       if (!session) return { success: false, error: "Please login first" };
       const actor = actorRef.current;
@@ -368,6 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name.trim(),
           address.trim(),
           city.trim(),
+          category.trim(),
         );
         if (!result.success) {
           return {
@@ -397,11 +402,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: string,
       address: string,
       city: string,
+      category = "",
     ): Promise<{ success: boolean; error?: string }> => {
       const actor = actorRef.current;
       if (!actor) return { success: false, error: "Not connected to backend" };
       try {
-        const result = await actor.updateShop(shopId, name, address, city);
+        const result = await actor.updateShop(
+          shopId,
+          name,
+          address,
+          city,
+          category,
+        );
         if (!result.success) {
           return {
             success: false,
@@ -411,7 +423,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Optimistically update local list
         setAllShops((prev) =>
           prev.map((s) =>
-            s.id === shopId ? { ...s, name, address, city } : s,
+            s.id === shopId
+              ? { ...s, name, address, city, category: category || s.category }
+              : s,
           ),
         );
         // If this was the currently selected shop, update session shopName
@@ -504,6 +518,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mobile: string,
       enteredOtp: string,
       shopName: string,
+      shopCategory = "",
     ): Promise<{ success: boolean; error?: string }> => {
       const cleaned = mobile.replace(/\D/g, "");
 
@@ -547,8 +562,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             resolvedShopId = latest.id;
             resolvedShopName = latest.name;
           } else {
-            // First-time user — create the primary shop in backend
-            await actor.addShop(cleaned, resolvedShopName, "", "");
+            // First-time user — create the primary shop in backend (with category)
+            await actor.addShop(
+              cleaned,
+              resolvedShopName,
+              "",
+              "",
+              shopCategory.trim(),
+            );
           }
         } catch (err) {
           // Backend unreachable — fall through to localStorage-only path
@@ -612,6 +633,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isOwner: true,
           };
       setCurrentUser(user);
+
+      // Fire-and-forget: update shop status on session start (backend-driven)
+      if (actor) {
+        actor
+          .updateShopStatus(resolvedShopId, BigInt(Date.now()) * 1_000_000n)
+          .catch(() => {});
+      }
 
       // Load all shops for this owner in the background
       setTimeout(() => loadOwnerShops(cleaned), 300);

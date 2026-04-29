@@ -1,25 +1,24 @@
 {
-  "overview": "Save Shop System is a mobile-first SaaS platform for Indian shop management with batch-wise FIFO inventory, multi-shop support, smart billing, PRO customer tracking, and now a Super Admin Dashboard for real-time platform monitoring.",
+  "overview": "A full-featured Hotel and Restaurant Management System with real-time order management, kitchen display system, table tracking, smart billing with GST, quick-order fast picks, and sales reports. Designed for fast, smooth restaurant operations from order to bill.",
   "features": [
-    "Multi-shop management with per-shop data isolation",
-    "Batch-wise FIFO inventory tracking",
-    "Smart billing with Wholesaler/Retailer/Regular price modes",
-    "PRO customer tracking with VIP/Gold/Silver tier badges",
-    "Super Admin Dashboard with real-time user and shop analytics",
-    "Offline mode with auto background sync",
-    "Diamond rewards gamification system",
-    "Auto mode system (Simple/Smart/Pro)"
+    "Menu management with Veg/Non-Veg/Drinks/Snacks categories and half/full portion pricing",
+    "Real-time table status board showing Free/Occupied tables",
+    "Order placement for Dine-in, Takeaway, and Online with item selection",
+    "Kitchen Order Ticket (KOT) screen with Pending/Cooking/Ready workflow",
+    "Smart billing with auto-calculated totals, optional GST (CGST/SGST split), and service charge",
+    "Quick-order fast-pick buttons for most common items",
+    "Restaurant reports: total orders, total sales, and top-selling items"
   ],
   "category": "productivity",
   "tags": [
-    "shop-management",
-    "inventory",
+    "restaurant",
+    "hotel",
+    "pos",
+    "order-management",
+    "kitchen",
     "billing",
-    "india",
-    "multi-shop",
-    "admin-dashboard",
-    "fifo",
-    "pwa"
+    "kot",
+    "table-management"
   ],
-  "last_updated": "2026-04-20T19:20:24.857Z"
+  "last_updated": "2026-04-28T08:54:26.682Z"
 }

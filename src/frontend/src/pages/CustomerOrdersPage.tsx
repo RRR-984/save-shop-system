@@ -370,11 +370,13 @@ function CreateOrderModal({
             >
               <option value="">— Select Customer —</option>
               <option value="walk-in">Walk-in Customer</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.mobile ? `(${c.mobile})` : ""}
-                </option>
-              ))}
+              {[...customers]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.mobile ? `(${c.mobile})` : ""}
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -402,11 +404,13 @@ function CreateOrderModal({
                     data-ocid={`order-product-select-${item.key}`}
                   >
                     <option value="">— Product —</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
+                    {[...products]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
                   </select>
                   <label htmlFor={`qty-${item.key}`} className="sr-only">
                     Qty

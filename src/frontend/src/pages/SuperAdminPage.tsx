@@ -16,13 +16,17 @@ import {
   ChevronRight,
   ClipboardCopy,
   Clock,
+  FolderOpen,
   GitMerge,
   Lock,
+  Pencil,
+  Plus,
   RefreshCw,
   Search,
   ShieldCheck,
   ShoppingBag,
   Store,
+  Tag,
   Trash2,
   TrendingUp,
   UserSearch,
@@ -39,11 +43,13 @@ import {
 import { toast } from "sonner";
 import type {
   AdminSettings as BackendAdminSettings,
+  ShopRankResult,
   ShopStatsResult,
   UserStatsResult,
 } from "../backend";
 import { createActorWithConfig } from "../config";
 import { useAuth } from "../context/AuthContext";
+import type { GlobalCategory } from "../types/store";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -61,7 +67,12 @@ type SortField =
   | "shopName"
   | "userId";
 type SortDir = "asc" | "desc";
-type AdminTab = "overview" | "staff-lookup" | "duplicates" | "change-log";
+type AdminTab =
+  | "overview"
+  | "staff-lookup"
+  | "duplicates"
+  | "change-log"
+  | "categories";
 
 interface TableRow extends UserStatsResult {
   _updatingPaid?: boolean;
@@ -165,6 +176,74 @@ function safeParse<T>(json: string, fallback: T): T {
 
 function isPermanentAdmin(mobile: string): boolean {
   return mobile.replace(/\D/g, "") === PERMANENT_SUPER_ADMIN;
+}
+
+/**
+ * Converts a raw ICP / canister error into a user-friendly message.
+ * Never leaks error codes, canister IDs, or stack traces.
+ */
+function parseCanisterError(err: unknown): string {
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : "unknown";
+
+  const lower = msg.toLowerCase();
+
+  // Canister stopped / not running
+  if (
+    lower.includes("ic0508") ||
+    lower.includes("canister stopped") ||
+    lower.includes("canister not running") ||
+    lower.includes("canister is stopped") ||
+    lower.includes("canister is not running") ||
+    lower.includes("module hash is not set") ||
+    lower.includes("no route to canister") ||
+    lower.includes("request_status")
+  ) {
+    return "Service temporarily unavailable. Please try again in a moment.";
+  }
+
+  // Network / fetch errors
+  if (
+    lower.includes("network") ||
+    lower.includes("fetch") ||
+    lower.includes("failed to fetch") ||
+    lower.includes("networkerror") ||
+    lower.includes("net::") ||
+    lower.includes("timeout") ||
+    lower.includes("connection")
+  ) {
+    return "Connection lost. Please check your network and try again.";
+  }
+
+  // Everything else — generic, no internals exposed
+  return "Unable to load data. Please retry.";
+}
+
+/**
+ * Retries an async operation up to `maxAttempts` times with `delayMs`
+ * between each attempt. Throws the last error if all attempts fail.
+ */
+async function retryWithDelay<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  delayMs = 1500,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxAttempts - 1) {
+        await new Promise((res) => setTimeout(res, delayMs));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 // ─── Skeleton helpers ─────────────────────────────────────────────────────────
@@ -501,18 +580,22 @@ function ChangeLogTab() {
     setLoading(true);
     setError(null);
     try {
-      const actor = await createActorWithConfig();
-      const extActor = actor as unknown as Record<
-        string,
-        () => Promise<string>
-      >;
-      const raw = await extActor.getSuperAdminChangeLog();
+      const raw = await retryWithDelay(
+        async () => {
+          const actor = await createActorWithConfig();
+          const extActor = actor as unknown as Record<
+            string,
+            () => Promise<string>
+          >;
+          return extActor.getSuperAdminChangeLog();
+        },
+        3,
+        1500,
+      );
       const parsed = safeParse<ChangeLogEntry[]>(raw, []);
       setEntries(parsed);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load change log.",
-      );
+      setError(parseCanisterError(err));
     } finally {
       setLoading(false);
     }
@@ -2186,6 +2269,7 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
   // ── Data state ────────────────────────────────────────────────────────────
   const [users, setUsers] = useState<TableRow[]>([]);
   const [shops, setShops] = useState<ShopStatsResult[]>([]);
+  const [topRankedShops, setTopRankedShops] = useState<ShopRankResult[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -2273,12 +2357,14 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
       try {
         const actor = await createActorWithConfig();
         const { startTs, endTs } = getDateRangeTs(dateRange);
-        const [usersRes, shopsRes] = await Promise.all([
+        const [usersRes, shopsRes, topRes] = await Promise.all([
           actor.getAllUsersWithStats(startTs, endTs),
           actor.getShopPerformanceStats(startTs, endTs),
+          actor.getTopActiveShops(10n),
         ]);
         setUsers(usersRes.map((u) => ({ ...u, _updatingPaid: false })));
         setShops(shopsRes);
+        setTopRankedShops(topRes);
         setLastSyncedAt(nowMs());
         setSyncSecsAgo(0);
       } catch {
@@ -2521,12 +2607,6 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
   );
 
   // ── Shop performance derived ──────────────────────────────────────────────
-  const topActiveShops = [...shops]
-    .sort((a, b) => Number(b.sessionCount) - Number(a.sessionCount))
-    .slice(0, 5);
-  const topSalesShops = [...shops]
-    .sort((a, b) => Number(b.sessionCount) - Number(a.sessionCount))
-    .slice(0, 5);
   const sevenDaysNs = msAgo(7);
   const inactiveShops = shops.filter((s) => s.lastActivity < sevenDaysNs);
 
@@ -2659,6 +2739,11 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
                 id: "duplicates" as AdminTab,
                 label: "Duplicates",
                 icon: GitMerge,
+              },
+              {
+                id: "categories" as AdminTab,
+                label: "Categories",
+                icon: Tag,
               },
               {
                 id: "change-log" as AdminTab,
@@ -3146,25 +3231,91 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
                 Shop Performance
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <ShopRankCard
-                  title="Top Active Shops"
-                  icon={Activity}
-                  rows={topActiveShops}
-                  valueLabel="Sessions"
-                  getValue={(s) => Number(s.sessionCount)}
-                  loading={dataLoading}
-                  ocid="super_admin.shop_performance.active_card"
-                />
-                <ShopRankCard
-                  title="Top Sales Shops"
-                  icon={TrendingUp}
-                  rows={topSalesShops}
-                  valueLabel="Sales"
-                  getValue={(s) => Number(s.sessionCount)}
-                  loading={dataLoading}
-                  ocid="super_admin.shop_performance.sales_card"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Top Active Shops — backend-ranked combined score */}
+                <Card
+                  className="bg-card border-border"
+                  data-ocid="super_admin.shop_performance.ranked_card"
+                >
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
+                        <TrendingUp size={12} className="text-primary" />
+                      </div>
+                      Top Active Shops
+                      <span className="ml-auto text-[10px] font-normal text-muted-foreground">
+                        Revenue + Sales + Recency
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    {dataLoading ? (
+                      <div className="space-y-2">
+                        {[0, 1, 2, 3, 4].map((i) => (
+                          <Skeleton key={i} className="h-10 w-full" />
+                        ))}
+                      </div>
+                    ) : topRankedShops.length === 0 ? (
+                      <div
+                        className="flex flex-col items-center py-4 gap-2 text-center"
+                        data-ocid="super_admin.shop_performance.ranked_card.empty_state"
+                      >
+                        <p className="text-xs text-muted-foreground">
+                          No data available
+                        </p>
+                      </div>
+                    ) : (
+                      <ol className="space-y-2.5">
+                        {topRankedShops.map((s, i) => {
+                          const statusCls =
+                            s.status === "active"
+                              ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30"
+                              : s.status === "inactive"
+                                ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/30"
+                                : "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+                          return (
+                            <li
+                              key={s.shopId}
+                              className="flex items-start gap-2.5 text-xs"
+                              data-ocid={`super_admin.shop_performance.ranked_card.item.${i + 1}`}
+                            >
+                              <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold flex-shrink-0 text-[10px] mt-0.5">
+                                {i + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-foreground truncate">
+                                  {s.shopName || s.shopId}
+                                </p>
+                                <p className="text-muted-foreground truncate">
+                                  {s.ownerMobile}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-muted-foreground">
+                                    ₹{Number(s.totalRevenue).toLocaleString()}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    •
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {Number(s.totalSalesCount)} sales
+                                  </span>
+                                </div>
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] flex-shrink-0 ${statusCls}`}
+                              >
+                                {s.status}
+                              </Badge>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Inactive Shops (7+ Days) */}
                 <Card
                   className="bg-card border-border"
                   data-ocid="super_admin.shop_performance.inactive_card"
@@ -3285,6 +3436,9 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
           <DuplicatesTab adminMobile={adminMobile} />
         )}
 
+        {/* ── Categories Tab ───────────────────────────────────────────────── */}
+        {activeTab === "categories" && <CategoriesTab />}
+
         {/* ── Change Log Tab ───────────────────────────────────────────────── */}
         {activeTab === "change-log" && <ChangeLogTab />}
       </main>
@@ -3300,95 +3454,380 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
   );
 }
 
-// ─── ShopRankCard ─────────────────────────────────────────────────────────────
+// ─── Categories Tab (Super Admin) ─────────────────────────────────────────────
 
-interface ShopRankCardProps {
-  title: string;
-  icon: React.ElementType;
-  rows: ShopStatsResult[];
-  valueLabel: string;
-  getValue: (s: ShopStatsResult) => number;
-  loading: boolean;
-  ocid: string;
-}
+function CategoriesTab() {
+  const [categories, setCategories] = useState<GlobalCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-function ShopRankCard({
-  title,
-  icon: Icon,
-  rows,
-  valueLabel,
-  getValue,
-  loading,
-  ocid,
-}: ShopRankCardProps) {
-  const [showAll, setShowAll] = useState(false);
-  const displayed = showAll ? rows : rows.slice(0, 5);
+  const fetchCategories = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const cats = await retryWithDelay(
+        async () => {
+          const actor = await createActorWithConfig();
+          return actor.getGlobalCategories();
+        },
+        3,
+        1500,
+      );
+      setCategories(cats);
+    } catch (err) {
+      setError(parseCanisterError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  const handleAdd = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setAdding(true);
+    try {
+      const actor = await createActorWithConfig();
+      const result = await actor.addGlobalCategory(name);
+      if (result.__kind__ === "ok") {
+        setNewName("");
+        await fetchCategories();
+        toast.success(`Category "${name}" added`);
+      } else {
+        toast.error(
+          (result as { __kind__: "err"; err: string }).err ??
+            "Failed to add category",
+        );
+      }
+    } catch (err) {
+      toast.error(parseCanisterError(err));
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    const name = editName.trim();
+    if (!name) return;
+    setSavingId(id);
+    try {
+      const actor = await createActorWithConfig();
+      const result = await actor.updateGlobalCategory(id, name);
+      if (result.__kind__ === "ok") {
+        setEditingId(null);
+        await fetchCategories();
+        toast.success("Category updated");
+      } else {
+        toast.error(
+          (result as { __kind__: "err"; err: string }).err ??
+            "Failed to update",
+        );
+      }
+    } catch (err) {
+      toast.error(parseCanisterError(err));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    setDeletingId(id);
+    try {
+      const actor = await createActorWithConfig();
+      const result = await actor.deleteGlobalCategory(id);
+      if (result.__kind__ === "ok") {
+        await fetchCategories();
+        toast.success(`Category "${name}" deleted`);
+      } else {
+        toast.error(
+          (result as { __kind__: "err"; err: string }).err ??
+            "Failed to delete",
+        );
+      }
+    } catch (err) {
+      toast.error(parseCanisterError(err));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const active = categories.filter((c) => !c.isDeleted);
+  const deleted = categories.filter((c) => c.isDeleted);
+  const defaultCount = active.filter((c) => c.isDefault).length;
+  const customCount = active.filter((c) => !c.isDefault).length;
 
   return (
-    <Card className="bg-card border-border" data-ocid={ocid}>
-      <CardHeader className="pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-            <Icon size={12} className="text-primary" />
+    <section className="space-y-4" data-ocid="super_admin.categories_section">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
+            <Tag size={14} className="text-primary" />
+            Global Category Management
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            These categories appear in the shop creation form. Default
+            categories cannot be deleted.
+          </p>
+          {!loading && active.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+              <span className="font-medium text-foreground">
+                {active.length} categories
+              </span>
+              <span className="text-border">·</span>
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 bg-blue-500/8 text-blue-600 dark:text-blue-400 border-blue-500/25"
+              >
+                {defaultCount} default
+              </Badge>
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 bg-violet-500/8 text-violet-600 dark:text-violet-400 border-violet-500/25"
+              >
+                {customCount} custom
+              </Badge>
+            </p>
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchCategories}
+          disabled={loading}
+          data-ocid="super_admin.categories.refresh_button"
+          className="gap-1.5 min-h-[44px] flex-shrink-0"
+        >
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Add new category */}
+      <Card
+        className="bg-card border-border"
+        data-ocid="super_admin.categories.add_card"
+      >
+        <CardContent className="px-4 py-3">
+          <p className="text-xs font-medium text-muted-foreground mb-2">
+            Add New Category
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={newName}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                setNewName(e.target.value)
+              }
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Enter") handleAdd();
+              }}
+              placeholder="e.g. Auto Parts, Pharmacy..."
+              data-ocid="super_admin.categories.new_name_input"
+              className="flex-1 h-9 text-sm"
+            />
+            <Button
+              onClick={handleAdd}
+              disabled={adding || !newName.trim()}
+              data-ocid="super_admin.categories.add_button"
+              className="gap-1.5 min-h-[36px]"
+              size="sm"
+            >
+              {adding ? (
+                <span className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+              ) : (
+                <Plus size={13} />
+              )}
+              Add
+            </Button>
           </div>
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 pb-4">
-        {loading ? (
-          <div className="space-y-2">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <div
-            className="flex flex-col items-center py-4 gap-2 text-center"
-            data-ocid={`${ocid}.empty_state`}
+        </CardContent>
+      </Card>
+
+      {error && (
+        <div
+          className="flex flex-col items-center gap-3 py-8 text-center"
+          data-ocid="super_admin.categories.error_state"
+        >
+          <AlertTriangle size={24} className="text-destructive opacity-70" />
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchCategories}
+            data-ocid="super_admin.categories.retry_button"
           >
-            <p className="text-xs text-muted-foreground">No data available</p>
-          </div>
-        ) : (
-          <>
-            <ol className="space-y-2">
-              {displayed.map((s, i) => (
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {loading && !error && (
+        <div
+          className="space-y-2"
+          data-ocid="super_admin.categories.loading_state"
+        >
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-11 w-full" />
+          ))}
+        </div>
+      )}
+
+      {!loading && !error && (
+        <Card
+          className="bg-card border-border overflow-hidden"
+          data-ocid="super_admin.categories.list_card"
+        >
+          {active.length === 0 ? (
+            <div
+              className="flex flex-col items-center gap-3 py-10 text-center"
+              data-ocid="super_admin.categories.empty_state"
+            >
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <FolderOpen size={18} className="text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                No categories yet
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Add the first global category above.
+              </p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {active.map((cat, idx) => (
                 <li
-                  key={s.shopId}
-                  className="flex items-center gap-2.5 text-xs"
-                  data-ocid={`${ocid}.item.${i + 1}`}
+                  key={cat.id}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors"
+                  data-ocid={`super_admin.categories.item.${idx + 1}`}
                 >
-                  <span className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-muted-foreground font-bold flex-shrink-0 text-[10px]">
-                    {i + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">
-                      {s.shopName || s.shopId}
-                    </p>
-                    <p className="text-muted-foreground truncate">
-                      {s.ownerMobile}
-                    </p>
+                  <div className="w-7 h-7 rounded-lg bg-primary/8 flex items-center justify-center flex-shrink-0">
+                    <Tag size={13} className="text-primary" />
                   </div>
-                  <span className="text-foreground font-semibold tabular-nums flex-shrink-0">
-                    {getValue(s).toLocaleString()}{" "}
-                    <span className="text-muted-foreground font-normal">
-                      {valueLabel}
-                    </span>
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    {editingId === cat.id ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={editName}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                            setEditName(e.target.value)
+                          }
+                          onKeyDown={(
+                            e: React.KeyboardEvent<HTMLInputElement>,
+                          ) => {
+                            if (e.key === "Enter") handleSaveEdit(cat.id);
+                            if (e.key === "Escape") setEditingId(null);
+                          }}
+                          data-ocid={`super_admin.categories.edit_input.${idx + 1}`}
+                          className="h-7 text-sm flex-1"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleSaveEdit(cat.id)}
+                          disabled={savingId === cat.id || !editName.trim()}
+                          data-ocid={`super_admin.categories.save_button.${idx + 1}`}
+                          className="h-7 px-2 text-xs"
+                        >
+                          {savingId === cat.id ? "..." : "Save"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingId(null)}
+                          data-ocid={`super_admin.categories.cancel_button.${idx + 1}`}
+                          className="h-7 px-2 text-xs"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">
+                          {cat.name}
+                        </span>
+                        {cat.isDefault ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                          >
+                            Default
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30"
+                          >
+                            Custom
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {editingId !== cat.id && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(cat.id);
+                          setEditName(cat.name);
+                        }}
+                        data-ocid={`super_admin.categories.edit_button.${idx + 1}`}
+                        className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Edit category name"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      {cat.isDefault ? (
+                        <button
+                          type="button"
+                          disabled
+                          data-ocid={`super_admin.categories.delete_button.${idx + 1}`}
+                          className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground/30 cursor-not-allowed"
+                          title="Default categories cannot be deleted"
+                          aria-label="Default categories cannot be deleted"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(cat.id, cat.name)}
+                          disabled={deletingId === cat.id}
+                          data-ocid={`super_admin.categories.delete_button.${idx + 1}`}
+                          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                          title={`Delete "${cat.name}"`}
+                        >
+                          {deletingId === cat.id ? (
+                            <span className="w-3 h-3 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 size={12} />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </li>
               ))}
-            </ol>
-            {rows.length > 5 && (
-              <button
-                type="button"
-                onClick={() => setShowAll((v) => !v)}
-                className="mt-3 text-xs text-primary hover:underline"
-              >
-                {showAll ? "Show Less" : `Show All (${rows.length})`}
-              </button>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+            </ul>
+          )}
+        </Card>
+      )}
+
+      {deleted.length > 0 && (
+        <div className="text-xs text-muted-foreground text-center">
+          {deleted.length} deleted{" "}
+          {deleted.length === 1 ? "category" : "categories"} (soft-deleted, not
+          shown to users)
+        </div>
+      )}
+    </section>
   );
 }

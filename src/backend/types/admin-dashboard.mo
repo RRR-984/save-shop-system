@@ -42,12 +42,15 @@ module {
   };
 
   /// Per-shop performance stats aggregated for the super-admin dashboard.
+  /// Includes totalRevenue and totalSalesCount for combined ranking.
   public type ShopStatsResult = {
     shopId           : Text;
     shopName         : Text;
     ownerMobile      : Text;
     sessionCount     : Nat;
     totalSalesAmount : Float;
+    totalRevenue     : Int;
+    totalSalesCount  : Nat;
     lastActivity     : Int;
   };
 

@@ -27,7 +27,31 @@ import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import { useTheme } from "../context/ThemeContext";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
-import type { AutoModeType, ShopMeta } from "../types/store";
+import type { AutoModeType, ShopMeta, ShopStatus } from "../types/store";
+
+// ─── Shop Status Dot ──────────────────────────────────────────────────────────
+function ShopStatusDot({ status }: { status?: ShopStatus }) {
+  if (!status) return null;
+  const cls =
+    status === "active"
+      ? "bg-green-400"
+      : status === "inactive"
+        ? "bg-yellow-400"
+        : "bg-red-500";
+  const label =
+    status === "active"
+      ? "Active"
+      : status === "inactive"
+        ? "Inactive"
+        : "Dead";
+  return (
+    <span
+      className={`w-2 h-2 rounded-full flex-shrink-0 ${cls}`}
+      title={label}
+      aria-label={label}
+    />
+  );
+}
 
 interface TopBarProps {
   title: string;
@@ -170,6 +194,7 @@ interface ShopFormState {
   name: string;
   address: string;
   city: string;
+  category?: string;
 }
 
 interface ShopModalProps {
@@ -313,6 +338,7 @@ function ShopChips({ className = "" }: ShopChipsProps) {
 
   const activeId = session?.selectedShopId ?? session?.shopId;
   const [switching, setSwitching] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [editModal, setEditModal] = useState<ShopMeta | null>(null);
@@ -321,8 +347,8 @@ function ShopChips({ className = "" }: ShopChipsProps) {
     name: "",
     address: "",
     city: "",
+    category: "",
   });
-  const [saving, setSaving] = useState(false);
 
   const pressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [longPressShop, setLongPressShop] = useState<ShopMeta | null>(null);
@@ -338,7 +364,7 @@ function ShopChips({ className = "" }: ShopChipsProps) {
   };
 
   const openNew = () => {
-    setForm({ name: "", address: "", city: "" });
+    setForm({ name: "", address: "", city: "", category: "" });
     setShowNewModal(true);
   };
 
@@ -362,6 +388,7 @@ function ShopChips({ className = "" }: ShopChipsProps) {
       form.name.trim(),
       form.address.trim(),
       form.city.trim(),
+      form.category?.trim() ?? "",
     );
     setSaving(false);
     if (result.success) {
@@ -477,6 +504,7 @@ function ShopChips({ className = "" }: ShopChipsProps) {
                   {isLoading && (
                     <Loader2 size={10} className="animate-spin flex-shrink-0" />
                   )}
+                  <ShopStatusDot status={shop.status} />
                   {truncName(shop.name)}
                 </button>
 

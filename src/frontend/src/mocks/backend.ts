@@ -1,4 +1,5 @@
 import type { backendInterface } from "../backend";
+import { DiscountType, PaymentMode, ShopStatus } from "../backend";
 
 const shopId = "shop_9999999999";
 
@@ -10,6 +11,9 @@ const sampleShop = {
   createdAt: "2024-01-01",
   address: "Main Market, Indore",
   ownerMobile: "9999999999",
+  status: ShopStatus.active,
+  category: "General",
+  lastActivityTs: BigInt(Date.now()) * 1_000_000n,
 };
 
 export const mockBackend: backendInterface = {
@@ -267,4 +271,85 @@ export const mockBackend: backendInterface = {
   getActiveUsersForShop: async () => [],
   checkIdempotency: async () => null,
   registerIdempotency: async () => true,
+  // ── New endpoints ────────────────────────────────────────────────────────
+  getGlobalCategories: async () => [
+    { id: "gc1", name: "Hardware", isDefault: true, isDeleted: false },
+    { id: "gc2", name: "Electrical", isDefault: true, isDeleted: false },
+    { id: "gc3", name: "Grocery", isDefault: true, isDeleted: false },
+    { id: "gc4", name: "Pharmacy", isDefault: true, isDeleted: false },
+    { id: "gc5", name: "Auto Parts", isDefault: true, isDeleted: false },
+    { id: "gc6", name: "Clothing", isDefault: true, isDeleted: false },
+    { id: "gc7", name: "Electronics", isDefault: true, isDeleted: false },
+    { id: "gc8", name: "Stationery", isDefault: true, isDeleted: false },
+  ],
+  addGlobalCategory: async (name: string) => ({
+    __kind__: "ok" as const,
+    ok: { id: `gc_${Date.now()}`, name, isDefault: false, isDeleted: false },
+  }),
+  updateGlobalCategory: async (_id: string, name: string) => ({
+    __kind__: "ok" as const,
+    ok: { id: _id, name, isDefault: false, isDeleted: false },
+  }),
+  deleteGlobalCategory: async (_id: string) => ({
+    __kind__: "ok" as const,
+    ok: null,
+  }),
+  updateShopStatus: async () => undefined,
+  getTopActiveShops: async () => [],
+  // ── Restaurant module ────────────────────────────────────────────────────
+  addMenuItem: async () => ({ __kind__: "ok" as const, ok: `menu_${Date.now()}` }),
+  updateMenuItem: async () => ({ __kind__: "ok" as const, ok: null }),
+  deleteMenuItem: async () => ({ __kind__: "ok" as const, ok: null }),
+  getMenuItems: async () => [],
+  addTable: async () => ({ __kind__: "ok" as const, ok: `table_${Date.now()}` }),
+  updateTableStatus: async () => ({ __kind__: "ok" as const, ok: null }),
+  getTables: async () => [],
+  createOrder: async () => ({ __kind__: "ok" as const, ok: `ord_${Date.now()}` }),
+  addItemsToOrder: async () => ({ __kind__: "ok" as const, ok: null }),
+  sendKOT: async () => ({ __kind__: "ok" as const, ok: `kot_${Date.now()}` }),
+  updateKotStatus: async () => ({ __kind__: "ok" as const, ok: null }),
+  getActiveKOTs: async () => [],
+  getAllKOTs: async () => [],
+  createBill: async () => ({
+    __kind__: "ok" as const,
+    ok: {
+      id: `bill_${Date.now()}`,
+      total: 0,
+      discountValue: 0,
+      serviceChargeRate: 0,
+      cgst: 0,
+      serviceCharge: 0,
+      discountType: DiscountType.Flat,
+      sgst: 0,
+      gstEnabled: false,
+      orderId: "",
+      restaurantId: "",
+      discount: 0,
+      paymentMode: PaymentMode.Cash,
+      gstRate: 0,
+      items: [],
+      serviceChargeEnabled: false,
+      paidAt: BigInt(Date.now()),
+      subtotal: 0,
+    },
+  }),
+  getBill: async () => null,
+  settleOrder: async () => ({ __kind__: "ok" as const, ok: null }),
+  cancelOrder: async () => ({ __kind__: "ok" as const, ok: null }),
+  getOrders: async () => [],
+  getRestaurantConfig: async (_restaurantId: string) => ({
+    serviceChargeRate: 0,
+    gstEnabled: false,
+    restaurantId: _restaurantId,
+    quickOrderItems: [],
+    gstRate: 5,
+    tableCount: BigInt(10),
+    serviceChargeEnabled: false,
+  }),
+  updateRestaurantConfig: async () => ({ __kind__: "ok" as const, ok: null }),
+  getRestaurantReports: async () => ({
+    totalOrders: BigInt(0),
+    topItems: [],
+    totalRevenue: 0,
+  }),
 };

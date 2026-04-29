@@ -346,122 +346,126 @@ export function StaffManagementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {activeStaff.map((user) => (
-                        <tr
-                          key={user.id}
-                          data-ocid={`staff.row.${user.id}`}
-                          className={cn(
-                            "border-b border-border last:border-0 hover:bg-muted/20 transition-colors",
-                            user.active === false && "opacity-60",
-                          )}
-                        >
-                          <td className="px-4 py-3">
-                            <span className="font-medium text-foreground">
-                              {user.name}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                            {user.mobile ? `+91 ${user.mobile}` : "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <RoleBadge role={user.role} />
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <Switch
-                              checked={user.active !== false}
-                              onCheckedChange={() => toggleActive(user)}
-                              data-ocid={`staff.toggle.${user.id}`}
-                              aria-label={`Toggle active status for ${user.name}`}
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => openEdit(user)}
-                                data-ocid={`staff.edit.${user.id}`}
-                                title={`Edit ${user.name}`}
-                                className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => confirmDelete(user)}
-                                data-ocid={`staff.delete.${user.id}`}
-                                title={`Delete ${user.name}`}
-                                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {[...activeStaff]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((user) => (
+                          <tr
+                            key={user.id}
+                            data-ocid={`staff.row.${user.id}`}
+                            className={cn(
+                              "border-b border-border last:border-0 hover:bg-muted/20 transition-colors",
+                              user.active === false && "opacity-60",
+                            )}
+                          >
+                            <td className="px-4 py-3">
+                              <span className="font-medium text-foreground">
+                                {user.name}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {user.mobile ? `+91 ${user.mobile}` : "—"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <RoleBadge role={user.role} />
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Switch
+                                checked={user.active !== false}
+                                onCheckedChange={() => toggleActive(user)}
+                                data-ocid={`staff.toggle.${user.id}`}
+                                aria-label={`Toggle active status for ${user.name}`}
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openEdit(user)}
+                                  data-ocid={`staff.edit.${user.id}`}
+                                  title={`Edit ${user.name}`}
+                                  className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => confirmDelete(user)}
+                                  data-ocid={`staff.delete.${user.id}`}
+                                  title={`Delete ${user.name}`}
+                                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile cards */}
                 <div className="md:hidden divide-y divide-border">
-                  {activeStaff.map((user) => (
-                    <div
-                      key={user.id}
-                      data-ocid={`staff.card.${user.id}`}
-                      className={cn(
-                        "px-4 py-3 flex items-start gap-3",
-                        user.active === false && "opacity-60",
-                      )}
-                    >
-                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-primary font-bold text-sm">
-                        {user.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-sm text-foreground">
-                            {user.name}
-                          </span>
-                          <RoleBadge role={user.role} />
-                        </div>
-                        {user.mobile && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            +91 {user.mobile}
-                          </p>
+                  {[...activeStaff]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((user) => (
+                      <div
+                        key={user.id}
+                        data-ocid={`staff.card.${user.id}`}
+                        className={cn(
+                          "px-4 py-3 flex items-start gap-3",
+                          user.active === false && "opacity-60",
                         )}
-                        <div className="flex items-center gap-2 mt-2">
-                          <Switch
-                            checked={user.active !== false}
-                            onCheckedChange={() => toggleActive(user)}
-                            data-ocid={`staff.toggle_mobile.${user.id}`}
-                            aria-label={`Toggle active status for ${user.name}`}
-                          />
-                          <span className="text-xs text-muted-foreground">
-                            {user.active !== false ? "Active" : "Inactive"}
-                          </span>
+                      >
+                        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 text-primary font-bold text-sm">
+                          {user.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm text-foreground">
+                              {user.name}
+                            </span>
+                            <RoleBadge role={user.role} />
+                          </div>
+                          {user.mobile && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              +91 {user.mobile}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-2">
+                            <Switch
+                              checked={user.active !== false}
+                              onCheckedChange={() => toggleActive(user)}
+                              data-ocid={`staff.toggle_mobile.${user.id}`}
+                              aria-label={`Toggle active status for ${user.name}`}
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              {user.active !== false ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(user)}
+                            data-ocid={`staff.edit_mobile.${user.id}`}
+                            title="Edit"
+                            className="p-2 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => confirmDelete(user)}
+                            data-ocid={`staff.delete_mobile.${user.id}`}
+                            title="Delete"
+                            className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-1 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(user)}
-                          data-ocid={`staff.edit_mobile.${user.id}`}
-                          title="Edit"
-                          className="p-2 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => confirmDelete(user)}
-                          data-ocid={`staff.delete_mobile.${user.id}`}
-                          title="Delete"
-                          className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </>
             )}
@@ -485,40 +489,42 @@ export function StaffManagementPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y divide-border">
-                {deletedStaff.map((user) => (
-                  <div
-                    key={user.id}
-                    data-ocid={`staff.deleted.${user.id}`}
-                    className="px-4 py-3 flex items-center gap-3 opacity-50"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 text-muted-foreground font-bold text-sm">
-                      {user.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-muted-foreground line-through">
-                          {user.name}
-                        </span>
-                        <RoleBadge role={user.role} />
-                      </div>
-                      {user.mobile && (
-                        <p className="text-xs text-muted-foreground">
-                          +91 {user.mobile}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRestore(user)}
-                      data-ocid={`staff.restore.${user.id}`}
-                      title={`Restore ${user.name}`}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors border border-border flex-shrink-0"
+                {[...deletedStaff]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((user) => (
+                    <div
+                      key={user.id}
+                      data-ocid={`staff.deleted.${user.id}`}
+                      className="px-4 py-3 flex items-center gap-3 opacity-50"
                     >
-                      <RotateCcw size={12} />
-                      Restore
-                    </button>
-                  </div>
-                ))}
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 text-muted-foreground font-bold text-sm">
+                        {user.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-muted-foreground line-through">
+                            {user.name}
+                          </span>
+                          <RoleBadge role={user.role} />
+                        </div>
+                        {user.mobile && (
+                          <p className="text-xs text-muted-foreground">
+                            +91 {user.mobile}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRestore(user)}
+                        data-ocid={`staff.restore.${user.id}`}
+                        title={`Restore ${user.name}`}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors border border-border flex-shrink-0"
+                      >
+                        <RotateCcw size={12} />
+                        Restore
+                      </button>
+                    </div>
+                  ))}
               </div>
             </CardContent>
           </Card>

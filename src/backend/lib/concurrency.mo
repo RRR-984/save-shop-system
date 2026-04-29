@@ -20,14 +20,14 @@ module {
   // ── buildLockKey ─────────────────────────────────────────────────────────────
 
   /// Build the canonical lock key: shopId:recordType:recordId
-  public func buildLockKey(shopId : Text, recordType : Text, recordId : Text) : Text {
+  public func buildLockKey(_shopId : Text, _recordType : Text, _recordId : Text) : Text {
     Debug.todo()
   };
 
   // ── isExpired ─────────────────────────────────────────────────────────────────
 
   /// Returns true if the lock's expiresAt is in the past.
-  public func isExpired(lock : ConcurrencyTypes.LockRecord, now : Int) : Bool {
+  public func isExpired(_lock : ConcurrencyTypes.LockRecord, _now : Int) : Bool {
     Debug.todo()
   };
 
@@ -37,13 +37,13 @@ module {
   /// Inserts a new lock (or replaces an expired one) in the lockTable.
   /// Does NOT release the old lock if it belongs to a different, non-expired user.
   public func tryAcquire(
-    lockTable  : Map.Map<Text, ConcurrencyTypes.LockRecord>,
-    shopId     : Text,
-    recordType : Text,
-    recordId   : Text,
-    userId     : Text,
-    userName   : Text,
-    now        : Int
+    _lockTable  : Map.Map<Text, ConcurrencyTypes.LockRecord>,
+    _shopId     : Text,
+    _recordType : Text,
+    _recordId   : Text,
+    _userId     : Text,
+    _userName   : Text,
+    _now        : Int
   ) : ConcurrencyTypes.LockResult {
     Debug.todo()
   };
@@ -53,12 +53,12 @@ module {
   /// Release a lock if the caller is the owner or the lock is expired.
   /// Returns true when the lock was removed, false otherwise.
   public func release(
-    lockTable  : Map.Map<Text, ConcurrencyTypes.LockRecord>,
-    shopId     : Text,
-    recordType : Text,
-    recordId   : Text,
-    userId     : Text,
-    now        : Int
+    _lockTable  : Map.Map<Text, ConcurrencyTypes.LockRecord>,
+    _shopId     : Text,
+    _recordType : Text,
+    _recordId   : Text,
+    _userId     : Text,
+    _now        : Int
   ) : Bool {
     Debug.todo()
   };
@@ -68,12 +68,12 @@ module {
   /// Extend the lock TTL by LOCK_TTL_NS if the caller is the owner.
   /// Returns true on success, false if lock is missing or caller is not the owner.
   public func heartbeat(
-    lockTable  : Map.Map<Text, ConcurrencyTypes.LockRecord>,
-    shopId     : Text,
-    recordType : Text,
-    recordId   : Text,
-    userId     : Text,
-    now        : Int
+    _lockTable  : Map.Map<Text, ConcurrencyTypes.LockRecord>,
+    _shopId     : Text,
+    _recordType : Text,
+    _recordId   : Text,
+    _userId     : Text,
+    _now        : Int
   ) : Bool {
     Debug.todo()
   };
@@ -82,11 +82,11 @@ module {
 
   /// Return the current unexpired lock for a record, or null.
   public func getStatus(
-    lockTable  : Map.Map<Text, ConcurrencyTypes.LockRecord>,
-    shopId     : Text,
-    recordType : Text,
-    recordId   : Text,
-    now        : Int
+    _lockTable  : Map.Map<Text, ConcurrencyTypes.LockRecord>,
+    _shopId     : Text,
+    _recordType : Text,
+    _recordId   : Text,
+    _now        : Int
   ) : ?ConcurrencyTypes.LockRecord {
     Debug.todo()
   };
@@ -96,9 +96,9 @@ module {
   /// Release every lock held by userId within a given shopId.
   /// Returns the count of locks released.
   public func releaseAllForUser(
-    lockTable : Map.Map<Text, ConcurrencyTypes.LockRecord>,
-    shopId    : Text,
-    userId    : Text
+    _lockTable : Map.Map<Text, ConcurrencyTypes.LockRecord>,
+    _shopId    : Text,
+    _userId    : Text
   ) : Nat {
     Debug.todo()
   };
@@ -109,9 +109,9 @@ module {
   /// A user is "active" if they hold any unexpired lock OR sent a heartbeat
   /// within the last ACTIVE_WINDOW_NS.
   public func activeUsersForShop(
-    lockTable : Map.Map<Text, ConcurrencyTypes.LockRecord>,
-    shopId    : Text,
-    now       : Int
+    _lockTable : Map.Map<Text, ConcurrencyTypes.LockRecord>,
+    _shopId    : Text,
+    _now       : Int
   ) : [ConcurrencyTypes.ActiveUserRecord] {
     Debug.todo()
   };
@@ -121,10 +121,10 @@ module {
   /// Return an existing idempotency record if it was processed within 24 hours.
   /// Returns null if not found or older than 24 h.
   public func checkIdempotency(
-    idempotencyTable : Map.Map<Text, ConcurrencyTypes.IdempotencyRecord>,
-    idempotencyKey   : Text,
-    shopId           : Text,
-    now              : Int
+    _idempotencyTable : Map.Map<Text, ConcurrencyTypes.IdempotencyRecord>,
+    _idempotencyKey   : Text,
+    _shopId           : Text,
+    _now              : Int
   ) : ?ConcurrencyTypes.IdempotencyRecord {
     Debug.todo()
   };
@@ -134,11 +134,11 @@ module {
   /// Store an idempotency record keyed by idempotencyKey.
   /// Always overwrites any existing entry for that key.
   public func registerIdempotency(
-    idempotencyTable : Map.Map<Text, ConcurrencyTypes.IdempotencyRecord>,
-    idempotencyKey   : Text,
-    invoiceId        : Text,
-    shopId           : Text,
-    now              : Int
+    _idempotencyTable : Map.Map<Text, ConcurrencyTypes.IdempotencyRecord>,
+    _idempotencyKey   : Text,
+    _invoiceId        : Text,
+    _shopId           : Text,
+    _now              : Int
   ) : () {
     Debug.todo()
   };

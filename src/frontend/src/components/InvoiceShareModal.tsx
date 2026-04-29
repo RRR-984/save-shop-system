@@ -373,9 +373,37 @@ export function InvoiceShareModal({
                   key={item.productId}
                   className="grid grid-cols-[1fr_auto_auto_auto] text-xs px-3 py-2 gap-2 border-t border-border/50"
                 >
-                  <span className="text-foreground font-medium truncate">
-                    {item.productName}
-                  </span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-foreground font-medium truncate">
+                      {item.productName}
+                    </span>
+                    {item.selectedAttrs &&
+                      (() => {
+                        const attrs = item.selectedAttrs;
+                        const chips: string[] = [];
+                        if (attrs.size) chips.push(`Size: ${attrs.size}`);
+                        if (attrs.color) chips.push(`Color: ${attrs.color}`);
+                        if (attrs.shade) chips.push(`Shade: ${attrs.shade}`);
+                        if (attrs.batchNo)
+                          chips.push(`Batch: ${attrs.batchNo}`);
+                        if (attrs.imeiSerialNo)
+                          chips.push(`IMEI: ${attrs.imeiSerialNo}`);
+                        if (attrs.weight)
+                          chips.push(
+                            `Wt: ${attrs.weight}${attrs.weightUnit ? ` ${attrs.weightUnit}` : ""}`,
+                          );
+                        if (attrs.partNo)
+                          chips.push(`Part No: ${attrs.partNo}`);
+                        if (attrs.srNo) chips.push(`SR No: ${attrs.srNo}`);
+                        if (attrs.notes) chips.push(attrs.notes);
+                        if (chips.length === 0) return null;
+                        return (
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            {chips.join(" · ")}
+                          </span>
+                        );
+                      })()}
+                  </div>
                   <span className="text-right text-muted-foreground">
                     {item.quantity}
                   </span>

@@ -129,6 +129,36 @@ export interface Product {
   dd?: string;
   ed?: string;
   mrp?: number;
+  // ── Category-specific extended fields ────────────────────────────────────
+  /** Clothing / Footwear: size (e.g. "L", "XL", "9") */
+  size?: string;
+  /** Clothing / Footwear: color */
+  color?: string;
+  /** Hardware / Mobile / Furniture / etc.: brand */
+  brand?: string;
+  /** Mobile / Electronics: model name or number */
+  model?: string;
+  /** Mobile / Electronics: IMEI or serial number */
+  imeiSerialNo?: string;
+  /** Sweets / Food: weight value */
+  weight?: number;
+  /** Sweets / Food: price per kg/unit */
+  pricePerKg?: number;
+  /** Furniture: size or dimensions */
+  dimensions?: string;
+  /** Furniture: material (wood, metal, etc.) */
+  material?: string;
+}
+
+/**
+ * Saved product field template for a category+shop combination.
+ * Used by CategoryProductForm to pre-fill repeated fields.
+ */
+export interface ProductTemplate {
+  category: string;
+  shopId: string;
+  fields: Partial<Product>;
+  savedAt: number;
 }
 
 export interface StockBatch {
@@ -181,6 +211,20 @@ export interface Customer {
   birthday?: string;
 }
 
+/** Category-specific sale attributes captured at billing time */
+export interface SaleItemAttrs {
+  size?: string;
+  color?: string;
+  shade?: string;
+  batchNo?: string;
+  imeiSerialNo?: string;
+  weight?: string;
+  weightUnit?: string;
+  partNo?: string;
+  srNo?: string;
+  notes?: string;
+}
+
 export interface InvoiceItem {
   productId: string;
   productName: string;
@@ -198,6 +242,8 @@ export interface InvoiceItem {
   staffBonus?: number;
   /** Price mode used for this item — for audit trail */
   priceModeUsed?: "standard" | "retailer" | "wholesaler";
+  /** Category-specific sale attributes (size, color, shade, batch, IMEI, weight, etc.) */
+  selectedAttrs?: SaleItemAttrs;
 }
 
 export interface Invoice {
@@ -290,6 +336,9 @@ export interface AuditLog {
   deletedUser?: boolean;
 }
 
+/** Re-exported from backend enum for frontend use */
+export type ShopStatus = "active" | "inactive" | "dead";
+
 export interface ShopMeta {
   id: string;
   name: string;
@@ -298,6 +347,30 @@ export interface ShopMeta {
   createdAt: string;
   ownerMobile: string;
   isDeleted: boolean;
+  /** Backend-computed shop lifecycle status */
+  status?: ShopStatus;
+  /** Last activity timestamp in nanoseconds (bigint from backend) */
+  lastActivityTs?: bigint;
+  /** Shop category (e.g. Hardware, Grocery) */
+  category?: string;
+}
+
+export interface GlobalCategory {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  isDeleted: boolean;
+}
+
+export interface ShopRankResult {
+  shopId: string;
+  shopName: string;
+  ownerMobile: string;
+  rankScore: bigint;
+  totalRevenue: bigint;
+  totalSalesCount: bigint;
+  lastActivityTs: bigint;
+  status: ShopStatus;
 }
 
 export interface MobileSession {
@@ -458,6 +531,7 @@ export interface CartDraftItem {
   batchNumber?: string;
   profit: number;
   profitPercent: number;
+  selectedAttrs?: SaleItemAttrs;
 }
 
 export interface DraftSale {
@@ -476,6 +550,37 @@ export function getDiamondTier(total: number): DiamondTier {
   if (total >= 200) return "gold";
   if (total >= 50) return "silver";
   return "bronze";
+}
+
+// ─── Rental / Lending System ──────────────────────────────────────────────────
+
+export type RentalRateType = "daily" | "weekly" | "monthly";
+export type RentalStatus = "Active" | "Returned" | "Overdue";
+
+export interface RentalRecord {
+  id: string;
+  shopId: string;
+  /** Linked customer id if selected from customer list */
+  customerId?: string;
+  customerName: string;
+  customerPhone: string;
+  itemName: string;
+  /** Linked product id if selected from inventory */
+  productId?: string;
+  quantity: number;
+  startDate: string; // ISO date string
+  endDate: string; // ISO date string (expected return)
+  rateType: RentalRateType;
+  rateAmount: number;
+  depositAmount: number;
+  totalAmount: number;
+  status: RentalStatus;
+  notes?: string;
+  /** Set when item is returned */
+  returnedDate?: string;
+  damageNotes?: string;
+  extraCharge?: number;
+  createdAt: string;
 }
 
 export type NavPage =
@@ -507,7 +612,15 @@ export type NavPage =
   | "referral-page"
   | "drafts"
   | "attendance"
-  | "super-admin";
+  | "super-admin"
+  | "service-repair"
+  | "rental"
+  | "restaurant-menu"
+  | "restaurant-tables"
+  | "restaurant-order"
+  | "restaurant-kitchen"
+  | "restaurant-billing"
+  | "restaurant-reports";
 
 // ─── Vendor & Order System ────────────────────────────────────────────────────
 

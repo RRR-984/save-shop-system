@@ -1,71 +1,79 @@
-# Design Brief: Multi-User Role System
+# Design Brief: Restaurant Management Module
 
 ## Direction
 
-**Role-Based Authority Hierarchy** — Extend Save Shop System with Owner/Manager/Staff roles, each with distinct visual identity, access controls, and secure PIN-based authentication.
+**Operational Control Center** — Scoped restaurant/hotel KOT system with real-time table & kitchen status, fast menu entry, smart billing. Uses warm food palette (amber/orange/green) for KOT status, maintaining dark navy sidebar consistency with existing Save Shop System.
 
 ## Tone
 
-Professional, hierarchical, security-conscious — every role communicates its authority level instantly through color, typography, and UI affordances without sacrificing mobile accessibility.
+Fast-paced, high-visibility, operational. No playfulness, no luxury — pure functional efficiency. Every interaction scannable at a glance. Professional SaaS quality with food-service urgency.
 
 ## Differentiation
 
-Role badges are scannable at a glance: Owner (brand blue, full authority), Manager (purple, medium authority), Staff (gray, execution-only). PIN entry feels intentional and secure. Staff Management is friction-free with inline toggles.
+Warm KOT status palette (bright yellow Pending, warm orange Cooking, bright green Ready) creates visual separation from cool brand blue used elsewhere. Category badges (Veg green, Non-Veg red, Drinks blue, Snacks amber) aid fast visual sorting. Table grid with clear Free/Occupied/Reserved states. Sidebar section isolated for restaurant-only context.
 
-## Color Palette (Role Tokens)
+## Color Palette (Restaurant Tokens)
 
-| Token               | OKLCH           | Role                           |
-| ------------------- | --------------- | ------------------------------ |
-| role-owner-bg       | 0.55 0.2 258    | Owner badge background (blue)  |
-| role-manager-bg     | 0.6 0.12 308    | Manager badge background (purple) |
-| role-staff-bg       | 0.5 0.01 264    | Staff badge background (gray)  |
-| role-owner-fg       | 1 0 0           | Owner badge text (white)       |
-| role-manager-fg     | 1 0 0           | Manager badge text (white)     |
-| role-staff-fg       | 0.86 0.008 264  | Staff badge text (light gray)  |
+| Token                | OKLCH            | Usage                           |
+| -------------------- | ---------------- | ------------------------------- |
+| kot-pending          | 0.85 0.18 92     | KOT pending order (bright yellow) |
+| kot-cooking          | 0.68 0.18 65     | KOT cooking (warm orange)       |
+| kot-ready            | 0.65 0.17 142    | KOT ready (bright green)        |
+| table-free           | 0.65 0.17 142    | Free table (green)              |
+| table-occupied       | 0.68 0.18 65     | Occupied table (orange)         |
+| table-reserved       | 0.52 0.214 258   | Reserved table (brand blue)     |
+| category-veg         | 0.65 0.17 142    | Veg menu badge (green)          |
+| category-nonveg      | 0.54 0.24 28     | Non-Veg menu badge (red)        |
+| category-drinks      | 0.52 0.214 258   | Drinks menu badge (blue)        |
+| category-snacks      | 0.68 0.18 65     | Snacks menu badge (orange)      |
 
 ## Typography
 
-- Display: Plus Jakarta Sans (700 weight) — role labels, headers, PIN entry prompts
-- Body: Plus Jakarta Sans (500/400 weight) — staff names, mobile numbers, descriptions
-- Scale: headers use uppercase, body text sentence-case; all role badges uppercase small caps
+- Display: Plus Jakarta Sans (700 weight) — table numbers, section headers, order counts
+- Body: Plus Jakarta Sans (500/400) — menu items, order details, billing
+- Scale: table numbers large (24px+), order items compact (14px), labels uppercase 12px
 
 ## Elevation & Depth
 
-Minimal shadow hierarchy: role badges have flat backgrounds with 15% opacity tint; cards use subtle shadow-card; staff management table rows have 2px left border accent (role-colored) on hover.
+KOT cards: shadow-card with lifted hover state. Table grid: subtle bottom border per cell, optional highlight on tap. Category badges: 15% opacity background. Menu items: white cards with shadow-soft, 8px rounded corners.
 
 ## Structural Zones
 
-| Zone                 | Background     | Border         | Notes                                  |
-| -------------------- | -------------- | -------------- | -------------------------------------- |
-| Header (role badge)  | role color 15% | none           | Uppercase label + icon, compact        |
-| Staff list (mobile)  | card           | role color 2px | Left accent border, inline toggle      |
-| PIN keypad section   | background     | border         | 4x3 grid, large buttons, clear CTA    |
-| Footer (actions)     | muted 30%      | border-top     | Delete/confirm buttons, spacing        |
+| Zone              | Background     | Border           | Notes                             |
+| ----------------- | -------------- | ---------------- | --------------------------------- |
+| Menu/Categories   | card           | bottom 1px       | Category badge + items grid       |
+| Table Grid        | background     | 1px border       | Grid layout, status color fill    |
+| KOT Kitchen       | card           | status-colored   | Pending/Cooking/Ready columns    |
+| Quick Order       | card           | none             | Fast-pick tile buttons            |
+| Billing           | card           | top border       | GST toggle, CGST/SGST split      |
 
 ## Spacing & Rhythm
 
-Badges: 0.75rem px, 0.25rem py; staff cards: 1rem padding, 0.5rem gap between elements; keypad: 0.75rem gap between buttons; section gaps 1.5rem (mobile) to 2rem (desktop).
+Menu: 1rem gap between items; table grid: 0.75rem padding per cell; KOT cards: 0.5rem gap; quick-pick tiles: 0.75rem gap; billing section: 1.5rem spacing; mobile sections separated by 1.5rem, desktop 2rem.
 
 ## Component Patterns
 
-- **Badges:** `badge-{role}` classes, rounded-full, uppercase 0.75rem text, 15% opacity background
-- **Staff Cards:** responsive grid → table on desktop; role badge + toggle switch + delete button per row
-- **PIN Input:** masked input field, 4 PIN boxes side-by-side, on-screen numeric keypad (0-9, del, confirm)
-- **Toggles:** green when active, gray when inactive, smooth transition
+- **KOT Status Card:** `bg-kot-{status}` (15% opacity), large item count, order time, compact item list, swipe-to-mark
+- **Table Cell:** `bg-table-{status}` (15% opacity), large table number, customer name optional, tap to view orders
+- **Menu Item Row:** category badge, half/full toggle, price display, stock indicator
+- **Quick-Order Tile:** soft pastel bg, item name, quantity spinner, clear tap target (48px+)
+- **Billing GST:** toggle switch, rate buttons (5%/12%/18%/28%), CGST/SGST line items, grand total
 
 ## Motion
 
-- Entrance: fade-in 0.4s on badge/card mount
-- Hover: card lift on staff row (shadow-card → shadow-card-hover), button active:scale-95
-- Decorative: none (security-focused, minimal distraction)
+- Entrance: fade-in 0.3s on card/table mount
+- KOT update: subtle scale-up 0.2s on new order, pulse on ready
+- Hover: table cell → shadow-soft-hover, KOT card → lift + shadow, button → scale-tap
+- Swipe: fast KOT card swipe-to-mark Cooking/Ready (momentum physics)
 
 ## Constraints
 
-- Role badges must fit single line on mobile (max ~80px width)
-- PIN entry must work on portrait mode without horizontal scroll
-- Staff Management must show at least 4 columns on tablet (name, mobile, role, actions)
-- All interactive elements must have 44px+ tap target (WCAG)
+- Table grid: mobile 2–3 cols (responsive), tablet 4–6, desktop 8+
+- KOT cards: max 3 visible on mobile, scroll horizontally or tab filter
+- Quick-order: 2–3 cols mobile, 4+ desktop
+- Menu: full-width list on mobile, grid 2–3 cols on tablet, sortable by category
+- Billing: all controls fit portrait without scroll
 
 ## Signature Detail
 
-Role badge color system: Owner dominates (brand blue authority), Manager holds middle ground (purple responsibility), Staff recedes (gray execution) — every role's visual weight matches its system responsibility.
+KOT status colors (yellow→orange→green) create instant cognitive recognition of food prep progress. Table grid provides restaurant owner a glanceable overview — green=revenue-ready, orange=service in progress, blue=future revenue. No technical jargon — pure operational clarity.

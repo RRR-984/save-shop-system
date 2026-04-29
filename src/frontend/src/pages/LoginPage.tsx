@@ -11,12 +11,15 @@ import {
   Phone,
   RefreshCw,
   ShieldCheck,
+  Tag,
   Users,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { createActorWithConfig } from "../config";
 import { useAuth } from "../context/AuthContext";
+import type { GlobalCategory } from "../types/store";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,6 +104,7 @@ function OtpLoginFlow({
 
   const [mobile, setMobile] = useState("");
   const [shopName, setShopName] = useState("");
+  const [shopCategory, setShopCategory] = useState("");
   const [referralCode, setReferralCode] = useState(
     initialReferralCode?.trim().toUpperCase() ?? "",
   );
@@ -114,6 +118,157 @@ function OtpLoginFlow({
   const [isVerifying, setIsVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Fallback category list — always shown if backend is unavailable ───────────
+  const FALLBACK_CATEGORIES: GlobalCategory[] = [
+    {
+      id: "cat_autoparts",
+      name: "Auto Parts",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_beverages",
+      name: "Beverages",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_building",
+      name: "Building Material",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_building_suppliers",
+      name: "Building Material Suppliers",
+      isDefault: true,
+      isDeleted: false,
+    },
+    { id: "cat_clothing", name: "Clothing", isDefault: true, isDeleted: false },
+    {
+      id: "cat_dairy",
+      name: "Dairy & Daily Needs",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_electrical",
+      name: "Electrical Shop",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_electronics",
+      name: "Electronics (TV / Fridge / AC)",
+      isDefault: true,
+      isDeleted: false,
+    },
+    { id: "cat_footwear", name: "Footwear", isDefault: true, isDeleted: false },
+    {
+      id: "cat_fruits",
+      name: "Fruits & Vegetables",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_furniture",
+      name: "Furniture",
+      isDefault: false,
+      isDeleted: false,
+    },
+    {
+      id: "cat_general",
+      name: "General Store",
+      isDefault: true,
+      isDeleted: false,
+    },
+    { id: "cat_grocery", name: "Grocery", isDefault: true, isDeleted: false },
+    { id: "cat_hardware", name: "Hardware", isDefault: true, isDeleted: false },
+    {
+      id: "cat_medical",
+      name: "Medical / Pharma",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_mobile",
+      name: "Mobile Shop",
+      isDefault: true,
+      isDeleted: false,
+    },
+    { id: "cat_oil", name: "Oil & Grease", isDefault: true, isDeleted: false },
+    { id: "cat_sanitary", name: "Sanitary", isDefault: true, isDeleted: false },
+    {
+      id: "cat_stationery",
+      name: "Stationery",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_sweets",
+      name: "Sweets & Bakery",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_tiles",
+      name: "Tiles & Marble",
+      isDefault: true,
+      isDeleted: false,
+    },
+  ];
+
+  // Load global categories for the shop type dropdown
+  const [globalCategories, setGlobalCategories] = useState<GlobalCategory[]>(
+    [],
+  );
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const applyFallback = () => {
+      if (!cancelled) {
+        setGlobalCategories(FALLBACK_CATEGORIES);
+        setCategoriesLoading(false);
+      }
+    };
+
+    const fetchCategories = (isRetry = false) => {
+      createActorWithConfig()
+        .then((actor) => actor.getGlobalCategories())
+        .then((cats) => {
+          if (cancelled) return;
+          const filtered = cats.filter((c) => !c.isDeleted);
+          if (filtered.length === 0) {
+            if (!isRetry) {
+              // Retry once after 1 second before falling back
+              retryTimer = setTimeout(() => fetchCategories(true), 1000);
+            } else {
+              // Second attempt also returned empty — use fallback
+              applyFallback();
+            }
+          } else {
+            setGlobalCategories(filtered);
+            setCategoriesLoading(false);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) applyFallback();
+        });
+    };
+
+    setCategoriesLoading(true);
+    fetchCategories();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const startCooldown = () => {
     setResendCooldown(30);
@@ -129,11 +284,22 @@ function OtpLoginFlow({
     }, 1000);
   };
 
+  const [categoryError, setCategoryError] = useState("");
+
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleaned = mobile.replace(/\D/g, "");
     if (cleaned.length !== 10) {
       setMobileError("Enter your 10-digit mobile number");
+      return;
+    }
+    // Category selection is mandatory — block if not selected or still loading
+    if (categoriesLoading) {
+      setCategoryError("Please wait while categories load");
+      return;
+    }
+    if (!shopCategory) {
+      setCategoryError("Please select your shop category to continue");
       return;
     }
     // Validate referral code format if entered (basic client-side check only)
@@ -143,6 +309,7 @@ function OtpLoginFlow({
     }
     setIsSending(true);
     setMobileError("");
+    setCategoryError("");
     setReferralError("");
     await new Promise((r) => setTimeout(r, 400));
     const result = sendOtp(cleaned);
@@ -168,7 +335,12 @@ function OtpLoginFlow({
     setIsVerifying(true);
     setOtpError("");
     await new Promise((r) => setTimeout(r, 350));
-    const result = await verifyOtp(mobile.replace(/\D/g, ""), otp, shopName);
+    const result = await verifyOtp(
+      mobile.replace(/\D/g, ""),
+      otp,
+      shopName,
+      shopCategory,
+    );
     if (!result.success) {
       setOtpError(result.error ?? "Error verifying OTP");
     } else {
@@ -293,6 +465,61 @@ function OtpLoginFlow({
                   <p className="text-xs text-muted-foreground">
                     Your shop will be created on first login
                   </p>
+                </div>
+
+                {/* Shop Category */}
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="shop-category"
+                    className="text-sm font-medium flex items-center gap-1.5"
+                  >
+                    <Tag size={13} className="text-primary" />
+                    Shop Category *
+                  </Label>
+                  {categoriesLoading ? (
+                    <div className="h-11 flex items-center px-3 rounded-lg border border-input bg-background text-muted-foreground text-sm">
+                      Loading categories...
+                    </div>
+                  ) : (
+                    <select
+                      id="shop-category"
+                      data-ocid="login.shop_category.select"
+                      value={shopCategory}
+                      onChange={(e) => {
+                        setShopCategory(e.target.value);
+                        setCategoryError("");
+                      }}
+                      required
+                      className={`w-full h-11 px-3 rounded-lg border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors ${
+                        categoryError ? "border-destructive" : "border-input"
+                      } ${!shopCategory ? "text-muted-foreground" : ""}`}
+                    >
+                      <option value="" disabled>
+                        — Select your shop category —
+                      </option>
+                      {[...globalCategories]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((cat) => (
+                          <option key={cat.id} value={cat.name}>
+                            {cat.name}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                  {categoryError && (
+                    <p
+                      className="text-xs text-destructive flex items-center gap-1"
+                      data-ocid="login.shop_category.field_error"
+                    >
+                      <span className="w-1 h-1 rounded-full bg-destructive flex-shrink-0" />
+                      {categoryError}
+                    </p>
+                  )}
+                  {!categoryError && !categoriesLoading && (
+                    <p className="text-xs text-muted-foreground">
+                      Required — your shop type helps us show the right features
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">

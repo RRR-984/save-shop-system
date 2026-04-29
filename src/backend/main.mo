@@ -1,7 +1,7 @@
-import Map "mo:core/Map";
-import List "mo:core/List";
-import Time "mo:core/Time";
-import Int "mo:core/Int";
+import Map    "mo:core/Map";
+import List   "mo:core/List";
+import Time   "mo:core/Time";
+import Int    "mo:core/Int";
 import MultiShopTypes "types/multishop";
 import MultiShopLib "lib/multishop";
 import MultiShopMixin "mixins/multishop-api";
@@ -9,6 +9,12 @@ import AdminDashboardTypes "types/admin-dashboard";
 import AdminDashboardMixin "mixins/admin-dashboard-api";
 import ConcurrencyTypes "types/concurrency";
 import ConcurrencyMixin "mixins/concurrency-api";
+import CategoryLib "lib/category";
+import CategoryMixin "mixins/category-api";
+import RestaurantLib "lib/restaurant";
+import RestaurantMixin "mixins/restaurant-api";
+
+
 
 actor {
   // Shop data: shopId -> (collectionName -> jsonData)
@@ -41,9 +47,27 @@ actor {
   // Idempotency index: idempotencyKey -> IdempotencyRecord (24-hour window)
   let idempotencyTable = Map.empty<Text, ConcurrencyTypes.IdempotencyRecord>();
 
+  // ── Global Categories ───────────────────────────────────────────────────────
+  // Backend-controlled category list shared across all shops.
+  // Bootstrapped with defaults on first canister init.
+  let globalCategoriesStore : CategoryLib.CategoryStore = Map.empty<Text, { id : Text; name : Text; isDefault : Bool; isDeleted : Bool }>();
+
+  // ── Restaurant State ────────────────────────────────────────────────────────
+  // All restaurant data is stored in typed Maps, keyed by restaurantId (= shopId).
+  let restaurantMenuStore   : RestaurantLib.MenuStore   = Map.empty();
+  let restaurantTableStore  : RestaurantLib.TableStore  = Map.empty();
+  let restaurantOrderStore  : RestaurantLib.OrderStore  = Map.empty();
+  let restaurantKotStore    : RestaurantLib.KotStore    = Map.empty();
+  let restaurantBillStore   : RestaurantLib.BillStore   = Map.empty();
+  let restaurantConfigStore : RestaurantLib.ConfigStore = Map.empty();
+  // Monotonic counter for restaurant entity ID generation.
+  let restaurantCounter : RestaurantLib.Counter = { var value = 0 };
+
   include MultiShopMixin(shopRegistry, shopData);
   include AdminDashboardMixin(activityStore, adminSettingsBox, paidUsersStore, shopRegistry, shopData, mergeAuditLog, superAdminChangeLog);
   include ConcurrencyMixin(lockTable, idempotencyTable);
+  include CategoryMixin(globalCategoriesStore);
+  include RestaurantMixin(restaurantMenuStore, restaurantTableStore, restaurantOrderStore, restaurantKotStore, restaurantBillStore, restaurantConfigStore, restaurantCounter);
 
   // ── Permanent super-admin bootstrap ────────────────────────────────────────
   // On every canister start, ensure the permanent super-admin (9929306080) is set.
@@ -68,6 +92,10 @@ actor {
       // Already has a valid super-admin — do not overwrite.
     };
   };
+
+  // ── Global Category Bootstrap ───────────────────────────────────────────────
+  // Seed default categories on first canister init (no-op if already seeded).
+  CategoryLib.initDefaultCategories(globalCategoriesStore);
 
   // Backup snapshots: shopId -> List<BackupEntry>
   // Stored separately from shopData to allow structured pruning by timestamp

@@ -101,6 +101,13 @@ export function ReferralPage() {
   // ── Stats ─────────────────────────────────────────────────────────────────
   const mySignups = referralSignups.filter((s) => s.referrerUserId === userId);
 
+  // Count signups where first transaction completed (referral fully successful)
+  const completedSignups = mySignups.filter(
+    (s) => s.firstTransactionCompleted,
+  ).length;
+  // Total signups (including pending first tx)
+  const totalSignups = mySignups.length;
+
   const referralDiamonds = diamondRewards
     .filter((r) => r.userId === userId && r.rewardType === "referral")
     .reduce((sum, r) => sum + r.diamondCount, 0);
@@ -194,10 +201,12 @@ export function ReferralPage() {
             Successful Signups
           </span>
           <span className="text-2xl font-extrabold text-foreground">
-            {referralCode.successfulSignups}
+            {completedSignups}
           </span>
           <span className="text-[10px] text-muted-foreground">
-            friends joined
+            {totalSignups > completedSignups
+              ? `${totalSignups - completedSignups} pending first tx`
+              : "friends joined"}
           </span>
         </div>
 
@@ -430,8 +439,8 @@ export function ReferralPage() {
                     }`}
                   >
                     {signup.firstTransactionCompleted
-                      ? "✓ Tx complete"
-                      : "Awaiting tx"}
+                      ? "✓ Completed"
+                      : "Awaiting 1st tx"}
                   </span>
                 </div>
               </div>

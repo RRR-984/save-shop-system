@@ -853,20 +853,22 @@ function VendorsPageInner() {
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
             data-ocid="vendors.list"
           >
-            {filtered.map((vendor) => (
-              <VendorCard
-                key={vendor.id}
-                vendor={vendor}
-                purchaseOrders={purchaseOrders}
-                rateHistoryCount={
-                  vendorRateHistory.filter((r) => r.vendorId === vendor.id)
-                    .length
-                }
-                onEdit={setEditTarget}
-                onDelete={setDeleteTarget}
-                onViewHistory={setHistoryTarget}
-              />
-            ))}
+            {[...filtered]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((vendor) => (
+                <VendorCard
+                  key={vendor.id}
+                  vendor={vendor}
+                  purchaseOrders={purchaseOrders}
+                  rateHistoryCount={
+                    vendorRateHistory.filter((r) => r.vendorId === vendor.id)
+                      .length
+                  }
+                  onEdit={setEditTarget}
+                  onDelete={setDeleteTarget}
+                  onViewHistory={setHistoryTarget}
+                />
+              ))}
           </div>
         )}
       </div>

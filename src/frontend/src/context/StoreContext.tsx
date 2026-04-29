@@ -27,6 +27,7 @@ import type {
   FeatureFlags,
   FeedbackEntry,
   FeedbackType,
+  GlobalCategory,
   Invoice,
   InvoiceItem,
   LowPriceAlertLog,
@@ -38,6 +39,7 @@ import type {
   ReferralSignup,
   ReminderLog,
   ReminderRequest,
+  RentalRecord,
   ReturnEntry,
   ShopSettings,
   ShopUnit,
@@ -88,14 +90,22 @@ function getDeviceId(): string {
   return id;
 }
 
-// Returns the referral code this device has already claimed (if any).
-function getDeviceUsedReferralCode(): string | null {
-  return localStorage.getItem("referral_device_used_code");
+// Returns all device+user pairs that have already claimed a referral code.
+// Key format: "referral_device_used_<deviceId>_<userId>" → code value
+function getDeviceUserUsedReferralCode(
+  deviceId: string,
+  userId: string,
+): string | null {
+  return localStorage.getItem(`referral_device_used_${deviceId}_${userId}`);
 }
 
-// Marks a referral code as used on this device (prevents re-use).
-function setDeviceUsedReferralCode(code: string): void {
-  localStorage.setItem("referral_device_used_code", code);
+// Marks a referral code as used for this device+user pair (prevents same user re-using on same device).
+function setDeviceUserUsedReferralCode(
+  deviceId: string,
+  userId: string,
+  code: string,
+): void {
+  localStorage.setItem(`referral_device_used_${deviceId}_${userId}`, code);
 }
 
 // Walk-in customer identifier — never added to ledger
@@ -156,6 +166,8 @@ interface StoreContextValue {
 
   // Data
   categories: Category[];
+  /** Global categories managed by super admin — loaded from backend on init */
+  globalCategories: GlobalCategory[];
   products: Product[];
   batches: StockBatch[];
   transactions: StockTransaction[];
@@ -414,9 +426,10 @@ interface StoreContextValue {
   referralSignups: ReferralSignup[];
   getOrCreateReferralCode: () => ReferralCode;
   awardReferralDiamonds: (referralSignupId: string) => void;
-  /** Check if this device has already claimed a referral code different from `code`.
-   *  Returns an error string if blocked, or null if allowed. */
-  checkReferralDeviceFraud: (code: string) => string | null;
+  /** Check if this device+user has already claimed a referral code different from `code`.
+   *  Returns an error string if blocked, or null if allowed.
+   *  A new user on the same device (different userId) is always allowed. */
+  checkReferralDeviceFraud: (code: string, newUserId: string) => string | null;
   /** Record a new referral signup from this device with the given referral code.
    *  Persists deviceId and marks the device as having used this code. */
   recordReferralSignup: (
@@ -441,6 +454,21 @@ interface StoreContextValue {
   // Bulk Reminder
   bulkReminderSentAt: string | null;
   sendBulkReminder: () => { sent: number; customers: Customer[] };
+
+  // Rental / Lending System
+  rentals: RentalRecord[];
+  addRental: (
+    r: Omit<RentalRecord, "id" | "shopId" | "createdAt" | "status">,
+  ) => RentalRecord;
+  returnRental: (
+    id: string,
+    returnedDate: string,
+    damageNotes?: string,
+    extraCharge?: number,
+  ) => void;
+  deleteRental: (id: string) => void;
+  getActiveRentals: () => RentalRecord[];
+  getOverdueRentals: () => RentalRecord[];
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -488,6 +516,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isPhase2Loading, setIsPhase2Loading] = useState(false);
   /** true when at least one Phase 1 collection returned a settled rejection */
   const [phase1HasPartialError, setPhase1HasPartialError] = useState(false);
+  /** Counts consecutive Phase 1 failures — error badge only shown after 3 */
+  const phase1RetryCountRef = useRef(0);
   /** true when at least one Phase 2 collection failed to load */
   const [phase2HasPartialError, setPhase2HasPartialError] = useState(false);
 
@@ -527,6 +557,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [globalCategories, setGlobalCategories] = useState<GlobalCategory[]>(
+    [],
+  );
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<StockBatch[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
@@ -678,7 +711,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       expiry: true,
       deadStock: true,
       rental: false,
-      service: false,
+      service: true,
       staff: true,
       credit: true,
       discount: true,
@@ -1067,299 +1100,493 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // ── PHASE 1: Essential collections ─────────────────────────────────────
     // products, categories, batches, shopUnits, transactions, users
     // Uses Promise.allSettled so one failure doesn't block the rest.
+    // Exponential backoff: 0ms (1st), 300ms (2nd), 600ms (3rd) before firing.
     setIsPhase1Loading(true);
     setPhase1HasPartialError(false);
-    Promise.allSettled([
-      actor.getProducts(shopId),
-      actor.getCategories(shopId),
-      actor.getBatches(shopId),
-      actor.getTransactions(shopId),
-      actor.getUsers(shopId),
-      actor.getShopUnits(shopId),
-    ])
-      .then(
-        ([
-          productsRes,
-          categoriesRes,
-          batchesRes,
-          transactionsRes,
-          usersRes,
-          shopUnitsRes,
-        ]) => {
-          let anyFailed = false;
 
-          if (productsRes.status === "fulfilled" && productsRes.value) {
-            const loaded = JSON.parse(productsRes.value) as Product[];
-            setProducts(loaded);
-            if (loaded.length > 0)
-              saveData(getShopKey(STORAGE_KEYS.products, shopId), loaded);
-          } else if (productsRes.status === "rejected") {
-            anyFailed = true;
-            console.warn(
-              "[StoreContext] Phase1: products failed",
-              productsRes.reason,
-            );
-          }
+    // Load global categories in parallel (fire-and-forget, never blocks Phase 1)
+    actorRef.current
+      ?.getGlobalCategories()
+      .then((cats) => setGlobalCategories(cats))
+      .catch(() => {});
 
-          if (categoriesRes.status === "fulfilled" && categoriesRes.value) {
-            setCategories(JSON.parse(categoriesRes.value) as Category[]);
-          } else if (categoriesRes.status === "rejected") {
-            anyFailed = true;
-          }
+    const phase1BackoffMs = [0, 300, 600][
+      Math.min(phase1RetryCountRef.current, 2)
+    ];
 
-          if (batchesRes.status === "fulfilled" && batchesRes.value) {
-            const loaded = JSON.parse(batchesRes.value) as StockBatch[];
-            setBatches(loaded);
-            batchesRef.current = loaded;
-            if (loaded.length > 0)
-              saveData(getShopKey(STORAGE_KEYS.batches, shopId), loaded);
-          } else if (batchesRes.status === "rejected") {
-            anyFailed = true;
-            console.warn(
-              "[StoreContext] Phase1: batches failed",
-              batchesRes.reason,
-            );
-          }
+    const runPhase1 = () =>
+      Promise.allSettled([
+        actor.getProducts(shopId),
+        actor.getCategories(shopId),
+        actor.getBatches(shopId),
+        actor.getTransactions(shopId),
+        actor.getUsers(shopId),
+        actor.getShopUnits(shopId),
+      ])
+        .then(
+          ([
+            productsRes,
+            categoriesRes,
+            batchesRes,
+            transactionsRes,
+            usersRes,
+            shopUnitsRes,
+          ]) => {
+            let anyFailed = false;
 
-          if (transactionsRes.status === "fulfilled" && transactionsRes.value) {
-            setTransactions(
-              JSON.parse(transactionsRes.value) as StockTransaction[],
-            );
-          } else if (transactionsRes.status === "rejected") {
-            anyFailed = true;
-          }
+            if (productsRes.status === "fulfilled" && productsRes.value) {
+              const loaded = JSON.parse(productsRes.value) as Product[];
+              setProducts(loaded);
+              if (loaded.length > 0)
+                saveData(getShopKey(STORAGE_KEYS.products, shopId), loaded);
+            } else if (productsRes.status === "rejected") {
+              anyFailed = true;
+              console.warn(
+                "[StoreContext] Phase1: products failed",
+                productsRes.reason,
+              );
+            }
 
-          if (usersRes.status === "fulfilled" && usersRes.value) {
-            const loaded = JSON.parse(usersRes.value) as AppUser[];
-            setUsers(loaded);
-            if (syncUsersToAuth) syncUsersToAuth(loaded);
-          } else if (usersRes.status === "rejected") {
-            anyFailed = true;
-          }
+            if (categoriesRes.status === "fulfilled" && categoriesRes.value) {
+              setCategories(JSON.parse(categoriesRes.value) as Category[]);
+            } else if (categoriesRes.status === "rejected") {
+              anyFailed = true;
+            }
 
-          if (shopUnitsRes.status === "fulfilled" && shopUnitsRes.value) {
-            setShopUnits(JSON.parse(shopUnitsRes.value) as ShopUnit[]);
-          } else if (shopUnitsRes.status === "rejected") {
-            anyFailed = true;
-          }
+            if (batchesRes.status === "fulfilled" && batchesRes.value) {
+              const loaded = JSON.parse(batchesRes.value) as StockBatch[];
+              setBatches(loaded);
+              batchesRef.current = loaded;
+              if (loaded.length > 0)
+                saveData(getShopKey(STORAGE_KEYS.batches, shopId), loaded);
+            } else if (batchesRes.status === "rejected") {
+              anyFailed = true;
+              console.warn(
+                "[StoreContext] Phase1: batches failed",
+                batchesRes.reason,
+              );
+            }
 
-          if (anyFailed) setPhase1HasPartialError(true);
+            if (
+              transactionsRes.status === "fulfilled" &&
+              transactionsRes.value
+            ) {
+              setTransactions(
+                JSON.parse(transactionsRes.value) as StockTransaction[],
+              );
+            } else if (transactionsRes.status === "rejected") {
+              anyFailed = true;
+            }
 
-          // Phase 1 complete — mark loading done so dashboard renders
+            if (usersRes.status === "fulfilled" && usersRes.value) {
+              const loaded = JSON.parse(usersRes.value) as AppUser[];
+              setUsers(loaded);
+              if (syncUsersToAuth) syncUsersToAuth(loaded);
+            } else if (usersRes.status === "rejected") {
+              anyFailed = true;
+            }
+
+            if (shopUnitsRes.status === "fulfilled" && shopUnitsRes.value) {
+              setShopUnits(JSON.parse(shopUnitsRes.value) as ShopUnit[]);
+            } else if (shopUnitsRes.status === "rejected") {
+              anyFailed = true;
+            }
+
+            if (anyFailed) {
+              phase1RetryCountRef.current += 1;
+              if (phase1RetryCountRef.current >= 3) {
+                setPhase1HasPartialError(true);
+              }
+            } else {
+              // Successful Phase 1 — reset retry counter
+              phase1RetryCountRef.current = 0;
+            }
+
+            // Phase 1 complete — mark loading done so dashboard renders
+            setIsPhase1Loading(false);
+            setIsLoading(false);
+            // Clear shop-switching gate — new shop data is now rendered
+            setIsShopSwitching(false);
+
+            // ── PHASE 2: Heavy collections — silent background fetch ────────────
+            // Never blocks user interaction. Runs after Phase 1 renders.
+            setIsPhase2Loading(true);
+            setPhase2HasPartialError(false);
+
+            // Cancellation token — set to true on network drop to abort Phase 2 setState calls
+            const phase2Cancel = { cancelled: false };
+            const phase2OfflineHandler = () => {
+              phase2Cancel.cancelled = true;
+            };
+            window.addEventListener("offline", phase2OfflineHandler, {
+              once: true,
+            });
+
+            // Track which Phase 2 items failed
+            let phase2AnyFailed = false;
+
+            const phase2 = [
+              actor
+                .getInvoices(shopId)
+                .then((raw) => {
+                  if (!raw) return;
+                  const loaded = JSON.parse(raw) as Invoice[];
+                  setInvoices(loaded);
+                  invoicesRef.current = loaded;
+                  if (loaded.length > 0)
+                    saveData(getShopKey(STORAGE_KEYS.sales, shopId), loaded);
+                })
+                .catch((e) => {
+                  phase2AnyFailed = true;
+                  console.warn("[StoreContext] Phase2: invoices failed", e);
+                }),
+
+              actor
+                .getCustomers(shopId)
+                .then((raw) => {
+                  if (!raw) return;
+                  const loaded = JSON.parse(raw) as Customer[];
+                  setCustomers(loaded);
+                  if (loaded.length > 0)
+                    saveData(
+                      getShopKey(STORAGE_KEYS.customers, shopId),
+                      loaded,
+                    );
+                })
+                .catch((e) => {
+                  phase2AnyFailed = true;
+                  console.warn("[StoreContext] Phase2: customers failed", e);
+                }),
+
+              actor
+                .getPayments(shopId)
+                .then((raw) => {
+                  if (!raw) return;
+                  const loaded = JSON.parse(raw) as PaymentRecord[];
+                  setPayments(loaded);
+                  if (loaded.length > 0)
+                    saveData(getShopKey(STORAGE_KEYS.payments, shopId), loaded);
+                })
+                .catch((e) => {
+                  phase2AnyFailed = true;
+                  console.warn("[StoreContext] Phase2: payments failed", e);
+                }),
+
+              actor
+                .getReturns(shopId)
+                .then((raw) => {
+                  if (!raw) return;
+                  const loaded = JSON.parse(raw) as ReturnEntry[];
+                  setReturns(loaded);
+                  returnsRef.current = loaded;
+                  if (loaded.length > 0)
+                    saveData(getShopKey(STORAGE_KEYS.returns, shopId), loaded);
+                })
+                .catch((e) => {
+                  phase2AnyFailed = true;
+                  console.warn("[StoreContext] Phase2: returns failed", e);
+                }),
+
+              // Vendors
+              actor
+                .getVendors(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const data = JSON.parse(raw) as Vendor[];
+                  setVendors(data);
+                  vendorsRef.current = data;
+                  if (data.length > 0)
+                    saveData(getShopKey(STORAGE_KEYS.vendors, shopId), data);
+                })
+                .catch((e) => {
+                  phase2AnyFailed = true;
+                  console.warn("[StoreContext] Phase2: vendors failed", e);
+                }),
+
+              // Purchase orders
+              actor
+                .getPurchaseOrders(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const data = JSON.parse(raw) as PurchaseOrder[];
+                  setPurchaseOrders(data);
+                  purchaseOrdersRef.current = data;
+                  if (data.length > 0)
+                    saveData(
+                      getShopKey(STORAGE_KEYS.purchaseOrders, shopId),
+                      data,
+                    );
+                })
+                .catch(() => {}),
+
+              // Customer orders
+              actor
+                .getCustomerOrders(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const data = JSON.parse(raw) as CustomerOrder[];
+                  setCustomerOrders(data);
+                  customerOrdersRef.current = data;
+                  if (data.length > 0)
+                    saveData(
+                      getShopKey(STORAGE_KEYS.customerOrders, shopId),
+                      data,
+                    );
+                })
+                .catch(() => {}),
+
+              // Vendor rate history
+              actor
+                .getVendorRateHistory(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const data = JSON.parse(raw) as VendorRateHistory[];
+                  setVendorRateHistory(data);
+                  vendorRateHistoryRef.current = data;
+                  if (data.length > 0)
+                    saveData(
+                      getShopKey(STORAGE_KEYS.vendorRateHistory, shopId),
+                      data,
+                    );
+                })
+                .catch(() => {}),
+
+              // Low price alert logs
+              actor
+                .getLowPriceAlertLogs(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const logs = JSON.parse(raw) as LowPriceAlertLog[];
+                  setLowPriceAlertLogs(logs);
+                  lowPriceAlertLogsRef.current = logs;
+                })
+                .catch(() => {}),
+
+              // Audit logs
+              actor
+                .getAuditLogs(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const logs = JSON.parse(raw) as AuditLog[];
+                  setAuditLogs(logs);
+                  auditLogsRef.current = logs;
+                })
+                .catch(() => {}),
+
+              // Reminder logs
+              actor
+                .getReminderLogs(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const logs = JSON.parse(raw) as ReminderLog[];
+                  setReminderLogs(logs);
+                  reminderLogsRef.current = logs;
+                })
+                .catch(() => {}),
+
+              // Reminder requests
+              actor
+                .getReminderRequests(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const reqs = JSON.parse(raw) as ReminderRequest[];
+                  setReminderRequests(reqs);
+                  reminderRequestsRef.current = reqs;
+                })
+                .catch(() => {}),
+
+              // ── Referral codes — merge backend + localStorage (deduped by id) ──
+              // referralCodes/referralSignups are global (not per-shop scoped) but
+              // we sync them from backend on every load so data survives cache clears
+              // and cross-device logins.
+              actor
+                .getReferralCodes(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const backendCodes = JSON.parse(raw) as ReferralCode[];
+                  if (backendCodes.length === 0) return;
+                  // Merge: backend wins for updated stats; keep local-only entries
+                  setReferralCodes((prev) => {
+                    const merged = [...backendCodes];
+                    for (const local of prev) {
+                      if (!merged.some((c) => c.id === local.id)) {
+                        merged.push(local);
+                      }
+                    }
+                    referralCodesRef.current = merged;
+                    saveData(STORAGE_KEYS.referralCodes, merged);
+                    return merged;
+                  });
+                })
+                .catch(() => {}),
+
+              // ── Referral signups — merge backend + localStorage (deduped by id) ──
+              actor
+                .getReferralSignups(shopId)
+                .then((raw) => {
+                  if (phase2Cancel.cancelled || !raw) return;
+                  const backendSignups = JSON.parse(raw) as ReferralSignup[];
+                  if (backendSignups.length === 0) return;
+                  setReferralSignups((prev) => {
+                    const merged = [...backendSignups];
+                    for (const local of prev) {
+                      if (!merged.some((s) => s.id === local.id)) {
+                        merged.push(local);
+                      }
+                    }
+                    referralSignupsRef.current = merged;
+                    saveData(STORAGE_KEYS.referralSignups, merged);
+                    return merged;
+                  });
+                })
+                .catch(() => {}),
+            ];
+
+            // After all Phase 2 settled — remove offline listener and update state
+            Promise.allSettled(phase2).then(() => {
+              window.removeEventListener("offline", phase2OfflineHandler);
+              if (phase2Cancel.cancelled) {
+                // Network dropped mid-Phase2 — mark partial error so pages show warning
+                setIsPhase2Loading(false);
+                setPhase2HasPartialError(true);
+                console.warn(
+                  "[StoreContext] Phase2 settled after cancel — partial data",
+                );
+                return;
+              }
+              localStorage.setItem(cacheTimestampKey, String(Date.now()));
+              setIsPhase2Loading(false);
+              if (phase2AnyFailed) setPhase2HasPartialError(true);
+
+              // ── Fallback referral reward scan ─────────────────────────────────
+              // After Phase 2 loads invoices + referralSignups, scan for any signups
+              // where the first transaction was done but diamonds were not awarded.
+              // This catches cases where createInvoice ran but the reward trigger missed.
+              const pendingSignups = referralSignupsRef.current.filter(
+                (s) => !s.rewardAwardedToReferrer,
+              );
+              if (pendingSignups.length > 0 && invoicesRef.current.length > 0) {
+                for (const signup of pendingSignups) {
+                  const normSignupMobile = signup.newUserMobile.replace(
+                    /\D/g,
+                    "",
+                  );
+                  // Check if the new user has any invoices (first tx done)
+                  const hasInvoice = invoicesRef.current.some((inv) => {
+                    const normInvMobile = (inv.customerMobile ?? "").replace(
+                      /\D/g,
+                      "",
+                    );
+                    return normInvMobile && normInvMobile === normSignupMobile;
+                  });
+                  if (hasInvoice) {
+                    // Mark first transaction completed + award diamonds
+                    const updatedSignups = referralSignupsRef.current.map(
+                      (s) =>
+                        s.id === signup.id
+                          ? {
+                              ...s,
+                              firstTransactionCompleted: true,
+                              rewardAwardedToReferrer: true,
+                              rewardAwardedToNewUser: true,
+                            }
+                          : s,
+                    );
+                    referralSignupsRef.current = updatedSignups;
+                    setReferralSignups(updatedSignups);
+                    saveData(STORAGE_KEYS.referralSignups, updatedSignups);
+                    try {
+                      (actorRef.current as any)?.saveReferralSignups?.(
+                        shopIdRef.current,
+                        JSON.stringify(updatedSignups),
+                      );
+                    } catch (_) {
+                      /* optional */
+                    }
+
+                    // Award diamonds
+                    const referrerReward: DiamondReward = {
+                      id: generateId(),
+                      shopId: shopIdRef.current,
+                      userId: signup.referrerUserId,
+                      userName: signup.referrerName,
+                      productId: "referral",
+                      productName: `Referral: ${signup.newUserName} joined`,
+                      cycleCompletedAt: new Date().toISOString(),
+                      diamondCount: 10,
+                      rewardType: "referral",
+                      referralId: signup.id,
+                    };
+                    const newUserReward: DiamondReward = {
+                      id: generateId(),
+                      shopId: shopIdRef.current,
+                      userId: signup.newUserId,
+                      userName: signup.newUserName,
+                      productId: "referral-welcome",
+                      productName: "Welcome Bonus — Referral",
+                      cycleCompletedAt: new Date().toISOString(),
+                      diamondCount: 10,
+                      rewardType: "referral",
+                      referralId: signup.id,
+                    };
+                    const updatedRewards = [
+                      ...diamondRewardsRef.current,
+                      referrerReward,
+                      newUserReward,
+                    ];
+                    diamondRewardsRef.current = updatedRewards;
+                    setDiamondRewards(updatedRewards);
+                    saveData(STORAGE_KEYS.diamondRewards, updatedRewards);
+                    try {
+                      (actorRef.current as any)?.saveDiamondRewards?.(
+                        shopIdRef.current,
+                        JSON.stringify(updatedRewards),
+                      );
+                    } catch (_) {
+                      /* optional */
+                    }
+
+                    // Update code stats
+                    const updatedCodes = referralCodesRef.current.map((rc) =>
+                      rc.id === signup.referralCodeId
+                        ? {
+                            ...rc,
+                            successfulSignups: rc.successfulSignups + 1,
+                            totalDiamondsEarned: rc.totalDiamondsEarned + 10,
+                          }
+                        : rc,
+                    );
+                    referralCodesRef.current = updatedCodes;
+                    setReferralCodes(updatedCodes);
+                    saveData(STORAGE_KEYS.referralCodes, updatedCodes);
+
+                    toast.success(
+                      `🎉 Referral reward! 10 💎 each for ${signup.referrerName} & ${signup.newUserName}`,
+                    );
+                  }
+                }
+              }
+            });
+          },
+        )
+        .catch(() => {
+          // Phase 1 itself threw (shouldn't happen with allSettled but safety net)
           setIsPhase1Loading(false);
           setIsLoading(false);
-          // Clear shop-switching gate — new shop data is now rendered
-          setIsShopSwitching(false);
+          phase1RetryCountRef.current += 1;
+          if (phase1RetryCountRef.current >= 3) {
+            setPhase1HasPartialError(true);
+          }
+        });
 
-          // ── PHASE 2: Heavy collections — silent background fetch ────────────
-          // Never blocks user interaction. Runs after Phase 1 renders.
-          setIsPhase2Loading(true);
-          setPhase2HasPartialError(false);
-
-          // Cancellation token — set to true on network drop to abort Phase 2 setState calls
-          const phase2Cancel = { cancelled: false };
-          const phase2OfflineHandler = () => {
-            phase2Cancel.cancelled = true;
-          };
-          window.addEventListener("offline", phase2OfflineHandler, {
-            once: true,
-          });
-
-          // Track which Phase 2 items failed
-          let phase2AnyFailed = false;
-
-          const phase2 = [
-            actor
-              .getInvoices(shopId)
-              .then((raw) => {
-                if (!raw) return;
-                const loaded = JSON.parse(raw) as Invoice[];
-                setInvoices(loaded);
-                invoicesRef.current = loaded;
-                if (loaded.length > 0)
-                  saveData(getShopKey(STORAGE_KEYS.sales, shopId), loaded);
-              })
-              .catch((e) => {
-                phase2AnyFailed = true;
-                console.warn("[StoreContext] Phase2: invoices failed", e);
-              }),
-
-            actor
-              .getCustomers(shopId)
-              .then((raw) => {
-                if (!raw) return;
-                const loaded = JSON.parse(raw) as Customer[];
-                setCustomers(loaded);
-                if (loaded.length > 0)
-                  saveData(getShopKey(STORAGE_KEYS.customers, shopId), loaded);
-              })
-              .catch((e) => {
-                phase2AnyFailed = true;
-                console.warn("[StoreContext] Phase2: customers failed", e);
-              }),
-
-            actor
-              .getPayments(shopId)
-              .then((raw) => {
-                if (!raw) return;
-                const loaded = JSON.parse(raw) as PaymentRecord[];
-                setPayments(loaded);
-                if (loaded.length > 0)
-                  saveData(getShopKey(STORAGE_KEYS.payments, shopId), loaded);
-              })
-              .catch((e) => {
-                phase2AnyFailed = true;
-                console.warn("[StoreContext] Phase2: payments failed", e);
-              }),
-
-            actor
-              .getReturns(shopId)
-              .then((raw) => {
-                if (!raw) return;
-                const loaded = JSON.parse(raw) as ReturnEntry[];
-                setReturns(loaded);
-                returnsRef.current = loaded;
-                if (loaded.length > 0)
-                  saveData(getShopKey(STORAGE_KEYS.returns, shopId), loaded);
-              })
-              .catch((e) => {
-                phase2AnyFailed = true;
-                console.warn("[StoreContext] Phase2: returns failed", e);
-              }),
-
-            // Vendors
-            actor
-              .getVendors(shopId)
-              .then((raw) => {
-                if (phase2Cancel.cancelled || !raw) return;
-                const data = JSON.parse(raw) as Vendor[];
-                setVendors(data);
-                vendorsRef.current = data;
-                if (data.length > 0)
-                  saveData(getShopKey(STORAGE_KEYS.vendors, shopId), data);
-              })
-              .catch((e) => {
-                phase2AnyFailed = true;
-                console.warn("[StoreContext] Phase2: vendors failed", e);
-              }),
-
-            // Purchase orders
-            actor
-              .getPurchaseOrders(shopId)
-              .then((raw) => {
-                if (phase2Cancel.cancelled || !raw) return;
-                const data = JSON.parse(raw) as PurchaseOrder[];
-                setPurchaseOrders(data);
-                purchaseOrdersRef.current = data;
-                if (data.length > 0)
-                  saveData(
-                    getShopKey(STORAGE_KEYS.purchaseOrders, shopId),
-                    data,
-                  );
-              })
-              .catch(() => {}),
-
-            // Customer orders
-            actor
-              .getCustomerOrders(shopId)
-              .then((raw) => {
-                if (phase2Cancel.cancelled || !raw) return;
-                const data = JSON.parse(raw) as CustomerOrder[];
-                setCustomerOrders(data);
-                customerOrdersRef.current = data;
-                if (data.length > 0)
-                  saveData(
-                    getShopKey(STORAGE_KEYS.customerOrders, shopId),
-                    data,
-                  );
-              })
-              .catch(() => {}),
-
-            // Vendor rate history
-            actor
-              .getVendorRateHistory(shopId)
-              .then((raw) => {
-                if (phase2Cancel.cancelled || !raw) return;
-                const data = JSON.parse(raw) as VendorRateHistory[];
-                setVendorRateHistory(data);
-                vendorRateHistoryRef.current = data;
-                if (data.length > 0)
-                  saveData(
-                    getShopKey(STORAGE_KEYS.vendorRateHistory, shopId),
-                    data,
-                  );
-              })
-              .catch(() => {}),
-
-            // Low price alert logs
-            actor
-              .getLowPriceAlertLogs(shopId)
-              .then((raw) => {
-                if (phase2Cancel.cancelled || !raw) return;
-                const logs = JSON.parse(raw) as LowPriceAlertLog[];
-                setLowPriceAlertLogs(logs);
-                lowPriceAlertLogsRef.current = logs;
-              })
-              .catch(() => {}),
-
-            // Audit logs
-            actor
-              .getAuditLogs(shopId)
-              .then((raw) => {
-                if (phase2Cancel.cancelled || !raw) return;
-                const logs = JSON.parse(raw) as AuditLog[];
-                setAuditLogs(logs);
-                auditLogsRef.current = logs;
-              })
-              .catch(() => {}),
-
-            // Reminder logs
-            actor
-              .getReminderLogs(shopId)
-              .then((raw) => {
-                if (phase2Cancel.cancelled || !raw) return;
-                const logs = JSON.parse(raw) as ReminderLog[];
-                setReminderLogs(logs);
-                reminderLogsRef.current = logs;
-              })
-              .catch(() => {}),
-
-            // Reminder requests
-            actor
-              .getReminderRequests(shopId)
-              .then((raw) => {
-                if (phase2Cancel.cancelled || !raw) return;
-                const reqs = JSON.parse(raw) as ReminderRequest[];
-                setReminderRequests(reqs);
-                reminderRequestsRef.current = reqs;
-              })
-              .catch(() => {}),
-          ];
-
-          // After all Phase 2 settled — remove offline listener and update state
-          Promise.allSettled(phase2).then(() => {
-            window.removeEventListener("offline", phase2OfflineHandler);
-            if (phase2Cancel.cancelled) {
-              // Network dropped mid-Phase2 — mark partial error so pages show warning
-              setIsPhase2Loading(false);
-              setPhase2HasPartialError(true);
-              console.warn(
-                "[StoreContext] Phase2 settled after cancel — partial data",
-              );
-              return;
-            }
-            localStorage.setItem(cacheTimestampKey, String(Date.now()));
-            setIsPhase2Loading(false);
-            if (phase2AnyFailed) setPhase2HasPartialError(true);
-          });
-        },
-      )
-      .catch(() => {
-        // Phase 1 itself threw (shouldn't happen with allSettled but safety net)
-        setIsPhase1Loading(false);
-        setIsLoading(false);
-        setPhase1HasPartialError(true);
-      });
+    // Fire Phase 1 with exponential backoff on retries
+    if (phase1BackoffMs > 0) {
+      setTimeout(() => {
+        void runPhase1();
+      }, phase1BackoffMs);
+    } else {
+      void runPhase1();
+    }
 
     // No cleanup needed (no timers active)
     return () => {};
@@ -1710,6 +1937,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return updated;
       });
       toast.success("Data saved ✓", { duration: 2500 });
+      // Fire-and-forget: update shop status on stock activity (backend-driven)
+      actorRef.current
+        ?.updateShopStatus(shopIdRef.current, BigInt(Date.now()) * 1_000_000n)
+        .catch(() => {});
     },
     [],
   );
@@ -2005,6 +2236,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             );
             setInvoices(updatedInvoices);
             toast.success("Data saved ✓", { duration: 2500 });
+            // Fire-and-forget: update shop status on billing activity (backend-driven)
+            icpActor
+              .updateShopStatus(currentShopId, BigInt(Date.now()) * 1_000_000n)
+              .catch(() => {});
           })
           .catch((err) => {
             // ICP failed — roll back ref to avoid stale optimistic state
@@ -2078,15 +2313,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
 
       // ── Check referral reward on first transaction ────────────────────────
-      // If this is the user's first invoice, check if they were referred
+      // Determine if this is the user's very first invoice.
+      // We check invoicesRef (now includes the new invoice) and pick the oldest
+      // by createdAt so offline-drafted invoices don't inflate the count.
       const shopInvoicesAfter = [...invoicesRef.current];
-      const userMobile = data.customerMobile ?? "";
-      const isFirstInvoice = shopInvoicesAfter.length === 1;
-      if (isFirstInvoice && userMobile) {
-        const normalizedMobile = userMobile.replace(/\D/g, "");
+
+      // The "new user's" mobile: prefer the invoice customer mobile, fall back
+      // to the logged-in user's own mobile (for the case where the new user is
+      // creating their first bill for a walk-in customer).
+      const rawUserMobile =
+        (data.customerMobile ?? "").replace(/\D/g, "") ||
+        (currentUser?.mobile ?? "").replace(/\D/g, "");
+
+      // isFirstInvoice: true if only 1 invoice exists, OR the new invoice is
+      // the chronologically oldest one (guards against offline draft inflation).
+      const sortedByTime = [...shopInvoicesAfter].sort(
+        (a, b) =>
+          new Date(a.date ?? 0).getTime() - new Date(b.date ?? 0).getTime(),
+      );
+      const oldestInvoiceId = sortedByTime[0]?.id;
+      const isFirstInvoice =
+        shopInvoicesAfter.length === 1 || oldestInvoiceId === invoice.id;
+
+      if (isFirstInvoice && rawUserMobile) {
         const pendingSignup = referralSignupsRef.current.find(
           (s) =>
-            s.newUserMobile.replace(/\D/g, "") === normalizedMobile &&
+            s.newUserMobile.replace(/\D/g, "") === rawUserMobile &&
             !s.firstTransactionCompleted,
         );
         if (pendingSignup) {
@@ -2148,6 +2400,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             diamondRewardsRef.current = rewardsWithReferral;
             setDiamondRewards(rewardsWithReferral);
             saveData(STORAGE_KEYS.diamondRewards, rewardsWithReferral);
+            try {
+              (actorRef.current as any)?.saveReferralSignups?.(
+                shopIdRef.current,
+                JSON.stringify(updatedSignups2),
+              );
+              (actorRef.current as any)?.saveDiamondRewards?.(
+                shopIdRef.current,
+                JSON.stringify(rewardsWithReferral),
+              );
+            } catch (_) {
+              /* optional */
+            }
             toast.success(
               `🎉 Referral reward! 10 💎 each for ${signup.referrerName} & ${signup.newUserName}`,
             );
@@ -3615,11 +3879,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Device-based referral fraud prevention ──────────────────────────────────
+  // A device+user combination can only claim one referral code.
+  // A new user on the same device (different mobile number / userId) is allowed.
   const checkReferralDeviceFraud = useCallback(
-    (code: string): string | null => {
-      const alreadyUsed = getDeviceUsedReferralCode();
+    (code: string, newUserId: string): string | null => {
+      const deviceId = getDeviceId();
+      const alreadyUsed = getDeviceUserUsedReferralCode(deviceId, newUserId);
       if (alreadyUsed && alreadyUsed !== code) {
-        return "This device has already used a referral code";
+        return "You have already used a different referral code";
       }
       return null;
     },
@@ -3634,19 +3901,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       newUserName: string,
       newUserMobile: string,
     ) => {
-      // Fraud check
-      const fraudError = checkReferralDeviceFraud(referralCode.code);
+      // Fraud check: device+userId pair uniqueness
+      const fraudError = checkReferralDeviceFraud(referralCode.code, newUserId);
       if (fraudError) {
         toast.error(fraudError);
         return;
       }
 
       // Prevent duplicate signups for the same new user
+      const normNew = newUserMobile.replace(/\D/g, "");
       const alreadySignedUp = referralSignupsRef.current.some(
         (s) =>
           s.newUserId === newUserId ||
-          s.newUserMobile.replace(/\D/g, "") ===
-            newUserMobile.replace(/\D/g, ""),
+          (normNew && s.newUserMobile.replace(/\D/g, "") === normNew),
       );
       if (alreadySignedUp) {
         toast.error("This user has already used a referral code");
@@ -3683,8 +3950,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         /* optional */
       }
 
-      // Mark this device as having used the code
-      setDeviceUsedReferralCode(referralCode.code);
+      // Mark this device+user as having used the code (scoped by userId)
+      setDeviceUserUsedReferralCode(deviceId, newUserId, referralCode.code);
 
       toast.success(
         "Referral code applied! 10 💎 diamonds will be awarded after your first transaction.",
@@ -3938,11 +4205,117 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     // 6. Clear cache timestamp so next load fetches fresh
     localStorage.removeItem(`saveshop_cache_ts_${sid}`);
+    setRentals([]);
+    rentalsRef.current = [];
+  }, []);
+
+  // ── Rental / Lending System ────────────────────────────────────────────────
+  const [rentals, setRentals] = useState<RentalRecord[]>(() =>
+    loadData<RentalRecord[]>(getShopKey(STORAGE_KEYS.rentals, shopId), []),
+  );
+  const rentalsRef = useRef<RentalRecord[]>(rentals);
+
+  // Reload rentals on shop change
+  useEffect(() => {
+    const loaded = loadData<RentalRecord[]>(
+      getShopKey(STORAGE_KEYS.rentals, shopId),
+      [],
+    );
+    rentalsRef.current = loaded;
+    setRentals(loaded);
+  }, [shopId]);
+
+  const addRental = useCallback(
+    (
+      r: Omit<RentalRecord, "id" | "shopId" | "createdAt" | "status">,
+    ): RentalRecord => {
+      const now = new Date().toISOString();
+      const newRental: RentalRecord = {
+        ...r,
+        id: generateId(),
+        shopId: shopIdRef.current,
+        status: "Active",
+        createdAt: now,
+      };
+      const updated = [...rentalsRef.current, newRental];
+      rentalsRef.current = updated;
+      setRentals(updated);
+      saveData(getShopKey(STORAGE_KEYS.rentals, shopIdRef.current), updated);
+      // Deduct from inventory if linked product
+      if (r.productId) {
+        addStockOut(r.productId, r.quantity, `Rental: ${r.customerName}`);
+      }
+      return newRental;
+    },
+    [addStockOut],
+  );
+
+  const returnRental = useCallback(
+    (
+      id: string,
+      returnedDate: string,
+      damageNotes?: string,
+      extraCharge?: number,
+    ) => {
+      const updated = rentalsRef.current.map((rental) => {
+        if (rental.id !== id) return rental;
+        return {
+          ...rental,
+          status: "Returned" as const,
+          returnedDate,
+          damageNotes,
+          extraCharge,
+        };
+      });
+      rentalsRef.current = updated;
+      setRentals(updated);
+      saveData(getShopKey(STORAGE_KEYS.rentals, shopIdRef.current), updated);
+      // Restore inventory if linked product
+      const rental = rentalsRef.current.find((r) => r.id === id);
+      if (rental?.productId) {
+        addStockIn(
+          rental.productId,
+          rental.quantity,
+          0,
+          returnedDate.split("T")[0],
+          `Rental return: ${rental.customerName}`,
+        );
+      }
+    },
+    [addStockIn],
+  );
+
+  const deleteRental = useCallback((id: string) => {
+    const updated = rentalsRef.current.filter((r) => r.id !== id);
+    rentalsRef.current = updated;
+    setRentals(updated);
+    saveData(getShopKey(STORAGE_KEYS.rentals, shopIdRef.current), updated);
+  }, []);
+
+  const getActiveRentals = useCallback((): RentalRecord[] => {
+    const today = new Date().toISOString().split("T")[0];
+    return rentalsRef.current
+      .filter((r) => r.shopId === shopIdRef.current && r.status !== "Returned")
+      .map((r) => ({
+        ...r,
+        status: r.endDate < today ? ("Overdue" as const) : r.status,
+      }));
+  }, []);
+
+  const getOverdueRentals = useCallback((): RentalRecord[] => {
+    const today = new Date().toISOString().split("T")[0];
+    return rentalsRef.current.filter(
+      (r) =>
+        r.shopId === shopIdRef.current &&
+        r.status !== "Returned" &&
+        r.endDate < today,
+    );
   }, []);
 
   const value: StoreContextValue = {
     resetShopData,
     categories,
+    globalCategories,
     products,
     batches,
     transactions,
@@ -4093,6 +4466,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     bulkReminderSentAt,
     sendBulkReminder,
     actorError,
+    // Rental / Lending
+    rentals,
+    addRental,
+    returnRental,
+    deleteRental,
+    getActiveRentals,
+    getOverdueRentals,
   };
 
   return (

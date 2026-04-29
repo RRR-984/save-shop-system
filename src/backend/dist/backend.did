@@ -15,12 +15,25 @@ type UpdateShopResult =
    error: opt text;
    success: bool;
  };
+type TableStatus = 
+ variant {
+   Free;
+   Occupied;
+   Reserved;
+ };
+type TableId = text;
 type SuperAdminChangeLog = 
  record {
    fromMobile: text;
    id: text;
    timestamp: int;
    toMobile: text;
+ };
+type ShopStatus = 
+ variant {
+   active;
+   dead;
+   inactive;
  };
 type ShopStatsResult = 
  record {
@@ -29,7 +42,9 @@ type ShopStatsResult =
    sessionCount: nat;
    shopId: text;
    shopName: text;
+   totalRevenue: int;
    totalSalesAmount: float64;
+   totalSalesCount: nat;
  };
 type ShopStats = 
  record {
@@ -41,15 +56,107 @@ type ShopStats =
    shopName: text;
    transactions: nat;
  };
+type ShopRankResult = 
+ record {
+   lastActivityTs: int;
+   ownerMobile: text;
+   rankScore: int;
+   shopId: text;
+   shopName: text;
+   status: ShopStatus;
+   totalRevenue: int;
+   totalSalesCount: nat;
+ };
 type ShopMeta = 
  record {
    address: text;
+   category: text;
    city: text;
    createdAt: text;
    id: text;
    isDeleted: bool;
+   lastActivityTs: int;
    name: text;
    ownerMobile: text;
+   status: ShopStatus;
+ };
+type RestaurantTable = 
+ record {
+   capacity: nat;
+   currentOrderId: opt OrderId;
+   id: TableId;
+   restaurantId: text;
+   status: TableStatus;
+   tableNumber: nat;
+ };
+type RestaurantOrder = 
+ record {
+   billId: opt BillId;
+   createdAt: int;
+   id: OrderId;
+   items: vec OrderItem;
+   kotId: opt KotId;
+   notes: text;
+   orderType: OrderType;
+   restaurantId: text;
+   status: OrderStatus;
+   tableId: opt TableId;
+   tableNumber: opt nat;
+   updatedAt: int;
+ };
+type RestaurantConfig = 
+ record {
+   gstEnabled: bool;
+   gstRate: float64;
+   quickOrderItems: vec MenuItemId;
+   restaurantId: text;
+   serviceChargeEnabled: bool;
+   serviceChargeRate: float64;
+   tableCount: nat;
+ };
+type RestaurantBill = 
+ record {
+   cgst: float64;
+   discount: float64;
+   discountType: DiscountType;
+   discountValue: float64;
+   gstEnabled: bool;
+   gstRate: float64;
+   id: BillId;
+   items: vec OrderItem;
+   orderId: OrderId;
+   paidAt: int;
+   paymentMode: PaymentMode;
+   restaurantId: text;
+   serviceCharge: float64;
+   serviceChargeEnabled: bool;
+   serviceChargeRate: float64;
+   sgst: float64;
+   subtotal: float64;
+   total: float64;
+ };
+type ReportResult = 
+ record {
+   topItems: vec record {
+                   itemName: text;
+                   quantity: nat;
+                   revenue: float64;
+                 };
+   totalOrders: nat;
+   totalRevenue: float64;
+ };
+type PortionSize = 
+ variant {
+   Full;
+   Half;
+   Regular;
+ };
+type PaymentMode = 
+ variant {
+   Card;
+   Cash;
+   Online;
+   Partial;
  };
 type OwnerStats = 
  record {
@@ -59,6 +166,51 @@ type OwnerStats =
    totalProfit: int;
    totalSales: nat;
    totalTransactions: nat;
+ };
+type OrderType = 
+ variant {
+   DineIn;
+   Online;
+   Takeaway;
+ };
+type OrderStatus = 
+ variant {
+   Billed;
+   Cancelled;
+   KotSent;
+   Open;
+ };
+type OrderItem = 
+ record {
+   itemName: text;
+   menuItemId: MenuItemId;
+   portionSize: PortionSize;
+   quantity: nat;
+   subtotal: float64;
+   unitPrice: float64;
+ };
+type OrderId = text;
+type MenuItemId = text;
+type MenuItem = 
+ record {
+   basePrice: float64;
+   category: MenuCategory;
+   createdAt: int;
+   fullPrice: opt float64;
+   halfPrice: opt float64;
+   id: MenuItemId;
+   isActive: bool;
+   isHalfFullEnabled: bool;
+   isQuickOrder: bool;
+   name: text;
+   restaurantId: text;
+ };
+type MenuCategory = 
+ variant {
+   Drinks;
+   NonVeg;
+   Snacks;
+   Veg;
  };
 type LockResult = 
  variant {
@@ -79,13 +231,59 @@ type LockRecord =
    userId: text;
    userName: text;
  };
+type KotStatus = 
+ variant {
+   Cooking;
+   Pending;
+   Ready;
+ };
+type KotItem = 
+ record {
+   itemName: text;
+   menuItemId: MenuItemId;
+   notes: text;
+   portionSize: PortionSize;
+   quantity: nat;
+ };
+type KotId = text;
+type KOT = 
+ record {
+   cookingStartedAt: opt int;
+   createdAt: int;
+   id: KotId;
+   items: vec KotItem;
+   orderId: OrderId;
+   orderType: OrderType;
+   readyAt: opt int;
+   restaurantId: text;
+   status: KotStatus;
+   tableNumber: opt nat;
+ };
 type IdempotencyRecord = 
  record {
    invoiceId: text;
    processedAt: int;
    shopId: text;
  };
+type GlobalCategory = 
+ record {
+   id: text;
+   isDefault: bool;
+   isDeleted: bool;
+   name: text;
+ };
+type DiscountType = 
+ variant {
+   Flat;
+   Percent;
+ };
 type DeleteShopResult = record {success: bool;};
+type CategoryResult = 
+ variant {
+   err: text;
+   ok: GlobalCategory;
+ };
+type BillId = text;
 type BackupSnapshotMeta = 
  record {
    id: text;
@@ -122,13 +320,58 @@ type ActiveUserRecord =
 service : {
   acquireLock: (recordId: text, recordType: text, shopId: text, userId: 
    text, userName: text) -> (LockResult);
-  addShop: (ownerMobile: text, shopName: text, address: text, city: text) ->
-   (AddShopResult);
+  addGlobalCategory: (name: text) -> (CategoryResult);
+  addItemsToOrder: (restaurantId: text, orderId: OrderId, items:
+   vec OrderItem) -> (variant {
+                        err: text;
+                        ok;
+                      });
+  addMenuItem: (restaurantId: text, name: text, category: MenuCategory,
+   basePrice: float64, halfPrice: opt float64, fullPrice: opt float64,
+   isHalfFullEnabled: bool, isQuickOrder: bool) ->
+   (variant {
+      err: text;
+      ok: MenuItemId;
+    });
+  addShop: (ownerMobile: text, shopName: text, address: text, city: text,
+   category: text) -> (AddShopResult);
+  addTable: (restaurantId: text, tableNumber: nat, capacity: nat) ->
+   (variant {
+      err: text;
+      ok: TableId;
+    });
+  cancelOrder: (restaurantId: text, orderId: OrderId) ->
+   (variant {
+      err: text;
+      ok;
+    });
   checkIdempotency: (idempotencyKey: text, shopId: text) ->
    (opt IdempotencyRecord) query;
   checkMobileExists: (mobile: text) -> (bool) query;
   clearShopData: (shopId: text) -> ();
+  createBill: (restaurantId: text, orderId: OrderId, gstEnabled: bool,
+   gstRate: float64, serviceChargeEnabled: bool, serviceChargeRate: float64,
+   discountType: DiscountType, discountValue: float64, paymentMode:
+   PaymentMode) -> (variant {
+                      err: text;
+                      ok: RestaurantBill;
+                    });
+  createOrder: (restaurantId: text, orderType: OrderType, tableId:
+   opt TableId, items: vec OrderItem, notes: text) ->
+   (variant {
+      err: text;
+      ok: OrderId;
+    });
   deleteBackupSnapshot: (shopId: text, snapshotId: text) -> ();
+  deleteGlobalCategory: (id: text) -> (variant {
+                                         err: text;
+                                         ok;
+                                       });
+  deleteMenuItem: (restaurantId: text, menuItemId: MenuItemId) ->
+   (variant {
+      err: text;
+      ok;
+    });
   deleteShop: (shopId: text) -> (DeleteShopResult);
   findDuplicateUsers: () -> (text);
   fullSystemReset: (callerMobile: text) ->
@@ -137,27 +380,34 @@ service : {
       message: text;
       success: bool;
     });
+  getActiveKOTs: (restaurantId: text) -> (vec KOT);
   getActiveUsersForShop: (shopId: text) -> (vec ActiveUserRecord) query;
   getActivities: (shopIdFilter: opt text, startTs: opt int, endTs:
    opt int) -> (vec ActivityRecord) query;
   getAdminSettings: () -> (AdminSettings) query;
+  getAllKOTs: (restaurantId: text) -> (vec KOT);
   getAllUsersWithStats: (startTs: opt int, endTs: opt int) ->
    (vec UserStatsResult) query;
   getAuditLogs: (shopId: text) -> (text) query;
   getBackupSnapshotData: (shopId: text, snapshotId: text) -> (opt text) query;
   getBackupSnapshots: (shopId: text) -> (vec BackupSnapshotMeta) query;
   getBatches: (shopId: text) -> (text) query;
+  getBill: (restaurantId: text, billId: BillId) -> (opt RestaurantBill);
   getCallerUserProfile: () -> (opt UserProfile) query;
   getCategories: (shopId: text) -> (text) query;
   getCustomerOrders: (shopId: text) -> (text) query;
   getCustomers: (shopId: text) -> (text) query;
   getDrafts: (shopId: text) -> (text) query;
   getFeedback: (shopId: text) -> (text) query;
+  getGlobalCategories: () -> (vec GlobalCategory) query;
   getInvoices: (shopId: text) -> (text) query;
   getLockStatus: (recordId: text, recordType: text, shopId: text) ->
    (opt LockRecord) query;
   getLowPriceAlertLogs: (shopId: text) -> (text) query;
+  getMenuItems: (restaurantId: text) -> (vec MenuItem);
   getMergeAuditLog: () -> (text) query;
+  getOrders: (restaurantId: text, statusFilter: opt OrderStatus) ->
+   (vec RestaurantOrder);
   getOwnerStats: (mobile: text) -> (OwnerStats) query;
   getPayments: (shopId: text) -> (text) query;
   getProducts: (shopId: text) -> (text) query;
@@ -166,6 +416,9 @@ service : {
   getReferralSignups: (shopId: text) -> (text) query;
   getReminderLogs: (shopId: text) -> (text) query;
   getReminderRequests: (shopId: text) -> (text) query;
+  getRestaurantConfig: (restaurantId: text) -> (RestaurantConfig);
+  getRestaurantReports: (restaurantId: text, fromTs: int, toTs: int) ->
+   (ReportResult);
   getReturns: (shopId: text) -> (text) query;
   getSettings: (shopId: text) -> (text) query;
   getShop: (shopId: text) -> (opt ShopMeta) query;
@@ -175,6 +428,8 @@ service : {
   getStaffAcrossShops: (mobile: text) -> (text) query;
   getSuperAdminChangeLog: () -> (vec SuperAdminChangeLog) query;
   getSyncLogs: (shopId: text) -> (text) query;
+  getTables: (restaurantId: text) -> (vec RestaurantTable);
+  getTopActiveShops: (limit: nat) -> (vec ShopRankResult) query;
   getTransactions: (shopId: text) -> (text) query;
   getUserProfile: (user: principal) -> (opt UserProfile) query;
   getUsers: (shopId: text) -> (text) query;
@@ -223,9 +478,43 @@ service : {
   saveUsers: (shopId: text, data: text) -> ();
   saveVendorRateHistory: (shopId: text, data: text) -> ();
   saveVendors: (shopId: text, data: text) -> ();
+  sendKOT: (restaurantId: text, orderId: OrderId) ->
+   (variant {
+      err: text;
+      ok: KotId;
+    });
+  settleOrder: (restaurantId: text, orderId: OrderId) ->
+   (variant {
+      err: text;
+      ok;
+    });
   toggleUserPaidStatus: (userId: text, shopId: text, isPaid: bool) -> (bool);
-  updateShop: (shopId: text, name: text, address: text, city: text) ->
-   (UpdateShopResult);
+  updateGlobalCategory: (id: text, name: text) -> (CategoryResult);
+  updateKotStatus: (restaurantId: text, kotId: KotId, status: KotStatus) ->
+   (variant {
+      err: text;
+      ok;
+    });
+  updateMenuItem: (restaurantId: text, menuItemId: MenuItemId, name:
+   opt text, category: opt MenuCategory, basePrice: opt float64, halfPrice:
+   opt opt float64, fullPrice: opt opt float64, isHalfFullEnabled: opt bool,
+   isQuickOrder: opt bool, isActive: opt bool) -> (variant {
+                                                     err: text;
+                                                     ok;
+                                                   });
+  updateRestaurantConfig: (restaurantId: text, cfg: RestaurantConfig) ->
+   (variant {
+      err: text;
+      ok;
+    });
+  updateShop: (shopId: text, name: text, address: text, city: text, category:
+   text) -> (UpdateShopResult);
+  updateShopStatus: (shopId: text, lastActivityTs: int) -> ();
+  updateTableStatus: (restaurantId: text, tableId: TableId, status:
+   TableStatus, currentOrderId: opt OrderId) -> (variant {
+                                                   err: text;
+                                                   ok;
+                                                 });
   verifyAndChangeSuperAdmin: (currentMobile: text, newMobile: text) ->
    (record {
       message: text;

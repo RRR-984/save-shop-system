@@ -38,12 +38,46 @@ export interface BackupSnapshotMeta {
   'tag' : string,
   'timestamp' : bigint,
 }
+export type BillId = string;
+export type CategoryResult = { 'ok' : GlobalCategory } |
+  { 'err' : string };
 export interface DeleteShopResult { 'success' : boolean }
+export type DiscountType = { 'Flat' : null } |
+  { 'Percent' : null };
+export interface GlobalCategory {
+  'id' : string,
+  'isDeleted' : boolean,
+  'name' : string,
+  'isDefault' : boolean,
+}
 export interface IdempotencyRecord {
   'shopId' : string,
   'invoiceId' : string,
   'processedAt' : bigint,
 }
+export interface KOT {
+  'id' : KotId,
+  'readyAt' : [] | [bigint],
+  'status' : KotStatus,
+  'createdAt' : bigint,
+  'tableNumber' : [] | [bigint],
+  'orderType' : OrderType,
+  'orderId' : OrderId,
+  'restaurantId' : string,
+  'cookingStartedAt' : [] | [bigint],
+  'items' : Array<KotItem>,
+}
+export type KotId = string;
+export interface KotItem {
+  'portionSize' : PortionSize,
+  'notes' : string,
+  'itemName' : string,
+  'quantity' : bigint,
+  'menuItemId' : MenuItemId,
+}
+export type KotStatus = { 'Cooking' : null } |
+  { 'Ready' : null } |
+  { 'Pending' : null };
 export interface LockRecord {
   'userName' : string,
   'expiresAt' : bigint,
@@ -61,6 +95,40 @@ export type LockResult = {
     }
   } |
   { 'acquired' : null };
+export type MenuCategory = { 'Veg' : null } |
+  { 'Drinks' : null } |
+  { 'NonVeg' : null } |
+  { 'Snacks' : null };
+export interface MenuItem {
+  'id' : MenuItemId,
+  'isHalfFullEnabled' : boolean,
+  'halfPrice' : [] | [number],
+  'isQuickOrder' : boolean,
+  'fullPrice' : [] | [number],
+  'name' : string,
+  'createdAt' : bigint,
+  'isActive' : boolean,
+  'restaurantId' : string,
+  'category' : MenuCategory,
+  'basePrice' : number,
+}
+export type MenuItemId = string;
+export type OrderId = string;
+export interface OrderItem {
+  'portionSize' : PortionSize,
+  'itemName' : string,
+  'quantity' : bigint,
+  'unitPrice' : number,
+  'menuItemId' : MenuItemId,
+  'subtotal' : number,
+}
+export type OrderStatus = { 'Billed' : null } |
+  { 'Open' : null } |
+  { 'KotSent' : null } |
+  { 'Cancelled' : null };
+export type OrderType = { 'Online' : null } |
+  { 'Takeaway' : null } |
+  { 'DineIn' : null };
 export interface OwnerStats {
   'totalProducts' : bigint,
   'totalProfit' : bigint,
@@ -69,13 +137,91 @@ export interface OwnerStats {
   'shopStats' : Array<ShopStats>,
   'totalTransactions' : bigint,
 }
+export type PaymentMode = { 'Card' : null } |
+  { 'Cash' : null } |
+  { 'Online' : null } |
+  { 'Partial' : null };
+export type PortionSize = { 'Full' : null } |
+  { 'Half' : null } |
+  { 'Regular' : null };
+export interface ReportResult {
+  'totalOrders' : bigint,
+  'topItems' : Array<
+    { 'revenue' : number, 'itemName' : string, 'quantity' : bigint }
+  >,
+  'totalRevenue' : number,
+}
+export interface RestaurantBill {
+  'id' : BillId,
+  'total' : number,
+  'discountValue' : number,
+  'serviceChargeRate' : number,
+  'cgst' : number,
+  'serviceCharge' : number,
+  'discountType' : DiscountType,
+  'sgst' : number,
+  'gstEnabled' : boolean,
+  'orderId' : OrderId,
+  'restaurantId' : string,
+  'discount' : number,
+  'paymentMode' : PaymentMode,
+  'gstRate' : number,
+  'items' : Array<OrderItem>,
+  'serviceChargeEnabled' : boolean,
+  'paidAt' : bigint,
+  'subtotal' : number,
+}
+export interface RestaurantConfig {
+  'serviceChargeRate' : number,
+  'gstEnabled' : boolean,
+  'restaurantId' : string,
+  'quickOrderItems' : Array<MenuItemId>,
+  'gstRate' : number,
+  'tableCount' : bigint,
+  'serviceChargeEnabled' : boolean,
+}
+export interface RestaurantOrder {
+  'id' : OrderId,
+  'status' : OrderStatus,
+  'createdAt' : bigint,
+  'tableId' : [] | [TableId],
+  'tableNumber' : [] | [bigint],
+  'orderType' : OrderType,
+  'restaurantId' : string,
+  'updatedAt' : bigint,
+  'notes' : string,
+  'items' : Array<OrderItem>,
+  'kotId' : [] | [KotId],
+  'billId' : [] | [BillId],
+}
+export interface RestaurantTable {
+  'id' : TableId,
+  'status' : TableStatus,
+  'tableNumber' : bigint,
+  'restaurantId' : string,
+  'currentOrderId' : [] | [OrderId],
+  'capacity' : bigint,
+}
 export interface ShopMeta {
   'id' : string,
+  'status' : ShopStatus,
   'isDeleted' : boolean,
   'city' : string,
   'name' : string,
   'createdAt' : string,
   'address' : string,
+  'category' : string,
+  'lastActivityTs' : bigint,
+  'ownerMobile' : string,
+}
+export interface ShopRankResult {
+  'status' : ShopStatus,
+  'shopId' : string,
+  'rankScore' : bigint,
+  'totalSalesCount' : bigint,
+  'shopName' : string,
+  'totalRevenue' : bigint,
+  'lastActivityTs' : bigint,
   'ownerMobile' : string,
 }
 export interface ShopStats {
@@ -91,16 +237,25 @@ export interface ShopStatsResult {
   'shopId' : string,
   'totalSalesAmount' : number,
   'lastActivity' : bigint,
+  'totalSalesCount' : bigint,
   'shopName' : string,
+  'totalRevenue' : bigint,
   'sessionCount' : bigint,
   'ownerMobile' : string,
 }
+export type ShopStatus = { 'active' : null } |
+  { 'dead' : null } |
+  { 'inactive' : null };
 export interface SuperAdminChangeLog {
   'id' : string,
   'fromMobile' : string,
   'timestamp' : bigint,
   'toMobile' : string,
 }
+export type TableId = string;
+export type TableStatus = { 'Reserved' : null } |
+  { 'Free' : null } |
+  { 'Occupied' : null };
 export interface UpdateShopResult {
   'error' : [] | [string],
   'success' : boolean,
@@ -121,23 +276,88 @@ export interface _SERVICE {
     [string, string, string, string, string],
     LockResult
   >,
-  'addShop' : ActorMethod<[string, string, string, string], AddShopResult>,
+  'addGlobalCategory' : ActorMethod<[string], CategoryResult>,
+  'addItemsToOrder' : ActorMethod<
+    [string, OrderId, Array<OrderItem>],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'addMenuItem' : ActorMethod<
+    [
+      string,
+      string,
+      MenuCategory,
+      number,
+      [] | [number],
+      [] | [number],
+      boolean,
+      boolean,
+    ],
+    { 'ok' : MenuItemId } |
+      { 'err' : string }
+  >,
+  'addShop' : ActorMethod<
+    [string, string, string, string, string],
+    AddShopResult
+  >,
+  'addTable' : ActorMethod<
+    [string, bigint, bigint],
+    { 'ok' : TableId } |
+      { 'err' : string }
+  >,
+  'cancelOrder' : ActorMethod<
+    [string, OrderId],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'checkIdempotency' : ActorMethod<[string, string], [] | [IdempotencyRecord]>,
   'checkMobileExists' : ActorMethod<[string], boolean>,
   'clearShopData' : ActorMethod<[string], undefined>,
+  'createBill' : ActorMethod<
+    [
+      string,
+      OrderId,
+      boolean,
+      number,
+      boolean,
+      number,
+      DiscountType,
+      number,
+      PaymentMode,
+    ],
+    { 'ok' : RestaurantBill } |
+      { 'err' : string }
+  >,
+  'createOrder' : ActorMethod<
+    [string, OrderType, [] | [TableId], Array<OrderItem>, string],
+    { 'ok' : OrderId } |
+      { 'err' : string }
+  >,
   'deleteBackupSnapshot' : ActorMethod<[string, string], undefined>,
+  'deleteGlobalCategory' : ActorMethod<
+    [string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'deleteMenuItem' : ActorMethod<
+    [string, MenuItemId],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'deleteShop' : ActorMethod<[string], DeleteShopResult>,
   'findDuplicateUsers' : ActorMethod<[], string>,
   'fullSystemReset' : ActorMethod<
     [string],
     { 'deletedShops' : bigint, 'message' : string, 'success' : boolean }
   >,
+  'getActiveKOTs' : ActorMethod<[string], Array<KOT>>,
   'getActiveUsersForShop' : ActorMethod<[string], Array<ActiveUserRecord>>,
   'getActivities' : ActorMethod<
     [[] | [string], [] | [bigint], [] | [bigint]],
     Array<ActivityRecord>
   >,
   'getAdminSettings' : ActorMethod<[], AdminSettings>,
+  'getAllKOTs' : ActorMethod<[string], Array<KOT>>,
   'getAllUsersWithStats' : ActorMethod<
     [[] | [bigint], [] | [bigint]],
     Array<UserStatsResult>
@@ -146,16 +366,23 @@ export interface _SERVICE {
   'getBackupSnapshotData' : ActorMethod<[string, string], [] | [string]>,
   'getBackupSnapshots' : ActorMethod<[string], Array<BackupSnapshotMeta>>,
   'getBatches' : ActorMethod<[string], string>,
+  'getBill' : ActorMethod<[string, BillId], [] | [RestaurantBill]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCategories' : ActorMethod<[string], string>,
   'getCustomerOrders' : ActorMethod<[string], string>,
   'getCustomers' : ActorMethod<[string], string>,
   'getDrafts' : ActorMethod<[string], string>,
   'getFeedback' : ActorMethod<[string], string>,
+  'getGlobalCategories' : ActorMethod<[], Array<GlobalCategory>>,
   'getInvoices' : ActorMethod<[string], string>,
   'getLockStatus' : ActorMethod<[string, string, string], [] | [LockRecord]>,
   'getLowPriceAlertLogs' : ActorMethod<[string], string>,
+  'getMenuItems' : ActorMethod<[string], Array<MenuItem>>,
   'getMergeAuditLog' : ActorMethod<[], string>,
+  'getOrders' : ActorMethod<
+    [string, [] | [OrderStatus]],
+    Array<RestaurantOrder>
+  >,
   'getOwnerStats' : ActorMethod<[string], OwnerStats>,
   'getPayments' : ActorMethod<[string], string>,
   'getProducts' : ActorMethod<[string], string>,
@@ -164,6 +391,8 @@ export interface _SERVICE {
   'getReferralSignups' : ActorMethod<[string], string>,
   'getReminderLogs' : ActorMethod<[string], string>,
   'getReminderRequests' : ActorMethod<[string], string>,
+  'getRestaurantConfig' : ActorMethod<[string], RestaurantConfig>,
+  'getRestaurantReports' : ActorMethod<[string, bigint, bigint], ReportResult>,
   'getReturns' : ActorMethod<[string], string>,
   'getSettings' : ActorMethod<[string], string>,
   'getShop' : ActorMethod<[string], [] | [ShopMeta]>,
@@ -175,6 +404,8 @@ export interface _SERVICE {
   'getStaffAcrossShops' : ActorMethod<[string], string>,
   'getSuperAdminChangeLog' : ActorMethod<[], Array<SuperAdminChangeLog>>,
   'getSyncLogs' : ActorMethod<[string], string>,
+  'getTables' : ActorMethod<[string], Array<RestaurantTable>>,
+  'getTopActiveShops' : ActorMethod<[bigint], Array<ShopRankResult>>,
   'getTransactions' : ActorMethod<[string], string>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getUsers' : ActorMethod<[string], string>,
@@ -221,10 +452,53 @@ export interface _SERVICE {
   'saveUsers' : ActorMethod<[string, string], undefined>,
   'saveVendorRateHistory' : ActorMethod<[string, string], undefined>,
   'saveVendors' : ActorMethod<[string, string], undefined>,
+  'sendKOT' : ActorMethod<
+    [string, OrderId],
+    { 'ok' : KotId } |
+      { 'err' : string }
+  >,
+  'settleOrder' : ActorMethod<
+    [string, OrderId],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'toggleUserPaidStatus' : ActorMethod<[string, string, boolean], boolean>,
+  'updateGlobalCategory' : ActorMethod<[string, string], CategoryResult>,
+  'updateKotStatus' : ActorMethod<
+    [string, KotId, KotStatus],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'updateMenuItem' : ActorMethod<
+    [
+      string,
+      MenuItemId,
+      [] | [string],
+      [] | [MenuCategory],
+      [] | [number],
+      [] | [[] | [number]],
+      [] | [[] | [number]],
+      [] | [boolean],
+      [] | [boolean],
+      [] | [boolean],
+    ],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'updateRestaurantConfig' : ActorMethod<
+    [string, RestaurantConfig],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'updateShop' : ActorMethod<
-    [string, string, string, string],
+    [string, string, string, string, string],
     UpdateShopResult
+  >,
+  'updateShopStatus' : ActorMethod<[string, bigint], undefined>,
+  'updateTableStatus' : ActorMethod<
+    [string, TableId, TableStatus, [] | [OrderId]],
+    { 'ok' : null } |
+      { 'err' : string }
   >,
   'verifyAndChangeSuperAdmin' : ActorMethod<
     [string, string],

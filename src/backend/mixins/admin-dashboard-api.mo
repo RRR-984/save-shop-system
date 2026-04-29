@@ -5,6 +5,7 @@ import Int "mo:core/Int";
 import Text "mo:core/Text";
 import AdminDashboardTypes "../types/admin-dashboard";
 import MultiShopTypes "../types/multishop";
+import MultiShopLib "../lib/multishop";
 
 /// Admin Dashboard Mixin
 /// Exposes super-admin API endpoints.
@@ -78,6 +79,8 @@ mixin (
       metadata;
     };
     activityStore.add(id, record);
+    // Auto-update shop status on every activity (session, billing, stock)
+    MultiShopLib.updateShopStatus(shopRegistry, shopId, ts);
   };
 
   // ── getActivities ───────────────────────────────────────────────────────────
@@ -330,6 +333,8 @@ mixin (
             ownerMobile;
             sessionCount;
             totalSalesAmount = 0.0;
+            totalRevenue     = 0;
+            totalSalesCount  = 0;
             lastActivity;
           });
         };

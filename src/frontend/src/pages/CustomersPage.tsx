@@ -1837,16 +1837,18 @@ export function CustomersPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {filtered.map((ledger, idx) => (
-              <CustomerCard
-                key={`${ledger.customerName}__${ledger.customerMobile}`}
-                ledger={ledger}
-                index={idx}
-                shopName={shopName}
-                currentUser={user}
-                isProMode={isProMode}
-              />
-            ))}
+            {[...filtered]
+              .sort((a, b) => a.customerName.localeCompare(b.customerName))
+              .map((ledger, idx) => (
+                <CustomerCard
+                  key={`${ledger.customerName}__${ledger.customerMobile}`}
+                  ledger={ledger}
+                  index={idx}
+                  shopName={shopName}
+                  currentUser={user}
+                  isProMode={isProMode}
+                />
+              ))}
           </div>
         )}
       </div>

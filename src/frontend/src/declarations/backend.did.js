@@ -16,17 +16,110 @@ export const LockResult = IDL.Variant({
   }),
   'acquired' : IDL.Null,
 });
+export const GlobalCategory = IDL.Record({
+  'id' : IDL.Text,
+  'isDeleted' : IDL.Bool,
+  'name' : IDL.Text,
+  'isDefault' : IDL.Bool,
+});
+export const CategoryResult = IDL.Variant({
+  'ok' : GlobalCategory,
+  'err' : IDL.Text,
+});
+export const OrderId = IDL.Text;
+export const PortionSize = IDL.Variant({
+  'Full' : IDL.Null,
+  'Half' : IDL.Null,
+  'Regular' : IDL.Null,
+});
+export const MenuItemId = IDL.Text;
+export const OrderItem = IDL.Record({
+  'portionSize' : PortionSize,
+  'itemName' : IDL.Text,
+  'quantity' : IDL.Nat,
+  'unitPrice' : IDL.Float64,
+  'menuItemId' : MenuItemId,
+  'subtotal' : IDL.Float64,
+});
+export const MenuCategory = IDL.Variant({
+  'Veg' : IDL.Null,
+  'Drinks' : IDL.Null,
+  'NonVeg' : IDL.Null,
+  'Snacks' : IDL.Null,
+});
 export const AddShopResult = IDL.Record({
   'shopId' : IDL.Text,
   'error' : IDL.Opt(IDL.Text),
   'success' : IDL.Bool,
 });
+export const TableId = IDL.Text;
 export const IdempotencyRecord = IDL.Record({
   'shopId' : IDL.Text,
   'invoiceId' : IDL.Text,
   'processedAt' : IDL.Int,
 });
+export const DiscountType = IDL.Variant({
+  'Flat' : IDL.Null,
+  'Percent' : IDL.Null,
+});
+export const PaymentMode = IDL.Variant({
+  'Card' : IDL.Null,
+  'Cash' : IDL.Null,
+  'Online' : IDL.Null,
+  'Partial' : IDL.Null,
+});
+export const BillId = IDL.Text;
+export const RestaurantBill = IDL.Record({
+  'id' : BillId,
+  'total' : IDL.Float64,
+  'discountValue' : IDL.Float64,
+  'serviceChargeRate' : IDL.Float64,
+  'cgst' : IDL.Float64,
+  'serviceCharge' : IDL.Float64,
+  'discountType' : DiscountType,
+  'sgst' : IDL.Float64,
+  'gstEnabled' : IDL.Bool,
+  'orderId' : OrderId,
+  'restaurantId' : IDL.Text,
+  'discount' : IDL.Float64,
+  'paymentMode' : PaymentMode,
+  'gstRate' : IDL.Float64,
+  'items' : IDL.Vec(OrderItem),
+  'serviceChargeEnabled' : IDL.Bool,
+  'paidAt' : IDL.Int,
+  'subtotal' : IDL.Float64,
+});
+export const OrderType = IDL.Variant({
+  'Online' : IDL.Null,
+  'Takeaway' : IDL.Null,
+  'DineIn' : IDL.Null,
+});
 export const DeleteShopResult = IDL.Record({ 'success' : IDL.Bool });
+export const KotId = IDL.Text;
+export const KotStatus = IDL.Variant({
+  'Cooking' : IDL.Null,
+  'Ready' : IDL.Null,
+  'Pending' : IDL.Null,
+});
+export const KotItem = IDL.Record({
+  'portionSize' : PortionSize,
+  'notes' : IDL.Text,
+  'itemName' : IDL.Text,
+  'quantity' : IDL.Nat,
+  'menuItemId' : MenuItemId,
+});
+export const KOT = IDL.Record({
+  'id' : KotId,
+  'readyAt' : IDL.Opt(IDL.Int),
+  'status' : KotStatus,
+  'createdAt' : IDL.Int,
+  'tableNumber' : IDL.Opt(IDL.Nat),
+  'orderType' : OrderType,
+  'orderId' : OrderId,
+  'restaurantId' : IDL.Text,
+  'cookingStartedAt' : IDL.Opt(IDL.Int),
+  'items' : IDL.Vec(KotItem),
+});
 export const ActiveUserRecord = IDL.Record({
   'userName' : IDL.Text,
   'userId' : IDL.Text,
@@ -70,6 +163,39 @@ export const LockRecord = IDL.Record({
   'acquiredAt' : IDL.Int,
   'recordId' : IDL.Text,
 });
+export const MenuItem = IDL.Record({
+  'id' : MenuItemId,
+  'isHalfFullEnabled' : IDL.Bool,
+  'halfPrice' : IDL.Opt(IDL.Float64),
+  'isQuickOrder' : IDL.Bool,
+  'fullPrice' : IDL.Opt(IDL.Float64),
+  'name' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'isActive' : IDL.Bool,
+  'restaurantId' : IDL.Text,
+  'category' : MenuCategory,
+  'basePrice' : IDL.Float64,
+});
+export const OrderStatus = IDL.Variant({
+  'Billed' : IDL.Null,
+  'Open' : IDL.Null,
+  'KotSent' : IDL.Null,
+  'Cancelled' : IDL.Null,
+});
+export const RestaurantOrder = IDL.Record({
+  'id' : OrderId,
+  'status' : OrderStatus,
+  'createdAt' : IDL.Int,
+  'tableId' : IDL.Opt(TableId),
+  'tableNumber' : IDL.Opt(IDL.Nat),
+  'orderType' : OrderType,
+  'restaurantId' : IDL.Text,
+  'updatedAt' : IDL.Int,
+  'notes' : IDL.Text,
+  'items' : IDL.Vec(OrderItem),
+  'kotId' : IDL.Opt(KotId),
+  'billId' : IDL.Opt(BillId),
+});
 export const ShopStats = IDL.Record({
   'shopId' : IDL.Text,
   'sales' : IDL.Nat,
@@ -87,20 +213,50 @@ export const OwnerStats = IDL.Record({
   'shopStats' : IDL.Vec(ShopStats),
   'totalTransactions' : IDL.Nat,
 });
+export const RestaurantConfig = IDL.Record({
+  'serviceChargeRate' : IDL.Float64,
+  'gstEnabled' : IDL.Bool,
+  'restaurantId' : IDL.Text,
+  'quickOrderItems' : IDL.Vec(MenuItemId),
+  'gstRate' : IDL.Float64,
+  'tableCount' : IDL.Nat,
+  'serviceChargeEnabled' : IDL.Bool,
+});
+export const ReportResult = IDL.Record({
+  'totalOrders' : IDL.Nat,
+  'topItems' : IDL.Vec(
+    IDL.Record({
+      'revenue' : IDL.Float64,
+      'itemName' : IDL.Text,
+      'quantity' : IDL.Nat,
+    })
+  ),
+  'totalRevenue' : IDL.Float64,
+});
+export const ShopStatus = IDL.Variant({
+  'active' : IDL.Null,
+  'dead' : IDL.Null,
+  'inactive' : IDL.Null,
+});
 export const ShopMeta = IDL.Record({
   'id' : IDL.Text,
+  'status' : ShopStatus,
   'isDeleted' : IDL.Bool,
   'city' : IDL.Text,
   'name' : IDL.Text,
   'createdAt' : IDL.Text,
   'address' : IDL.Text,
+  'category' : IDL.Text,
+  'lastActivityTs' : IDL.Int,
   'ownerMobile' : IDL.Text,
 });
 export const ShopStatsResult = IDL.Record({
   'shopId' : IDL.Text,
   'totalSalesAmount' : IDL.Float64,
   'lastActivity' : IDL.Int,
+  'totalSalesCount' : IDL.Nat,
   'shopName' : IDL.Text,
+  'totalRevenue' : IDL.Int,
   'sessionCount' : IDL.Nat,
   'ownerMobile' : IDL.Text,
 });
@@ -109,6 +265,29 @@ export const SuperAdminChangeLog = IDL.Record({
   'fromMobile' : IDL.Text,
   'timestamp' : IDL.Int,
   'toMobile' : IDL.Text,
+});
+export const TableStatus = IDL.Variant({
+  'Reserved' : IDL.Null,
+  'Free' : IDL.Null,
+  'Occupied' : IDL.Null,
+});
+export const RestaurantTable = IDL.Record({
+  'id' : TableId,
+  'status' : TableStatus,
+  'tableNumber' : IDL.Nat,
+  'restaurantId' : IDL.Text,
+  'currentOrderId' : IDL.Opt(OrderId),
+  'capacity' : IDL.Nat,
+});
+export const ShopRankResult = IDL.Record({
+  'status' : ShopStatus,
+  'shopId' : IDL.Text,
+  'rankScore' : IDL.Int,
+  'totalSalesCount' : IDL.Nat,
+  'shopName' : IDL.Text,
+  'totalRevenue' : IDL.Int,
+  'lastActivityTs' : IDL.Int,
+  'ownerMobile' : IDL.Text,
 });
 export const UpdateShopResult = IDL.Record({
   'error' : IDL.Opt(IDL.Text),
@@ -121,9 +300,39 @@ export const idlService = IDL.Service({
       [LockResult],
       [],
     ),
+  'addGlobalCategory' : IDL.Func([IDL.Text], [CategoryResult], []),
+  'addItemsToOrder' : IDL.Func(
+      [IDL.Text, OrderId, IDL.Vec(OrderItem)],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'addMenuItem' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        MenuCategory,
+        IDL.Float64,
+        IDL.Opt(IDL.Float64),
+        IDL.Opt(IDL.Float64),
+        IDL.Bool,
+        IDL.Bool,
+      ],
+      [IDL.Variant({ 'ok' : MenuItemId, 'err' : IDL.Text })],
+      [],
+    ),
   'addShop' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [AddShopResult],
+      [],
+    ),
+  'addTable' : IDL.Func(
+      [IDL.Text, IDL.Nat, IDL.Nat],
+      [IDL.Variant({ 'ok' : TableId, 'err' : IDL.Text })],
+      [],
+    ),
+  'cancelOrder' : IDL.Func(
+      [IDL.Text, OrderId],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
   'checkIdempotency' : IDL.Func(
@@ -133,7 +342,37 @@ export const idlService = IDL.Service({
     ),
   'checkMobileExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'clearShopData' : IDL.Func([IDL.Text], [], []),
+  'createBill' : IDL.Func(
+      [
+        IDL.Text,
+        OrderId,
+        IDL.Bool,
+        IDL.Float64,
+        IDL.Bool,
+        IDL.Float64,
+        DiscountType,
+        IDL.Float64,
+        PaymentMode,
+      ],
+      [IDL.Variant({ 'ok' : RestaurantBill, 'err' : IDL.Text })],
+      [],
+    ),
+  'createOrder' : IDL.Func(
+      [IDL.Text, OrderType, IDL.Opt(TableId), IDL.Vec(OrderItem), IDL.Text],
+      [IDL.Variant({ 'ok' : OrderId, 'err' : IDL.Text })],
+      [],
+    ),
   'deleteBackupSnapshot' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'deleteGlobalCategory' : IDL.Func(
+      [IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'deleteMenuItem' : IDL.Func(
+      [IDL.Text, MenuItemId],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'deleteShop' : IDL.Func([IDL.Text], [DeleteShopResult], []),
   'findDuplicateUsers' : IDL.Func([], [IDL.Text], []),
   'fullSystemReset' : IDL.Func(
@@ -147,6 +386,7 @@ export const idlService = IDL.Service({
       ],
       [],
     ),
+  'getActiveKOTs' : IDL.Func([IDL.Text], [IDL.Vec(KOT)], []),
   'getActiveUsersForShop' : IDL.Func(
       [IDL.Text],
       [IDL.Vec(ActiveUserRecord)],
@@ -158,6 +398,7 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getAdminSettings' : IDL.Func([], [AdminSettings], ['query']),
+  'getAllKOTs' : IDL.Func([IDL.Text], [IDL.Vec(KOT)], []),
   'getAllUsersWithStats' : IDL.Func(
       [IDL.Opt(IDL.Int), IDL.Opt(IDL.Int)],
       [IDL.Vec(UserStatsResult)],
@@ -175,12 +416,14 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getBatches' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getBill' : IDL.Func([IDL.Text, BillId], [IDL.Opt(RestaurantBill)], []),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCategories' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getCustomerOrders' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getCustomers' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getDrafts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getFeedback' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getGlobalCategories' : IDL.Func([], [IDL.Vec(GlobalCategory)], ['query']),
   'getInvoices' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getLockStatus' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text],
@@ -188,7 +431,13 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getLowPriceAlertLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getMenuItems' : IDL.Func([IDL.Text], [IDL.Vec(MenuItem)], []),
   'getMergeAuditLog' : IDL.Func([], [IDL.Text], ['query']),
+  'getOrders' : IDL.Func(
+      [IDL.Text, IDL.Opt(OrderStatus)],
+      [IDL.Vec(RestaurantOrder)],
+      [],
+    ),
   'getOwnerStats' : IDL.Func([IDL.Text], [OwnerStats], ['query']),
   'getPayments' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getProducts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
@@ -197,6 +446,12 @@ export const idlService = IDL.Service({
   'getReferralSignups' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getReminderLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getReminderRequests' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getRestaurantConfig' : IDL.Func([IDL.Text], [RestaurantConfig], []),
+  'getRestaurantReports' : IDL.Func(
+      [IDL.Text, IDL.Int, IDL.Int],
+      [ReportResult],
+      [],
+    ),
   'getReturns' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getSettings' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getShop' : IDL.Func([IDL.Text], [IDL.Opt(ShopMeta)], ['query']),
@@ -213,6 +468,12 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getSyncLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getTables' : IDL.Func([IDL.Text], [IDL.Vec(RestaurantTable)], []),
+  'getTopActiveShops' : IDL.Func(
+      [IDL.Nat],
+      [IDL.Vec(ShopRankResult)],
+      ['query'],
+    ),
   'getTransactions' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
@@ -276,14 +537,57 @@ export const idlService = IDL.Service({
   'saveUsers' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveVendorRateHistory' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveVendors' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'sendKOT' : IDL.Func(
+      [IDL.Text, OrderId],
+      [IDL.Variant({ 'ok' : KotId, 'err' : IDL.Text })],
+      [],
+    ),
+  'settleOrder' : IDL.Func(
+      [IDL.Text, OrderId],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'toggleUserPaidStatus' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Bool],
       [IDL.Bool],
       [],
     ),
+  'updateGlobalCategory' : IDL.Func([IDL.Text, IDL.Text], [CategoryResult], []),
+  'updateKotStatus' : IDL.Func(
+      [IDL.Text, KotId, KotStatus],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'updateMenuItem' : IDL.Func(
+      [
+        IDL.Text,
+        MenuItemId,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(MenuCategory),
+        IDL.Opt(IDL.Float64),
+        IDL.Opt(IDL.Opt(IDL.Float64)),
+        IDL.Opt(IDL.Opt(IDL.Float64)),
+        IDL.Opt(IDL.Bool),
+        IDL.Opt(IDL.Bool),
+        IDL.Opt(IDL.Bool),
+      ],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'updateRestaurantConfig' : IDL.Func(
+      [IDL.Text, RestaurantConfig],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'updateShop' : IDL.Func(
-      [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [UpdateShopResult],
+      [],
+    ),
+  'updateShopStatus' : IDL.Func([IDL.Text, IDL.Int], [], []),
+  'updateTableStatus' : IDL.Func(
+      [IDL.Text, TableId, TableStatus, IDL.Opt(OrderId)],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
   'verifyAndChangeSuperAdmin' : IDL.Func(
@@ -304,17 +608,107 @@ export const idlFactory = ({ IDL }) => {
     }),
     'acquired' : IDL.Null,
   });
+  const GlobalCategory = IDL.Record({
+    'id' : IDL.Text,
+    'isDeleted' : IDL.Bool,
+    'name' : IDL.Text,
+    'isDefault' : IDL.Bool,
+  });
+  const CategoryResult = IDL.Variant({
+    'ok' : GlobalCategory,
+    'err' : IDL.Text,
+  });
+  const OrderId = IDL.Text;
+  const PortionSize = IDL.Variant({
+    'Full' : IDL.Null,
+    'Half' : IDL.Null,
+    'Regular' : IDL.Null,
+  });
+  const MenuItemId = IDL.Text;
+  const OrderItem = IDL.Record({
+    'portionSize' : PortionSize,
+    'itemName' : IDL.Text,
+    'quantity' : IDL.Nat,
+    'unitPrice' : IDL.Float64,
+    'menuItemId' : MenuItemId,
+    'subtotal' : IDL.Float64,
+  });
+  const MenuCategory = IDL.Variant({
+    'Veg' : IDL.Null,
+    'Drinks' : IDL.Null,
+    'NonVeg' : IDL.Null,
+    'Snacks' : IDL.Null,
+  });
   const AddShopResult = IDL.Record({
     'shopId' : IDL.Text,
     'error' : IDL.Opt(IDL.Text),
     'success' : IDL.Bool,
   });
+  const TableId = IDL.Text;
   const IdempotencyRecord = IDL.Record({
     'shopId' : IDL.Text,
     'invoiceId' : IDL.Text,
     'processedAt' : IDL.Int,
   });
+  const DiscountType = IDL.Variant({ 'Flat' : IDL.Null, 'Percent' : IDL.Null });
+  const PaymentMode = IDL.Variant({
+    'Card' : IDL.Null,
+    'Cash' : IDL.Null,
+    'Online' : IDL.Null,
+    'Partial' : IDL.Null,
+  });
+  const BillId = IDL.Text;
+  const RestaurantBill = IDL.Record({
+    'id' : BillId,
+    'total' : IDL.Float64,
+    'discountValue' : IDL.Float64,
+    'serviceChargeRate' : IDL.Float64,
+    'cgst' : IDL.Float64,
+    'serviceCharge' : IDL.Float64,
+    'discountType' : DiscountType,
+    'sgst' : IDL.Float64,
+    'gstEnabled' : IDL.Bool,
+    'orderId' : OrderId,
+    'restaurantId' : IDL.Text,
+    'discount' : IDL.Float64,
+    'paymentMode' : PaymentMode,
+    'gstRate' : IDL.Float64,
+    'items' : IDL.Vec(OrderItem),
+    'serviceChargeEnabled' : IDL.Bool,
+    'paidAt' : IDL.Int,
+    'subtotal' : IDL.Float64,
+  });
+  const OrderType = IDL.Variant({
+    'Online' : IDL.Null,
+    'Takeaway' : IDL.Null,
+    'DineIn' : IDL.Null,
+  });
   const DeleteShopResult = IDL.Record({ 'success' : IDL.Bool });
+  const KotId = IDL.Text;
+  const KotStatus = IDL.Variant({
+    'Cooking' : IDL.Null,
+    'Ready' : IDL.Null,
+    'Pending' : IDL.Null,
+  });
+  const KotItem = IDL.Record({
+    'portionSize' : PortionSize,
+    'notes' : IDL.Text,
+    'itemName' : IDL.Text,
+    'quantity' : IDL.Nat,
+    'menuItemId' : MenuItemId,
+  });
+  const KOT = IDL.Record({
+    'id' : KotId,
+    'readyAt' : IDL.Opt(IDL.Int),
+    'status' : KotStatus,
+    'createdAt' : IDL.Int,
+    'tableNumber' : IDL.Opt(IDL.Nat),
+    'orderType' : OrderType,
+    'orderId' : OrderId,
+    'restaurantId' : IDL.Text,
+    'cookingStartedAt' : IDL.Opt(IDL.Int),
+    'items' : IDL.Vec(KotItem),
+  });
   const ActiveUserRecord = IDL.Record({
     'userName' : IDL.Text,
     'userId' : IDL.Text,
@@ -358,6 +752,39 @@ export const idlFactory = ({ IDL }) => {
     'acquiredAt' : IDL.Int,
     'recordId' : IDL.Text,
   });
+  const MenuItem = IDL.Record({
+    'id' : MenuItemId,
+    'isHalfFullEnabled' : IDL.Bool,
+    'halfPrice' : IDL.Opt(IDL.Float64),
+    'isQuickOrder' : IDL.Bool,
+    'fullPrice' : IDL.Opt(IDL.Float64),
+    'name' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'isActive' : IDL.Bool,
+    'restaurantId' : IDL.Text,
+    'category' : MenuCategory,
+    'basePrice' : IDL.Float64,
+  });
+  const OrderStatus = IDL.Variant({
+    'Billed' : IDL.Null,
+    'Open' : IDL.Null,
+    'KotSent' : IDL.Null,
+    'Cancelled' : IDL.Null,
+  });
+  const RestaurantOrder = IDL.Record({
+    'id' : OrderId,
+    'status' : OrderStatus,
+    'createdAt' : IDL.Int,
+    'tableId' : IDL.Opt(TableId),
+    'tableNumber' : IDL.Opt(IDL.Nat),
+    'orderType' : OrderType,
+    'restaurantId' : IDL.Text,
+    'updatedAt' : IDL.Int,
+    'notes' : IDL.Text,
+    'items' : IDL.Vec(OrderItem),
+    'kotId' : IDL.Opt(KotId),
+    'billId' : IDL.Opt(BillId),
+  });
   const ShopStats = IDL.Record({
     'shopId' : IDL.Text,
     'sales' : IDL.Nat,
@@ -375,20 +802,50 @@ export const idlFactory = ({ IDL }) => {
     'shopStats' : IDL.Vec(ShopStats),
     'totalTransactions' : IDL.Nat,
   });
+  const RestaurantConfig = IDL.Record({
+    'serviceChargeRate' : IDL.Float64,
+    'gstEnabled' : IDL.Bool,
+    'restaurantId' : IDL.Text,
+    'quickOrderItems' : IDL.Vec(MenuItemId),
+    'gstRate' : IDL.Float64,
+    'tableCount' : IDL.Nat,
+    'serviceChargeEnabled' : IDL.Bool,
+  });
+  const ReportResult = IDL.Record({
+    'totalOrders' : IDL.Nat,
+    'topItems' : IDL.Vec(
+      IDL.Record({
+        'revenue' : IDL.Float64,
+        'itemName' : IDL.Text,
+        'quantity' : IDL.Nat,
+      })
+    ),
+    'totalRevenue' : IDL.Float64,
+  });
+  const ShopStatus = IDL.Variant({
+    'active' : IDL.Null,
+    'dead' : IDL.Null,
+    'inactive' : IDL.Null,
+  });
   const ShopMeta = IDL.Record({
     'id' : IDL.Text,
+    'status' : ShopStatus,
     'isDeleted' : IDL.Bool,
     'city' : IDL.Text,
     'name' : IDL.Text,
     'createdAt' : IDL.Text,
     'address' : IDL.Text,
+    'category' : IDL.Text,
+    'lastActivityTs' : IDL.Int,
     'ownerMobile' : IDL.Text,
   });
   const ShopStatsResult = IDL.Record({
     'shopId' : IDL.Text,
     'totalSalesAmount' : IDL.Float64,
     'lastActivity' : IDL.Int,
+    'totalSalesCount' : IDL.Nat,
     'shopName' : IDL.Text,
+    'totalRevenue' : IDL.Int,
     'sessionCount' : IDL.Nat,
     'ownerMobile' : IDL.Text,
   });
@@ -397,6 +854,29 @@ export const idlFactory = ({ IDL }) => {
     'fromMobile' : IDL.Text,
     'timestamp' : IDL.Int,
     'toMobile' : IDL.Text,
+  });
+  const TableStatus = IDL.Variant({
+    'Reserved' : IDL.Null,
+    'Free' : IDL.Null,
+    'Occupied' : IDL.Null,
+  });
+  const RestaurantTable = IDL.Record({
+    'id' : TableId,
+    'status' : TableStatus,
+    'tableNumber' : IDL.Nat,
+    'restaurantId' : IDL.Text,
+    'currentOrderId' : IDL.Opt(OrderId),
+    'capacity' : IDL.Nat,
+  });
+  const ShopRankResult = IDL.Record({
+    'status' : ShopStatus,
+    'shopId' : IDL.Text,
+    'rankScore' : IDL.Int,
+    'totalSalesCount' : IDL.Nat,
+    'shopName' : IDL.Text,
+    'totalRevenue' : IDL.Int,
+    'lastActivityTs' : IDL.Int,
+    'ownerMobile' : IDL.Text,
   });
   const UpdateShopResult = IDL.Record({
     'error' : IDL.Opt(IDL.Text),
@@ -409,9 +889,39 @@ export const idlFactory = ({ IDL }) => {
         [LockResult],
         [],
       ),
+    'addGlobalCategory' : IDL.Func([IDL.Text], [CategoryResult], []),
+    'addItemsToOrder' : IDL.Func(
+        [IDL.Text, OrderId, IDL.Vec(OrderItem)],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'addMenuItem' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          MenuCategory,
+          IDL.Float64,
+          IDL.Opt(IDL.Float64),
+          IDL.Opt(IDL.Float64),
+          IDL.Bool,
+          IDL.Bool,
+        ],
+        [IDL.Variant({ 'ok' : MenuItemId, 'err' : IDL.Text })],
+        [],
+      ),
     'addShop' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [AddShopResult],
+        [],
+      ),
+    'addTable' : IDL.Func(
+        [IDL.Text, IDL.Nat, IDL.Nat],
+        [IDL.Variant({ 'ok' : TableId, 'err' : IDL.Text })],
+        [],
+      ),
+    'cancelOrder' : IDL.Func(
+        [IDL.Text, OrderId],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
     'checkIdempotency' : IDL.Func(
@@ -421,7 +931,37 @@ export const idlFactory = ({ IDL }) => {
       ),
     'checkMobileExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'clearShopData' : IDL.Func([IDL.Text], [], []),
+    'createBill' : IDL.Func(
+        [
+          IDL.Text,
+          OrderId,
+          IDL.Bool,
+          IDL.Float64,
+          IDL.Bool,
+          IDL.Float64,
+          DiscountType,
+          IDL.Float64,
+          PaymentMode,
+        ],
+        [IDL.Variant({ 'ok' : RestaurantBill, 'err' : IDL.Text })],
+        [],
+      ),
+    'createOrder' : IDL.Func(
+        [IDL.Text, OrderType, IDL.Opt(TableId), IDL.Vec(OrderItem), IDL.Text],
+        [IDL.Variant({ 'ok' : OrderId, 'err' : IDL.Text })],
+        [],
+      ),
     'deleteBackupSnapshot' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'deleteGlobalCategory' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'deleteMenuItem' : IDL.Func(
+        [IDL.Text, MenuItemId],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'deleteShop' : IDL.Func([IDL.Text], [DeleteShopResult], []),
     'findDuplicateUsers' : IDL.Func([], [IDL.Text], []),
     'fullSystemReset' : IDL.Func(
@@ -435,6 +975,7 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'getActiveKOTs' : IDL.Func([IDL.Text], [IDL.Vec(KOT)], []),
     'getActiveUsersForShop' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(ActiveUserRecord)],
@@ -446,6 +987,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getAdminSettings' : IDL.Func([], [AdminSettings], ['query']),
+    'getAllKOTs' : IDL.Func([IDL.Text], [IDL.Vec(KOT)], []),
     'getAllUsersWithStats' : IDL.Func(
         [IDL.Opt(IDL.Int), IDL.Opt(IDL.Int)],
         [IDL.Vec(UserStatsResult)],
@@ -463,12 +1005,14 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getBatches' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getBill' : IDL.Func([IDL.Text, BillId], [IDL.Opt(RestaurantBill)], []),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCategories' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getCustomerOrders' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getCustomers' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getDrafts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getFeedback' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getGlobalCategories' : IDL.Func([], [IDL.Vec(GlobalCategory)], ['query']),
     'getInvoices' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getLockStatus' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
@@ -476,7 +1020,13 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getLowPriceAlertLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getMenuItems' : IDL.Func([IDL.Text], [IDL.Vec(MenuItem)], []),
     'getMergeAuditLog' : IDL.Func([], [IDL.Text], ['query']),
+    'getOrders' : IDL.Func(
+        [IDL.Text, IDL.Opt(OrderStatus)],
+        [IDL.Vec(RestaurantOrder)],
+        [],
+      ),
     'getOwnerStats' : IDL.Func([IDL.Text], [OwnerStats], ['query']),
     'getPayments' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getProducts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
@@ -485,6 +1035,12 @@ export const idlFactory = ({ IDL }) => {
     'getReferralSignups' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getReminderLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getReminderRequests' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getRestaurantConfig' : IDL.Func([IDL.Text], [RestaurantConfig], []),
+    'getRestaurantReports' : IDL.Func(
+        [IDL.Text, IDL.Int, IDL.Int],
+        [ReportResult],
+        [],
+      ),
     'getReturns' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getSettings' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getShop' : IDL.Func([IDL.Text], [IDL.Opt(ShopMeta)], ['query']),
@@ -501,6 +1057,12 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getSyncLogs' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getTables' : IDL.Func([IDL.Text], [IDL.Vec(RestaurantTable)], []),
+    'getTopActiveShops' : IDL.Func(
+        [IDL.Nat],
+        [IDL.Vec(ShopRankResult)],
+        ['query'],
+      ),
     'getTransactions' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
@@ -568,14 +1130,61 @@ export const idlFactory = ({ IDL }) => {
     'saveUsers' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveVendorRateHistory' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveVendors' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'sendKOT' : IDL.Func(
+        [IDL.Text, OrderId],
+        [IDL.Variant({ 'ok' : KotId, 'err' : IDL.Text })],
+        [],
+      ),
+    'settleOrder' : IDL.Func(
+        [IDL.Text, OrderId],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'toggleUserPaidStatus' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Bool],
         [],
       ),
+    'updateGlobalCategory' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [CategoryResult],
+        [],
+      ),
+    'updateKotStatus' : IDL.Func(
+        [IDL.Text, KotId, KotStatus],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'updateMenuItem' : IDL.Func(
+        [
+          IDL.Text,
+          MenuItemId,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(MenuCategory),
+          IDL.Opt(IDL.Float64),
+          IDL.Opt(IDL.Opt(IDL.Float64)),
+          IDL.Opt(IDL.Opt(IDL.Float64)),
+          IDL.Opt(IDL.Bool),
+          IDL.Opt(IDL.Bool),
+          IDL.Opt(IDL.Bool),
+        ],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'updateRestaurantConfig' : IDL.Func(
+        [IDL.Text, RestaurantConfig],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
     'updateShop' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [UpdateShopResult],
+        [],
+      ),
+    'updateShopStatus' : IDL.Func([IDL.Text, IDL.Int], [], []),
+    'updateTableStatus' : IDL.Func(
+        [IDL.Text, TableId, TableStatus, IDL.Opt(OrderId)],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
     'verifyAndChangeSuperAdmin' : IDL.Func(

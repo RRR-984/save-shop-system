@@ -1619,6 +1619,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           p.name.toLowerCase().includes(searchLower) ||
           (p.categoryId ?? "").toLowerCase().includes(searchLower),
       )
+      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 5)
       .map((p) => ({ ...p, currentStock: getProductStock(p.id) }));
 
@@ -1629,6 +1630,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           c.name.toLowerCase().includes(searchLower) ||
           (c.mobile ?? "").includes(searchLower),
       )
+      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 5);
 
     // Vendors (up to 5)
@@ -1639,6 +1641,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           (v.mobile ?? "").toLowerCase().includes(searchLower) ||
           (v.email ?? "").toLowerCase().includes(searchLower),
       )
+      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 5);
 
     // Staff/Users (up to 5)
@@ -1649,6 +1652,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           (u.mobile ?? "").includes(searchLower) ||
           u.role.toLowerCase().includes(searchLower),
       )
+      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 5);
 
     // Navigation pages (up to 5)
@@ -2677,7 +2681,64 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 3 — SMART ALERTS
-        ══════════════════════════════════════════════════════════════════ */}
+         ══════════════════════════════════════════════════════════════════ */}
+        {/* Service Due Widget — shown when service feature is enabled and there are due vehicles */}
+        {appConfig.featureFlags?.service &&
+          (() => {
+            try {
+              const storageKey = `service_reminders_${session?.shopId ?? ""}`;
+              const raw = localStorage.getItem(storageKey);
+              if (!raw) return null;
+              const reminders = JSON.parse(raw) as Array<{
+                dueDate: string;
+                status: string;
+                snoozedUntil?: string;
+              }>;
+              const todayIso = new Date().toISOString().slice(0, 10);
+              const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+              const cutoff = new Date(Date.now() + twoDaysMs)
+                .toISOString()
+                .slice(0, 10);
+              const dueCount = reminders.filter((r) => {
+                if (r.status === "dismissed") return false;
+                if (
+                  r.status === "snoozed" &&
+                  r.snoozedUntil &&
+                  r.snoozedUntil > todayIso
+                )
+                  return false;
+                return r.dueDate <= cutoff;
+              }).length;
+              if (dueCount === 0) return null;
+              return (
+                <button
+                  type="button"
+                  data-ocid="dashboard.service_due.card"
+                  onClick={() => onNavigate("service-repair" as NavPage)}
+                  className="flex items-center gap-3 p-3.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-2xl w-full text-left hover:bg-amber-100 dark:hover:bg-amber-950/30 transition-colors active:scale-[0.99]"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                    <span className="text-lg">🔧</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                      {dueCount} Vehicle{dueCount !== 1 ? "s" : ""} Due for
+                      Service
+                    </p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Tap to view service reminders
+                    </p>
+                  </div>
+                  <span className="flex-shrink-0 text-xs font-bold px-2 py-1 rounded-full bg-amber-200 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300">
+                    {dueCount}
+                  </span>
+                </button>
+              );
+            } catch {
+              return null;
+            }
+          })()}
+
         {isDashSectionVisible("smartAlerts") &&
           isModeVisible("smartAlerts") && (
             <div

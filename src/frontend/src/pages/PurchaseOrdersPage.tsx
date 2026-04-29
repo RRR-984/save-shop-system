@@ -463,11 +463,13 @@ function AddPOModal({
                     data-ocid="po-vendor-select"
                   >
                     <option value="">-- Select Vendor --</option>
-                    {storeVendors.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name} ({v.mobile})
-                      </option>
-                    ))}
+                    {[...storeVendors]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name} ({v.mobile})
+                        </option>
+                      ))}
                   </select>
                   <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 </div>

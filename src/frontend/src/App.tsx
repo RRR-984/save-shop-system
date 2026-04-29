@@ -35,8 +35,16 @@ import { PurchaseOrdersPage } from "./pages/PurchaseOrdersPage";
 import { RankingsPage } from "./pages/RankingsPage";
 import { ReferralPage } from "./pages/ReferralPage";
 import { ReminderLogPage } from "./pages/ReminderLogPage";
+import { RentalPage } from "./pages/RentalPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { RestaurantBillingPage } from "./pages/RestaurantBillingPage";
+import { RestaurantKitchenPage } from "./pages/RestaurantKitchenPage";
+import { RestaurantMenuPage } from "./pages/RestaurantMenuPage";
+import { RestaurantOrderPage } from "./pages/RestaurantOrderPage";
+import { RestaurantReportsPage } from "./pages/RestaurantReportsPage";
+import { RestaurantTablesPage } from "./pages/RestaurantTablesPage";
 import { ReturnsPage } from "./pages/ReturnsPage";
+import { ServiceRepairPage } from "./pages/ServiceRepairPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ShopBoardPage } from "./pages/ShopBoardPage";
 import { StaffAttendancePage } from "./pages/StaffAttendancePage";
@@ -102,6 +110,14 @@ const PAGE_TITLES: Record<NavPage, string> = {
   attendance: "📅 Attendance",
   "owner-dashboard": "🏪 Owner Overview",
   "super-admin": "🛡️ Super Admin",
+  rental: "🔑 Rental / Lending",
+  "service-repair": "🔧 Service & Repair",
+  "restaurant-menu": "🍽️ Menu Management",
+  "restaurant-tables": "🪑 Table Management",
+  "restaurant-order": "📋 New Order",
+  "restaurant-kitchen": "👨‍🍳 Kitchen Display",
+  "restaurant-billing": "🧾 Restaurant Billing",
+  "restaurant-reports": "📊 Restaurant Reports",
 };
 
 /** Badge shown on dashboard when Phase 1 had partial errors */
@@ -213,19 +229,51 @@ function AppContent() {
   // Show skeleton only while Phase 1 is loading AND timeout hasn't expired
   const showSkeleton = isPhase1Loading && !skeletonTimeout;
 
-  // Process any referral code that was saved to localStorage during login
+  // Process any referral code that was saved to localStorage during login.
+  // Strategy: wait until isLoading===false AND referralCodes has been populated.
+  // Do NOT consume (remove) pending_referral until we've had a real chance to
+  // match it. If referralCodes is still empty after loading completes, keep the
+  // pending entry so the next render cycle can retry.
+  const pendingReferralProcessedRef = useRef(false);
   useEffect(() => {
+    // Gate: loading must be done and we must not have already processed this
     if (isLoading) return;
+    if (pendingReferralProcessedRef.current) return;
+
     try {
       const raw = localStorage.getItem("pending_referral");
-      if (!raw) return;
-      localStorage.removeItem("pending_referral");
+      if (!raw) {
+        // Nothing pending — mark as done so we stop checking
+        pendingReferralProcessedRef.current = true;
+        return;
+      }
+
       const pending = JSON.parse(raw) as {
         code: string;
         newUserId: string;
         shopName: string;
         mobile: string;
       };
+
+      // If referralCodes is still empty, it may not have loaded yet from backend.
+      // Keep pending_referral in localStorage and let the next re-render (when
+      // referralCodes updates) retry. But only retry up to 5 times.
+      const retryKey = "pending_referral_retries";
+      const retries = Number.parseInt(
+        localStorage.getItem(retryKey) ?? "0",
+        10,
+      );
+
+      if (referralCodes.length === 0 && retries < 5) {
+        localStorage.setItem(retryKey, String(retries + 1));
+        return; // retry on next referralCodes update
+      }
+
+      // We have codes (or exhausted retries) — consume the pending entry
+      localStorage.removeItem("pending_referral");
+      localStorage.removeItem(retryKey);
+      pendingReferralProcessedRef.current = true;
+
       const matchedCode = referralCodes.find((rc) => rc.code === pending.code);
       if (matchedCode) {
         recordReferralSignup(
@@ -237,6 +285,7 @@ function AppContent() {
       }
     } catch {
       /* ignore parse / storage errors */
+      pendingReferralProcessedRef.current = true;
     }
   }, [isLoading, referralCodes, recordReferralSignup]);
 
@@ -365,6 +414,22 @@ function AppContent() {
         return <OwnerDashboardPage onNavigate={handleNavigate} />;
       case "super-admin":
         return <SuperAdminPage onBack={handleGoHome} />;
+      case "service-repair":
+        return <ServiceRepairPage />;
+      case "rental":
+        return <RentalPage />;
+      case "restaurant-menu":
+        return <RestaurantMenuPage />;
+      case "restaurant-tables":
+        return <RestaurantTablesPage />;
+      case "restaurant-order":
+        return <RestaurantOrderPage />;
+      case "restaurant-kitchen":
+        return <RestaurantKitchenPage />;
+      case "restaurant-billing":
+        return <RestaurantBillingPage />;
+      case "restaurant-reports":
+        return <RestaurantReportsPage />;
       default:
         return <DashboardPage onNavigate={handleNavigate} />;
     }

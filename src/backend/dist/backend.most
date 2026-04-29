@@ -12,12 +12,39 @@ type AdminSettings__819383327 =
   {createdAt : Int; superAdminMobile : Text; updatedAt : Int};
 type BackupEntry__821971064 =
   {data : Text; id : Text; tag : Text; timestamp : Int};
+type BillId__465598121 = Text;
 type Data__791452850<K, V> =
   {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type DiscountType__614762053 = {#Flat; #Percent};
+type GlobalCategory__202431902 =
+  {id : Text; isDefault : Bool; isDeleted : Bool; name : Text};
 type IdempotencyRecord__1073704331 =
   {invoiceId : Text; processedAt : Int; shopId : Text};
 type Internal__8484328<K, V> =
   {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type KOT__428598018 =
+  {
+    cookingStartedAt : ?Int;
+    createdAt : Int;
+    id : KotId__750661055;
+    items : [KotItem__52162917];
+    orderId : OrderId__13201612;
+    orderType : OrderType__901165430;
+    readyAt : ?Int;
+    restaurantId : Text;
+    status : KotStatus__121087819;
+    tableNumber : ?Nat
+  };
+type KotId__750661055 = Text;
+type KotItem__52162917 =
+  {
+    itemName : Text;
+    menuItemId : MenuItemId__339428799;
+    notes : Text;
+    portionSize : PortionSize__68146422;
+    quantity : Nat
+  };
+type KotStatus__121087819 = {#Cooking; #Pending; #Ready};
 type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
 type List__415060402<T> = List__790383201<T>;
 type List__790383201<T> =
@@ -40,22 +67,113 @@ type Map__158565046<K, V> = Map__297112838<K, V>;
 type Map__297112838<K, V> =
   {var root : Node__46230540<K, V>; var size : Nat__490723111};
 type Map__605269027<K, V> = Map__158565046<K, V>;
+type MenuCategory__796141541 = {#Drinks; #NonVeg; #Snacks; #Veg};
+type MenuItemId__339428799 = Text;
+type MenuItem__243732802 =
+  {
+    basePrice : Float;
+    category : MenuCategory__796141541;
+    createdAt : Int;
+    fullPrice : ?Float;
+    halfPrice : ?Float;
+    id : MenuItemId__339428799;
+    isActive : Bool;
+    isHalfFullEnabled : Bool;
+    isQuickOrder : Bool;
+    name : Text;
+    restaurantId : Text
+  };
 type Nat__490723111 = Nat__920180692;
 type Nat__920180692 = Nat;
 type Node__46230540<K, V> =
   {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type OrderId__13201612 = Text;
+type OrderItem__114140777 =
+  {
+    itemName : Text;
+    menuItemId : MenuItemId__339428799;
+    portionSize : PortionSize__68146422;
+    quantity : Nat;
+    subtotal : Float;
+    unitPrice : Float
+  };
+type OrderStatus__278917466 = {#Billed; #Cancelled; #KotSent; #Open};
+type OrderType__901165430 = {#DineIn; #Online; #Takeaway};
+type PaymentMode__451623708 = {#Card; #Cash; #Online; #Partial};
+type PortionSize__68146422 = {#Full; #Half; #Regular};
+type RestaurantBill__96938898 =
+  {
+    cgst : Float;
+    discount : Float;
+    discountType : DiscountType__614762053;
+    discountValue : Float;
+    gstEnabled : Bool;
+    gstRate : Float;
+    id : BillId__465598121;
+    items : [OrderItem__114140777];
+    orderId : OrderId__13201612;
+    paidAt : Int;
+    paymentMode : PaymentMode__451623708;
+    restaurantId : Text;
+    serviceCharge : Float;
+    serviceChargeEnabled : Bool;
+    serviceChargeRate : Float;
+    sgst : Float;
+    subtotal : Float;
+    total : Float
+  };
+type RestaurantConfig__135611180 =
+  {
+    gstEnabled : Bool;
+    gstRate : Float;
+    quickOrderItems : [MenuItemId__339428799];
+    restaurantId : Text;
+    serviceChargeEnabled : Bool;
+    serviceChargeRate : Float;
+    tableCount : Nat
+  };
+type RestaurantOrder__804521922 =
+  {
+    billId : ?BillId__465598121;
+    createdAt : Int;
+    id : OrderId__13201612;
+    items : [OrderItem__114140777];
+    kotId : ?KotId__750661055;
+    notes : Text;
+    orderType : OrderType__901165430;
+    restaurantId : Text;
+    status : OrderStatus__278917466;
+    tableId : ?TableId__250519170;
+    tableNumber : ?Nat;
+    updatedAt : Int
+  };
+type RestaurantTable__94312009 =
+  {
+    capacity : Nat;
+    currentOrderId : ?OrderId__13201612;
+    id : TableId__250519170;
+    restaurantId : Text;
+    status : TableStatus__122069648;
+    tableNumber : Nat
+  };
 type ShopMeta__216240044 =
   {
     address : Text;
+    category : Text;
     city : Text;
     createdAt : Text;
     id : Text;
     isDeleted : Bool;
+    lastActivityTs : Int;
     name : Text;
-    ownerMobile : Text
+    ownerMobile : Text;
+    status : ShopStatus__443988319
   };
+type ShopStatus__443988319 = {#active; #dead; #inactive};
 type SuperAdminChangeLog__469178578 =
   {fromMobile : Text; id : Text; timestamp : Int; toMobile : Text};
+type TableId__250519170 = Text;
+type TableStatus__122069648 = {#Free; #Occupied; #Reserved};
 type UserProfile__491224006 = {name : Text};
 actor {
   stable PERMANENT_SUPER_ADMIN : Text;
@@ -68,6 +186,11 @@ actor {
   stable backupSnapshots :
     {
       var root : Node__46230540<Text, List__415060402<BackupEntry__821971064>>;
+      var size : Nat__490723111
+    };
+  stable globalCategoriesStore :
+    {
+      var root : Node__46230540<Text, GlobalCategory__202431902>;
       var size : Nat__490723111
     };
   stable idempotencyTable :
@@ -88,6 +211,40 @@ actor {
     };
   stable paidUsersStore :
     {var root : Node__46230540<Text, Bool>; var size : Nat__490723111};
+  stable restaurantBillStore :
+    {
+      var root :
+        Node__46230540<Text, List__415060402<RestaurantBill__96938898>>;
+      var size : Nat__490723111
+    };
+  stable restaurantConfigStore :
+    {
+      var root : Node__46230540<Text, RestaurantConfig__135611180>;
+      var size : Nat__490723111
+    };
+  stable restaurantCounter : {var value : Nat};
+  stable restaurantKotStore :
+    {
+      var root : Node__46230540<Text, List__415060402<KOT__428598018>>;
+      var size : Nat__490723111
+    };
+  stable restaurantMenuStore :
+    {
+      var root : Node__46230540<Text, List__415060402<MenuItem__243732802>>;
+      var size : Nat__490723111
+    };
+  stable restaurantOrderStore :
+    {
+      var root :
+        Node__46230540<Text, List__415060402<RestaurantOrder__804521922>>;
+      var size : Nat__490723111
+    };
+  stable restaurantTableStore :
+    {
+      var root :
+        Node__46230540<Text, List__415060402<RestaurantTable__94312009>>;
+      var size : Nat__490723111
+    };
   stable shopData :
     {
       var root : Node__46230540<Text, Map__605269027<Text, Text>>;

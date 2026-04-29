@@ -38,7 +38,11 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { CategoryProductForm } from "../components/CategoryProductForm";
+import { ShadePalette } from "../components/ShadePalette";
 import { VoiceInputButton } from "../components/VoiceInputButton";
+import { FIELD_LABELS, getCategoryFieldConfig } from "../config/categoryFields";
+import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { useStore } from "../context/StoreContext";
 import { useAsyncAction } from "../hooks/useAsyncAction";
@@ -82,6 +86,7 @@ export function StockPage({
     shopId,
     appConfig,
   } = useStore();
+  const { selectedShop } = useAuth();
   const { t, language } = useLanguage();
 
   // ── Form draft protection ────────────────────────────────────────────────
@@ -115,6 +120,11 @@ export function StockPage({
   // Mixed Unit: dual qty
   const [inLengthQty, setInLengthQty] = useState("");
   const [inWeightQty, setInWeightQty] = useState("");
+
+  // Category-specific field values (e.g. size, color, brand, batchNo, etc.)
+  const [categoryFieldValues, setCategoryFieldValues] = useState<
+    Record<string, string>
+  >({});
 
   // Extra details toggle — OFF by default
   const [showExtraDetails, setShowExtraDetails] = useState(false);
@@ -168,81 +178,79 @@ export function StockPage({
 
   // ── Quick Add Product dialog ──────────────────────────────────────────────
   const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [qaName, setQaName] = useState("");
-  const [qaCategory, setQaCategory] = useState("");
-  const [qaUnit, setQaUnit] = useState("");
-  const [qaMinStock, setQaMinStock] = useState("");
-  const [qaSellPrice, setQaSellPrice] = useState("");
-  // Spare part fields
-  const [qaPartNo, setQaPartNo] = useState("");
-  const [qaSrNo, setQaSrNo] = useState("");
-  const [qaTnNo, setQaTnNo] = useState("");
-  const [qaDd, setQaDd] = useState("");
-  const [qaEd, setQaEd] = useState("");
-  const [qaMrp, setQaMrp] = useState("");
-  const [showSparePartFields, setShowSparePartFields] = useState(false);
+  // shopCategory drives CategoryProductForm field bundles
+  const shopCategory = selectedShop?.category ?? "";
 
-  const resetQuickAdd = () => {
-    setQaName("");
-    setQaCategory("");
-    setQaUnit("");
-    setQaMinStock("");
-    setQaSellPrice("");
-    setQaPartNo("");
-    setQaSrNo("");
-    setQaTnNo("");
-    setQaDd("");
-    setQaEd("");
-    setQaMrp("");
-    setShowSparePartFields(false);
-  };
-
-  const handleQuickAddProduct = () => {
-    if (!qaName.trim()) {
+  const handleQuickAddProduct = (fields: Partial<Product>) => {
+    const name = (fields.name ?? "").trim();
+    if (!name) {
       toast.error("Product name required");
       return;
     }
-    if (!qaUnit.trim()) {
-      toast.error("Unit required (e.g. kg, piece, liter)");
-      return;
-    }
+    // unit may be absent for some categories (Auto Parts); default to "piece"
+    const unit = (fields.unit as string | undefined)?.trim() || "piece";
+
     const duplicate = products.find(
-      (p) => p.name.trim().toLowerCase() === qaName.trim().toLowerCase(),
+      (p) => p.name.trim().toLowerCase() === name.toLowerCase(),
     );
     if (duplicate) {
-      toast.warning(`"${qaName}" already exists`);
+      toast.warning(`"${name}" already exists`);
       return;
     }
 
     let catId = categories.find(
-      (c) => c.name.toLowerCase() === qaCategory.trim().toLowerCase(),
+      (c) => c.name.toLowerCase() === shopCategory.toLowerCase(),
     )?.id;
-    if (!catId && qaCategory.trim()) {
-      catId = addCategory(qaCategory.trim());
+    if (!catId && shopCategory.trim()) {
+      catId = addCategory(shopCategory.trim());
     }
     if (!catId) {
       catId = addCategory("General");
     }
 
+    // The form returns field keys like 'purchaseRate', 'batchNo' that aren't
+    // directly on Product — access them via a loosely typed proxy.
+    const f = fields as Record<string, unknown>;
+
     const newId = addProduct({
-      name: qaName.trim(),
+      name,
       categoryId: catId,
-      unit: qaUnit.trim(),
-      minStockAlert: qaMinStock ? Number(qaMinStock) : 0,
-      sellingPrice: qaSellPrice ? Number(qaSellPrice) : 0,
+      unit,
+      minStockAlert: 0,
+      sellingPrice: Number(f.sellingPrice ?? 0) || 0,
       unitMode: "single",
-      ...(qaPartNo.trim() ? { partNo: qaPartNo.trim() } : {}),
-      ...(qaSrNo.trim() ? { srNo: qaSrNo.trim() } : {}),
-      ...(qaTnNo.trim() ? { tnNo: qaTnNo.trim() } : {}),
-      ...(qaDd.trim() ? { dd: qaDd.trim() } : {}),
-      ...(qaEd.trim() ? { ed: qaEd.trim() } : {}),
-      ...(qaMrp && Number(qaMrp) > 0 ? { mrp: Number(qaMrp) } : {}),
+      ...(f.partNo ? { partNo: String(f.partNo) } : {}),
+      ...(f.srNo ? { srNo: String(f.srNo) } : {}),
+      ...(f.tnNo ? { tnNo: String(f.tnNo) } : {}),
+      ...(f.dd ? { dd: String(f.dd) } : {}),
+      ...(f.ed ? { ed: String(f.ed) } : {}),
+      ...(f.mrp && Number(f.mrp) > 0 ? { mrp: Number(f.mrp) } : {}),
+      ...(f.purchaseRate && Number(f.purchaseRate) > 0
+        ? { purchasePrice: Number(f.purchaseRate) }
+        : {}),
+      ...(f.size ? { size: String(f.size) } : {}),
+      ...(f.color ? { color: String(f.color) } : {}),
+      ...(f.brand ? { brand: String(f.brand) } : {}),
+      ...(f.model ? { model: String(f.model) } : {}),
+      ...(f.imeiSerialNo ? { imeiSerialNo: String(f.imeiSerialNo) } : {}),
+      ...(f.weight && Number(f.weight) > 0 ? { weight: Number(f.weight) } : {}),
+      ...(f.pricePerKg && Number(f.pricePerKg) > 0
+        ? { pricePerKg: Number(f.pricePerKg) }
+        : {}),
+      ...(f.dimensions ? { dimensions: String(f.dimensions) } : {}),
+      ...(f.material ? { material: String(f.material) } : {}),
+      ...(f.batchNo ? { details: `Batch: ${String(f.batchNo)}` } : {}),
+      ...(f.expiryDate ? { expiryDate: String(f.expiryDate) } : {}),
+      ...(f.cosmeticType ? { cosmeticType: String(f.cosmeticType) } : {}),
+      ...(f.shade ? { shade: String(f.shade) } : {}),
+      ...(f.cosmeticFormula
+        ? { cosmeticFormula: String(f.cosmeticFormula) }
+        : {}),
     });
 
     // Auto-select the new product in Stock In dropdown
     handleInProductChange(newId);
-    toast.success(`"${qaName.trim()}" added successfully!`);
-    resetQuickAdd();
+    toast.success(`"${name}" added successfully!`);
     setShowQuickAdd(false);
   };
 
@@ -261,6 +269,7 @@ export function StockPage({
     setInLengthQty("");
     setInWeightQty("");
     setInQty("");
+    setCategoryFieldValues({});
   };
 
   // Voice input handler for Stock In form
@@ -338,7 +347,7 @@ export function StockPage({
       );
       // Sync sell/retailer/wholesaler price back to product record
       if (inProduct) {
-        const priceUpdates: Record<string, number> = {};
+        const priceUpdates: Record<string, unknown> = {};
         if (inSellPrice && Number(inSellPrice) > 0) {
           priceUpdates.sellingPrice = Number(inSellPrice);
         }
@@ -348,8 +357,22 @@ export function StockPage({
         if (inWholesalerPrice && Number(inWholesalerPrice) > 0) {
           priceUpdates.wholesalerPrice = Number(inWholesalerPrice);
         }
+        // Persist category-specific fields (size, color, brand, batchNo, etc.) back to product
+        const numericCatFields = new Set(["mrp", "weight", "pricePerKg"]);
+        for (const [k, v] of Object.entries(categoryFieldValues)) {
+          if (!v.trim()) continue;
+          // Skip fields already covered above or that are stock-entry-only
+          if (["expiryDate", "qty", "purchaseRate", "sellingPrice"].includes(k))
+            continue;
+          if (numericCatFields.has(k)) {
+            const n = Number(v);
+            if (!Number.isNaN(n) && n > 0) priceUpdates[k] = n;
+          } else {
+            priceUpdates[k] = v.trim();
+          }
+        }
         if (Object.keys(priceUpdates).length > 0) {
-          updateProduct(inProduct, priceUpdates);
+          updateProduct(inProduct, priceUpdates as Record<string, number>);
         }
       }
       // Clear draft on success
@@ -375,6 +398,7 @@ export function StockPage({
       setInWholesalerPrice("");
       setInLengthQty("");
       setInWeightQty("");
+      setCategoryFieldValues({});
       // Navigate to inventory so user sees updated stock
       if (onNavigate) onNavigate("inventory");
     },
@@ -513,14 +537,16 @@ export function StockPage({
                         <span>Add New Product</span>
                       </button>
                       <Separator className="my-1" />
-                      {products.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}{" "}
-                          {p.unitMode === "mixed"
-                            ? `(Mixed: ${p.lengthUnit}+${p.weightUnit})`
-                            : `(Stock: ${getProductStock(p.id)} ${p.unit})`}
-                        </SelectItem>
-                      ))}
+                      {[...products]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}{" "}
+                            {p.unitMode === "mixed"
+                              ? `(Mixed: ${p.lengthUnit}+${p.weightUnit})`
+                              : `(Stock: ${getProductStock(p.id)} ${p.unit})`}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -725,6 +751,213 @@ export function StockPage({
                     onChange={(e) => setInExpiryDate(e.target.value)}
                   />
                 </div>
+
+                {/* ── Category-specific fields ───────────────────────────── */}
+                {(() => {
+                  const catConfig = getCategoryFieldConfig(shopCategory);
+                  // Fields to render: exclude generic fields already shown, always skip name/qty/purchaseRate/sellingPrice/expiryDate
+                  const skipFields = new Set([
+                    "name",
+                    "qty",
+                    "purchaseRate",
+                    "sellingPrice",
+                    "mrp",
+                    "totalPrice",
+                    "expiryDate",
+                  ]);
+                  const catFields = catConfig.fields.filter(
+                    (f) => !skipFields.has(f),
+                  );
+                  if (catFields.length === 0) return null;
+
+                  const setCatField = (key: string, val: string) => {
+                    setCategoryFieldValues((prev) => ({ ...prev, [key]: val }));
+                  };
+
+                  const renderCatField = (fieldKey: string) => {
+                    const rawLabel =
+                      catConfig.labelOverrides?.[fieldKey] ??
+                      FIELD_LABELS[fieldKey] ??
+                      fieldKey;
+                    const val = categoryFieldValues[fieldKey] ?? "";
+
+                    // Size — button group
+                    if (fieldKey === "size" && catConfig.sizeOptions) {
+                      return (
+                        <div key={fieldKey} className="col-span-2 space-y-1.5">
+                          <Label className="text-sm font-medium">
+                            {rawLabel}
+                            {catConfig.required.includes(fieldKey) && (
+                              <span className="text-destructive ml-1">*</span>
+                            )}
+                          </Label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {catConfig.sizeOptions.map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                data-ocid={`stock.in.cat.size.${s}`}
+                                onClick={() =>
+                                  setCatField(fieldKey, val === s ? "" : s)
+                                }
+                                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                  val === s
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background text-foreground border-border hover:border-primary hover:text-primary"
+                                }`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Shade — visual color palette (cosmetics)
+                    if (fieldKey === "shade") {
+                      return (
+                        <div key={fieldKey} className="col-span-2 space-y-1.5">
+                          <Label className="text-sm font-medium">
+                            {rawLabel}
+                          </Label>
+                          <ShadePalette
+                            value={val}
+                            onChange={(v) => setCatField(fieldKey, v)}
+                            ocidPrefix="stock.in.cat"
+                          />
+                        </div>
+                      );
+                    }
+
+                    // Dropdown fields: cosmeticType, cosmeticFormula, and unit
+                    if (
+                      (fieldKey === "cosmeticType" ||
+                        fieldKey === "cosmeticFormula") &&
+                      catConfig.unitOptions?.[fieldKey]?.length
+                    ) {
+                      const opts = catConfig.unitOptions[fieldKey]!;
+                      return (
+                        <div key={fieldKey} className="space-y-1.5">
+                          <Label className="text-sm font-medium">
+                            {rawLabel}
+                            {catConfig.required.includes(fieldKey) && (
+                              <span className="text-destructive ml-1">*</span>
+                            )}
+                          </Label>
+                          <Select
+                            value={val}
+                            onValueChange={(v) => setCatField(fieldKey, v)}
+                          >
+                            <SelectTrigger
+                              data-ocid={`stock.in.cat.${fieldKey}.select`}
+                            >
+                              <SelectValue placeholder={`Select ${rawLabel}`} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {opts.map((o) => (
+                                <SelectItem key={o} value={o}>
+                                  {o}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    }
+
+                    // Unit — select
+                    if (fieldKey === "unit" && catConfig.unitOptions?.unit) {
+                      const opts = catConfig.unitOptions.unit;
+                      const isCustom = val && !opts.includes(val);
+                      return (
+                        <div key={fieldKey} className="space-y-1.5">
+                          <Label className="text-sm font-medium">
+                            {rawLabel}
+                          </Label>
+                          {isCustom ? (
+                            <Input
+                              data-ocid="stock.in.cat.unit.input"
+                              placeholder="Enter unit"
+                              value={val}
+                              onChange={(e) =>
+                                setCatField(fieldKey, e.target.value)
+                              }
+                            />
+                          ) : (
+                            <Select
+                              value={val}
+                              onValueChange={(v) => setCatField(fieldKey, v)}
+                            >
+                              <SelectTrigger data-ocid="stock.in.cat.unit.select">
+                                <SelectValue placeholder="Select unit" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {opts.map((o) => (
+                                  <SelectItem key={o} value={o}>
+                                    {o}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="__custom__">
+                                  Other…
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // Date fields
+                    if (fieldKey === "expiryDate") return null; // already shown above
+
+                    // Default: text input
+                    return (
+                      <div key={fieldKey} className="space-y-1.5">
+                        <Label className="text-sm font-medium">
+                          {rawLabel}
+                          {catConfig.required.includes(fieldKey) && (
+                            <span className="text-destructive ml-1">*</span>
+                          )}
+                        </Label>
+                        <Input
+                          data-ocid={`stock.in.cat.${fieldKey}.input`}
+                          placeholder={rawLabel}
+                          value={val}
+                          onChange={(e) =>
+                            setCatField(fieldKey, e.target.value)
+                          }
+                        />
+                      </div>
+                    );
+                  };
+
+                  // Find size & shade fields (full width) vs rest (grid)
+                  const fullWidthFields = catFields.filter(
+                    (f) =>
+                      (f === "size" && catConfig.sizeOptions) || f === "shade",
+                  );
+                  const gridFields = catFields.filter(
+                    (f) =>
+                      !(f === "size" && catConfig.sizeOptions) && f !== "shade",
+                  );
+
+                  return (
+                    <div className="space-y-3 border-t border-border pt-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        {shopCategory
+                          ? `${shopCategory} Details`
+                          : "Product Details"}
+                      </p>
+                      {fullWidthFields.map((f) => renderCatField(f))}
+                      {gridFields.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                          {gridFields.map((f) => renderCatField(f))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* ── Sell Price, Profit % — always visible ─────────────── */}
                 {!isMixedIn && (
@@ -1218,11 +1451,13 @@ export function StockPage({
                       <SelectValue placeholder="Select product" />
                     </SelectTrigger>
                     <SelectContent>
-                      {products.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} (Stock: {getProductStock(p.id)} {p.unit})
-                        </SelectItem>
-                      ))}
+                      {[...products]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name} (Stock: {getProductStock(p.id)} {p.unit})
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1416,13 +1651,12 @@ export function StockPage({
       <Dialog
         open={showQuickAdd}
         onOpenChange={(open) => {
-          if (!open) resetQuickAdd();
           setShowQuickAdd(open);
         }}
       >
         <DialogContent
           data-ocid="stock.quick_add_product.dialog"
-          className="max-w-sm w-full"
+          className="max-w-md w-full max-h-[90vh] overflow-y-auto"
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
@@ -1430,181 +1664,15 @@ export function StockPage({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 pt-1">
-            <div className="space-y-1.5">
-              <Label className="text-sm">
-                Product Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                data-ocid="stock.quick_add.name.input"
-                placeholder="e.g. Basmati Rice"
-                value={qaName}
-                onChange={(e) => setQaName(e.target.value)}
-                autoFocus
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Category</Label>
-                <Input
-                  data-ocid="stock.quick_add.category.input"
-                  placeholder="e.g. Grains"
-                  value={qaCategory}
-                  onChange={(e) => setQaCategory(e.target.value)}
-                  list="qa-category-suggestions"
-                />
-                {categories.length > 0 && (
-                  <datalist id="qa-category-suggestions">
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.name} />
-                    ))}
-                  </datalist>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-sm">
-                  Unit <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  data-ocid="stock.quick_add.unit.input"
-                  placeholder="kg / piece / liter"
-                  value={qaUnit}
-                  onChange={(e) => setQaUnit(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm">Min Stock Alert</Label>
-                <Input
-                  data-ocid="stock.quick_add.min_stock.input"
-                  type="number"
-                  placeholder="e.g. 5"
-                  value={qaMinStock}
-                  onChange={(e) => setQaMinStock(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Selling Price (₹)</Label>
-                <Input
-                  data-ocid="stock.quick_add.sell_price.input"
-                  type="number"
-                  placeholder="e.g. 120"
-                  value={qaSellPrice}
-                  onChange={(e) => setQaSellPrice(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              * Required fields. Other details can be edited from Admin Panel
-              later.
-            </p>
-
-            {/* ── Spare Part / Auto Part Details ──────────────────── */}
-            <div className="border-t border-border pt-3">
-              <div className="flex items-center gap-2.5 mb-3">
-                <Switch
-                  id="qa-spare-part-toggle"
-                  checked={showSparePartFields}
-                  onCheckedChange={setShowSparePartFields}
-                />
-                <label
-                  htmlFor="qa-spare-part-toggle"
-                  className="text-sm font-medium text-cyan-700 cursor-pointer select-none"
-                >
-                  + Spare Part / Auto Part Details (Optional)
-                </label>
-              </div>
-              {showSparePartFields && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">Part No</Label>
-                      <Input
-                        data-ocid="stock.quick_add.part_no.input"
-                        placeholder="e.g. AB1234"
-                        value={qaPartNo}
-                        onChange={(e) => setQaPartNo(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">SR No (Serial No)</Label>
-                      <Input
-                        data-ocid="stock.quick_add.sr_no.input"
-                        placeholder="e.g. SN-5678"
-                        value={qaSrNo}
-                        onChange={(e) => setQaSrNo(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">TN No</Label>
-                      <Input
-                        data-ocid="stock.quick_add.tn_no.input"
-                        placeholder="e.g. TN-9012"
-                        value={qaTnNo}
-                        onChange={(e) => setQaTnNo(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">DD</Label>
-                      <Input
-                        data-ocid="stock.quick_add.dd.input"
-                        placeholder="e.g. DD-001"
-                        value={qaDd}
-                        onChange={(e) => setQaDd(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">ED</Label>
-                      <Input
-                        data-ocid="stock.quick_add.ed.input"
-                        placeholder="e.g. ED-002"
-                        value={qaEd}
-                        onChange={(e) => setQaEd(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-sm">MRP (₹)</Label>
-                      <Input
-                        data-ocid="stock.quick_add.mrp.input"
-                        type="number"
-                        placeholder="e.g. 450"
-                        value={qaMrp}
-                        onChange={(e) => setQaMrp(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => {
-                  resetQuickAdd();
-                  setShowQuickAdd(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                data-ocid="stock.quick_add.save.button"
-                className="flex-1"
-                onClick={handleQuickAddProduct}
-              >
-                <Plus size={14} className="mr-1" /> Save & Select
-              </Button>
-            </div>
+          <div className="pt-1">
+            <CategoryProductForm
+              category={shopCategory}
+              shopId={shopId}
+              products={products}
+              onSubmit={handleQuickAddProduct}
+              onCancel={() => setShowQuickAdd(false)}
+              submitLabel="Save & Select"
+            />
           </div>
         </DialogContent>
       </Dialog>
@@ -1854,11 +1922,13 @@ function BulkStockIn() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— No Vendor —</SelectItem>
-                  {vendors.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
+                  {[...vendors]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -2225,11 +2295,13 @@ function BulkRowDesktop({
               <Plus size={12} /> New Product
             </button>
             <Separator className="my-1" />
-            {products.map((p) => (
-              <SelectItem key={p.id} value={p.id} className="text-xs">
-                {p.name} ({getProductStock(p.id)} {p.unit})
-              </SelectItem>
-            ))}
+            {[...products]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((p) => (
+                <SelectItem key={p.id} value={p.id} className="text-xs">
+                  {p.name} ({getProductStock(p.id)} {p.unit})
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </td>
@@ -2408,11 +2480,13 @@ function BulkRowMobile({
                 <Plus size={13} /> New Product
               </button>
               <Separator className="my-1" />
-              {products.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name} ({getProductStock(p.id)} {p.unit})
-                </SelectItem>
-              ))}
+              {[...products]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} ({getProductStock(p.id)} {p.unit})
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>
