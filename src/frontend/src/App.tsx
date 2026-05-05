@@ -141,6 +141,8 @@ function AppContent() {
   const [navHistory, setNavHistory] = useState<NavPage[]>(initial.history);
   const [transitioning, setTransitioning] = useState(false);
   const [pageParams, setPageParams] = useState<Record<string, unknown>>({});
+  // Mobile sidebar open trigger — set by Sidebar, forwarded to TopBar
+  const sidebarMenuTriggerRef = useRef<(() => void) | null>(null);
   const {
     isLoading,
     isPhase1Loading,
@@ -183,7 +185,11 @@ function AppContent() {
   const fabDefaultPos = () => {
     const vw = typeof window !== "undefined" ? window.innerWidth : 400;
     const vh = typeof window !== "undefined" ? window.innerHeight : 700;
-    return { x: vw - FAB_W - 20, y: vh - FAB_H - 20 };
+    const isMobile = vw <= 768;
+    // On mobile: keep away from bottom browser chrome (80px safe zone) and
+    // away from top sticky header. On desktop: original 20px margin.
+    const safeBottom = isMobile ? 80 : 20;
+    return { x: vw - FAB_W - 16, y: vh - FAB_H - safeBottom };
   };
   const {
     pos: fabPos,
@@ -318,7 +324,7 @@ function AppContent() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const doTransition = (nextPage: NavPage) => {
+  const doTransition = useCallback((nextPage: NavPage) => {
     setTransitioning(true);
     pendingPageRef.current = nextPage;
     setTimeout(() => {
@@ -326,14 +332,54 @@ function AppContent() {
       setTransitioning(false);
       window.scrollTo({ top: 0, behavior: "instant" });
     }, 120);
-  };
+  }, []);
 
-  const handleNavigate = (page: NavPage, params?: Record<string, unknown>) => {
-    if (page === currentPage) return;
-    setNavHistory((prev) => [...prev, currentPage]);
-    setPageParams(params ?? {});
-    doTransition(page);
-  };
+  const handleNavigate = useCallback(
+    (page: NavPage, params?: Record<string, unknown>) => {
+      if (page === currentPageRef.current) return;
+      setNavHistory((prev) => [...prev, currentPageRef.current]);
+      setPageParams(params ?? {});
+      doTransition(page);
+    },
+    [doTransition],
+  );
+
+  const handleAction = useCallback(
+    (action: string) => {
+      switch (action) {
+        case "NEW_SALE":
+          handleNavigate("billing");
+          break;
+        case "ADD_STOCK":
+          handleNavigate("stock");
+          break;
+        case "ADD_PRODUCT":
+          handleNavigate("inventory");
+          break;
+        case "NEW_ORDER":
+          handleNavigate("restaurant-order");
+          break;
+        case "NEW_JOB_CARD":
+        case "SEARCH_VEHICLE":
+          handleNavigate("service-repair");
+          setTimeout(() => {
+            window.dispatchEvent(
+              new CustomEvent("chatbot-action", { detail: { action } }),
+            );
+          }, 350);
+          break;
+        case "NEW_CUSTOMER":
+          handleNavigate("customers");
+          break;
+        case "NEW_VENDOR":
+          handleNavigate("vendors");
+          break;
+        default:
+          break;
+      }
+    },
+    [handleNavigate],
+  );
 
   const handleGoHome = () => {
     if (currentPage === "dashboard") return;
@@ -497,13 +543,21 @@ function AppContent() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
+      <Sidebar
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
+        onAction={handleAction}
+        onMenuTriggerReady={(fn) => {
+          sidebarMenuTriggerRef.current = fn;
+        }}
+      />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-auto">
         <TopBar
           title={PAGE_TITLES[currentPage] ?? "Save Shop"}
           goHome={handleGoHome}
           isHome={currentPage === "dashboard"}
+          onMenuToggle={() => sidebarMenuTriggerRef.current?.()}
         />
         <SyncStatusBanner engine={syncEngine} />
         {/* Compact multi-device sync status bar */}

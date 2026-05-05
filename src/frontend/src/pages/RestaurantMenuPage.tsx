@@ -728,27 +728,25 @@ export function RestaurantMenuPage() {
 
                 {/* Items grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {[...items]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((item) => {
-                      const absIdx = filtered.indexOf(item) + 1;
-                      const stockQty = item.inventoryProductId
-                        ? getProductStock(item.inventoryProductId)
-                        : null;
-                      return (
-                        <MenuItemCard
-                          key={item.id}
-                          item={item}
-                          index={absIdx}
-                          stockQty={stockQty}
-                          isOwnerOrManager={isOwnerOrManager}
-                          onEdit={openEdit}
-                          onDeleteRequest={setDeleteId}
-                          onToggleAvailable={toggleAvailable}
-                          onToggleQuickOrder={toggleQuickOrder}
-                        />
-                      );
-                    })}
+                  {items.map((item) => {
+                    const absIdx = filtered.indexOf(item) + 1;
+                    const stockQty = item.inventoryProductId
+                      ? getProductStock(item.inventoryProductId)
+                      : null;
+                    return (
+                      <MenuItemCard
+                        key={item.id}
+                        item={item}
+                        index={absIdx}
+                        stockQty={stockQty}
+                        isOwnerOrManager={isOwnerOrManager}
+                        onEdit={openEdit}
+                        onDeleteRequest={setDeleteId}
+                        onToggleAvailable={toggleAvailable}
+                        onToggleQuickOrder={toggleQuickOrder}
+                      />
+                    );
+                  })}
                 </div>
               </section>
             );

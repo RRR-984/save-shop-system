@@ -36,7 +36,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CategoryProductForm } from "../components/CategoryProductForm";
 import { ShadePalette } from "../components/ShadePalette";
@@ -87,6 +87,21 @@ export function StockPage({
     appConfig,
   } = useStore();
   const { selectedShop } = useAuth();
+
+  /** Filter products to only those belonging to the current shop category.
+   *  If no shopCategory is set, show all products (fallback). */
+  const categoryFilteredProducts = useMemo(() => {
+    const shopCat = selectedShop?.category ?? "";
+    if (!shopCat.trim()) return products;
+    return products.filter((p) => {
+      if (!p.categoryId) return true; // uncategorized — always show
+      const catName = categories.find((c) => c.id === p.categoryId)?.name ?? "";
+      return (
+        catName.toLowerCase().includes(shopCat.toLowerCase()) ||
+        shopCat.toLowerCase().includes(catName.toLowerCase())
+      );
+    });
+  }, [products, categories, selectedShop?.category]);
   const { t, language } = useLanguage();
 
   // ── Form draft protection ────────────────────────────────────────────────
@@ -537,16 +552,14 @@ export function StockPage({
                         <span>Add New Product</span>
                       </button>
                       <Separator className="my-1" />
-                      {[...products]
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}{" "}
-                            {p.unitMode === "mixed"
-                              ? `(Mixed: ${p.lengthUnit}+${p.weightUnit})`
-                              : `(Stock: ${getProductStock(p.id)} ${p.unit})`}
-                          </SelectItem>
-                        ))}
+                      {categoryFilteredProducts.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}{" "}
+                          {p.unitMode === "mixed"
+                            ? `(Mixed: ${p.lengthUnit}+${p.weightUnit})`
+                            : `(Stock: ${getProductStock(p.id)} ${p.unit})`}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1451,13 +1464,11 @@ export function StockPage({
                       <SelectValue placeholder="Select product" />
                     </SelectTrigger>
                     <SelectContent>
-                      {[...products]
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} (Stock: {getProductStock(p.id)} {p.unit})
-                          </SelectItem>
-                        ))}
+                      {products.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} (Stock: {getProductStock(p.id)} {p.unit})
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1746,15 +1757,21 @@ function BulkStockIn() {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const calcFinalCost = (row: BulkRow): number => {
-    const qty = Number(row.qty || 0);
-    const rate = Number(row.rate || 0);
-    return rate * qty + Number(row.transport || 0) + Number(row.labour || 0);
+    const qty = Number.parseFloat(row.qty) || 0;
+    const rate = Number.parseFloat(row.rate) || 0;
+    const transport = Number.parseFloat(row.transport) || 0;
+    const labour = Number.parseFloat(row.labour) || 0;
+    return rate * qty + transport + labour;
   };
 
   const calcPerUnitCost = (row: BulkRow): number => {
-    const qty = Number(row.qty || 0);
+    const qty = Number.parseFloat(row.qty) || 0;
     if (qty <= 0) return 0;
-    return calcFinalCost(row) / qty;
+    const rate = Number.parseFloat(row.rate) || 0;
+    const transport = Number.parseFloat(row.transport) || 0;
+    const labour = Number.parseFloat(row.labour) || 0;
+    // Per-unit cost = rate + (extra charges spread over units)
+    return rate + (transport + labour) / qty;
   };
 
   const validRowCount = rows.filter(
@@ -1773,27 +1790,52 @@ function BulkStockIn() {
     overrides: Partial<BulkRow> = {},
   ): Partial<BulkRow> => {
     const merged = { ...row, ...overrides };
-    const qty = Number(merged.qty || 0);
+    const qty = Number.parseFloat(merged.qty) || 0;
+    const perUnit = calcPerUnitCost(merged);
     const finalCost = calcFinalCost(merged);
+
+    // User explicitly changed profit %
     if (overrides.profitPct !== undefined) {
-      const pct = Number(merged.profitPct || 0);
-      if (finalCost > 0 && qty > 0) {
-        const totalSell = finalCost + (finalCost * pct) / 100;
+      const pct = Number.parseFloat(merged.profitPct) || 0;
+      if (perUnit > 0 && qty > 0) {
         return {
           profitPct: merged.profitPct,
-          sellPrice: (totalSell / qty).toFixed(2),
+          sellPrice: (perUnit + (perUnit * pct) / 100).toFixed(2),
         };
       }
       return { profitPct: merged.profitPct };
     }
+
+    // User explicitly changed sell price
     if (overrides.sellPrice !== undefined) {
-      if (finalCost > 0 && qty > 0 && Number(merged.sellPrice) > 0) {
-        const totalSell = Number(merged.sellPrice) * qty;
-        const pct = ((totalSell - finalCost) / finalCost) * 100;
+      const sp = Number.parseFloat(merged.sellPrice) || 0;
+      if (perUnit > 0 && sp > 0) {
+        const pct = ((sp - perUnit) / perUnit) * 100;
         return { sellPrice: merged.sellPrice, profitPct: pct.toFixed(2) };
       }
       return { sellPrice: merged.sellPrice };
     }
+
+    // Rate / qty / transport / labour changed — keep profit% locked, recalc sell price
+    if (
+      overrides.rate !== undefined ||
+      overrides.qty !== undefined ||
+      overrides.transport !== undefined ||
+      overrides.labour !== undefined
+    ) {
+      const existingPct = Number.parseFloat(row.profitPct) || 0;
+      if (existingPct > 0 && perUnit > 0 && qty > 0) {
+        return {
+          sellPrice: (perUnit + (perUnit * existingPct) / 100).toFixed(2),
+        };
+      }
+      const existingSell = Number.parseFloat(row.sellPrice) || 0;
+      if (existingSell > 0 && finalCost > 0 && qty > 0) {
+        const pct = ((existingSell - perUnit) / perUnit) * 100;
+        return { profitPct: Math.max(0, pct).toFixed(2) };
+      }
+    }
+
     return {};
   };
 
@@ -1922,13 +1964,11 @@ function BulkStockIn() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— No Vendor —</SelectItem>
-                  {[...vendors]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.name}
-                      </SelectItem>
-                    ))}
+                  {vendors.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1965,25 +2005,25 @@ function BulkStockIn() {
                   <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[180px]">
                     Product *
                   </th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[80px]">
                     Qty *
                   </th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[100px]">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[150px]">
                     Rate (₹) *
                   </th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[120px]">
                     Transport
                   </th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[120px]">
                     Labour
                   </th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[100px]">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[150px]">
                     Sell Price
                   </th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[80px]">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">
                     Profit %
                   </th>
-                  <th className="text-center px-3 py-2 font-medium text-muted-foreground w-[80px]">
+                  <th className="text-center px-3 py-2 font-medium text-muted-foreground w-[110px]">
                     Lagat/Unit
                   </th>
                   <th className="w-10" />
@@ -2295,13 +2335,11 @@ function BulkRowDesktop({
               <Plus size={12} /> New Product
             </button>
             <Separator className="my-1" />
-            {[...products]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((p) => (
-                <SelectItem key={p.id} value={p.id} className="text-xs">
-                  {p.name} ({getProductStock(p.id)} {p.unit})
-                </SelectItem>
-              ))}
+            {products.map((p) => (
+              <SelectItem key={p.id} value={p.id} className="text-xs">
+                {p.name} ({getProductStock(p.id)} {p.unit})
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </td>
@@ -2310,7 +2348,7 @@ function BulkRowDesktop({
         <Input
           type="number"
           placeholder="0"
-          className="h-8 text-xs"
+          className="h-8 text-xs w-full min-w-0"
           value={row.qty}
           onFocus={(e) => {
             if (e.target.value === "0") e.target.select();
@@ -2323,7 +2361,7 @@ function BulkRowDesktop({
         <Input
           type="number"
           placeholder="0"
-          className="h-8 text-xs"
+          className="h-8 text-xs w-full min-w-0"
           value={row.rate}
           onFocus={(e) => {
             if (e.target.value === "0") e.target.select();
@@ -2336,7 +2374,7 @@ function BulkRowDesktop({
         <Input
           type="number"
           placeholder="0"
-          className="h-8 text-xs"
+          className="h-8 text-xs w-full min-w-0"
           value={row.transport}
           onFocus={(e) => {
             if (e.target.value === "0") e.target.select();
@@ -2349,7 +2387,7 @@ function BulkRowDesktop({
         <Input
           type="number"
           placeholder="0"
-          className="h-8 text-xs"
+          className="h-8 text-xs w-full min-w-0"
           value={row.labour}
           onFocus={(e) => {
             if (e.target.value === "0") e.target.select();
@@ -2362,7 +2400,7 @@ function BulkRowDesktop({
         <Input
           type="number"
           placeholder="0"
-          className="h-8 text-xs"
+          className="h-8 text-xs w-full min-w-0"
           value={row.sellPrice}
           onFocus={(e) => {
             if (e.target.value === "0") e.target.select();
@@ -2375,7 +2413,7 @@ function BulkRowDesktop({
         <Input
           type="number"
           placeholder="0"
-          className="h-8 text-xs"
+          className="h-8 text-xs w-full min-w-0"
           value={row.profitPct}
           onFocus={(e) => {
             if (e.target.value === "0") e.target.select();
@@ -2385,11 +2423,21 @@ function BulkRowDesktop({
       </td>
       {/* Per unit cost (read-only) */}
       <td className="px-3 py-2 text-center">
-        <span
-          className={`text-xs font-semibold ${perUnitCost > 0 ? "text-primary" : "text-muted-foreground"}`}
-        >
-          {perUnitCost > 0 ? `₹${perUnitCost.toFixed(2)}` : "—"}
-        </span>
+        {perUnitCost > 0 ? (
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-xs font-bold text-primary">
+              ₹{perUnitCost.toFixed(2)}
+            </span>
+            {(Number.parseFloat(row.transport) > 0 ||
+              Number.parseFloat(row.labour) > 0) && (
+              <span className="text-[10px] text-muted-foreground leading-tight">
+                Rate+Charges
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
       </td>
       {/* Delete */}
       <td className="px-2 py-2 text-center">
@@ -2480,13 +2528,11 @@ function BulkRowMobile({
                 <Plus size={13} /> New Product
               </button>
               <Separator className="my-1" />
-              {[...products]
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} ({getProductStock(p.id)} {p.unit})
-                  </SelectItem>
-                ))}
+              {products.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} ({getProductStock(p.id)} {p.unit})
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -2577,18 +2623,21 @@ function BulkRowMobile({
 
         {/* Cost summary mini-box */}
         {(finalCost > 0 || perUnitCost > 0) && (
-          <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-xs">
-            <span className="text-muted-foreground">Final Lagat:</span>
-            <span className="font-semibold text-foreground">
-              ₹{finalCost.toFixed(2)}
-            </span>
-            {perUnitCost > 0 && (
-              <>
-                <span className="text-muted-foreground ml-2">Per Unit:</span>
-                <span className="font-semibold text-primary">
-                  ₹{perUnitCost.toFixed(2)}
+          <div className="rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Rate/Unit:</span>
+              <span className="font-bold text-primary">
+                ₹{perUnitCost.toFixed(2)}
+              </span>
+            </div>
+            {(Number.parseFloat(row.transport) > 0 ||
+              Number.parseFloat(row.labour) > 0) && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Final Lagat:</span>
+                <span className="font-semibold text-foreground">
+                  ₹{finalCost.toFixed(2)}
                 </span>
-              </>
+              </div>
             )}
           </div>
         )}

@@ -76,10 +76,10 @@ const ORDER_TYPES: {
 
 const CATEGORIES: Array<{ value: MenuCategory | "all"; label: string }> = [
   { value: "all", label: "All" },
-  { value: "drinks", label: "🥤 Drinks" },
-  { value: "nonveg", label: "🍗 Non-Veg" },
-  { value: "snacks", label: "🍟 Snacks" },
   { value: "veg", label: "🥦 Veg" },
+  { value: "nonveg", label: "🍗 Non-Veg" },
+  { value: "drinks", label: "🥤 Drinks" },
+  { value: "snacks", label: "🍟 Snacks" },
 ];
 
 interface CartEntry {

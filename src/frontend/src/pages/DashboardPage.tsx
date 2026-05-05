@@ -894,11 +894,12 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const {
     products,
     batches,
+    categories,
     invoices,
     getTotalStockValue,
     getTodaySales,
     getTodayProfit,
-    getLowStockProducts,
+
     transactions,
     getProductStock,
     getTotalCreditDue,
@@ -925,7 +926,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     phase2HasPartialError,
   } = useStore();
 
-  const { currentShop, session, currentUser, createNewShop } = useAuth();
+  const { currentShop, session, currentUser, createNewShop, selectedShop } =
+    useAuth();
   const { t } = useLanguage();
   const { language } = useLanguage();
 
@@ -1094,9 +1096,27 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const totalValue = getTotalStockValue();
   const todaySales = useMemo(() => getTodaySales(), [getTodaySales]);
   const todayProfit = getTodayProfit();
+
+  // ── Category-filtered products (CRITICAL: alerts only show for current shop category) ──
+  const categoryFilteredProducts = useMemo(() => {
+    if (!selectedShop?.category) return products;
+    const shopCategoryName = selectedShop.category.toLowerCase();
+    const matchingCategory = categories.find(
+      (c) =>
+        c.name.toLowerCase() === shopCategoryName ||
+        c.id.toLowerCase() === shopCategoryName,
+    );
+    if (!matchingCategory) return products;
+    return products.filter((p) => p.categoryId === matchingCategory.id);
+  }, [products, selectedShop?.category, categories]);
+
   const lowStockItems = useMemo(
-    () => getLowStockProducts(),
-    [getLowStockProducts],
+    () =>
+      categoryFilteredProducts.filter((p) => {
+        const stock = getProductStock(p.id);
+        return stock > 0 && stock <= p.minStockAlert;
+      }),
+    [categoryFilteredProducts, getProductStock],
   );
   const allLedgers = useMemo(
     () => getAllCustomerLedgers(),
@@ -1142,7 +1162,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     .reduce((s, inv) => s + inv.paidAmount, 0);
 
   // ── Alert counts ────────────────────────────────────────────────────────────
-  const outOfStockItems = products.filter((p) => getProductStock(p.id) === 0);
+  const outOfStockItems = useMemo(
+    () => categoryFilteredProducts.filter((p) => getProductStock(p.id) === 0),
+    [categoryFilteredProducts, getProductStock],
+  );
   const dueCustomers = allLedgers
     .filter((l) => l.totalDue > 0)
     .sort((a, b) => b.totalDue - a.totalDue)
@@ -1169,16 +1192,19 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           const daysLeft = Math.ceil(
             (expiry.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24),
           );
-          const product = products.find((p) => p.id === b.productId);
+          const product = categoryFilteredProducts.find(
+            (p) => p.id === b.productId,
+          );
           return {
             batchId: b.id,
             productName: product?.name ?? "Unknown",
             daysLeft,
+            productFound: !!product,
           };
         })
-        .filter((a) => a.daysLeft <= 30)
+        .filter((a) => a.productFound && a.daysLeft <= 30)
         .sort((a, b) => a.daysLeft - b.daysLeft),
-    [batches, products, todayDate],
+    [batches, categoryFilteredProducts, todayDate],
   );
 
   // ── Total alerts count (for Summary Card #4) ───────────────────────────────
@@ -1318,7 +1344,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const halfThreshold = Math.floor(threshold / 2);
 
   const deadStockItems = useMemo(() => {
-    return products.filter((p) => {
+    return categoryFilteredProducts.filter((p) => {
       const totalQty = batches
         .filter((b) => b.productId === p.id)
         .reduce((s, b) => s + b.quantity, 0);
@@ -1329,10 +1355,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         : 9999;
       return daysSince >= threshold;
     });
-  }, [products, batches, threshold, getLastSoldDate, todayMs]);
+  }, [categoryFilteredProducts, batches, threshold, getLastSoldDate, todayMs]);
 
   const slowMovingItems = useMemo(() => {
-    return products.filter((p) => {
+    return categoryFilteredProducts.filter((p) => {
       const totalQty = batches
         .filter((b) => b.productId === p.id)
         .reduce((s, b) => s + b.quantity, 0);
@@ -1343,7 +1369,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         : 9999;
       return daysSince >= halfThreshold && daysSince < threshold;
     });
-  }, [products, batches, halfThreshold, threshold, getLastSoldDate, todayMs]);
+  }, [
+    categoryFilteredProducts,
+    batches,
+    halfThreshold,
+    threshold,
+    getLastSoldDate,
+    todayMs,
+  ]);
 
   const expiryWithin30 = expiryAlerts.length;
 
@@ -1619,7 +1652,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           p.name.toLowerCase().includes(searchLower) ||
           (p.categoryId ?? "").toLowerCase().includes(searchLower),
       )
-      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 5)
       .map((p) => ({ ...p, currentStock: getProductStock(p.id) }));
 
@@ -1630,7 +1662,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           c.name.toLowerCase().includes(searchLower) ||
           (c.mobile ?? "").includes(searchLower),
       )
-      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 5);
 
     // Vendors (up to 5)
@@ -1641,7 +1672,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           (v.mobile ?? "").toLowerCase().includes(searchLower) ||
           (v.email ?? "").toLowerCase().includes(searchLower),
       )
-      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 5);
 
     // Staff/Users (up to 5)
@@ -1652,7 +1682,6 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           (u.mobile ?? "").includes(searchLower) ||
           u.role.toLowerCase().includes(searchLower),
       )
-      .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 5);
 
     // Navigation pages (up to 5)
@@ -1702,7 +1731,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const filterChipProducts = useMemo(() => {
     if (activeFilter === "all" || activeFilter === "paymentPending")
       return null;
-    const withStock = products.map((p) => ({
+    const withStock = categoryFilteredProducts.map((p) => ({
       ...p,
       currentStock: getProductStock(p.id),
       profitPct:
@@ -1724,7 +1753,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       case "expiryAlert":
         return withStock.filter((p) =>
           expiryAlerts.some((e) => {
-            const prod = products.find((pr) => pr.name === e.productName);
+            const prod = categoryFilteredProducts.find(
+              (pr) => pr.name === e.productName,
+            );
             return prod?.id === p.id;
           }),
         );
@@ -1737,7 +1768,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     }
   }, [
     activeFilter,
-    products,
+    categoryFilteredProducts,
     getProductStock,
     deadStockItems,
     expiryAlerts,

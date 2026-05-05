@@ -18,6 +18,13 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     minify: false,
+    rollupOptions: {
+      output: {
+        entryFileNames: "[name]-[hash].js",
+        chunkFileNames: "[name]-[hash].js",
+        assetFileNames: "[name]-[hash][extname]",
+      },
+    },
   },
   css: {
     postcss: "./postcss.config.js",

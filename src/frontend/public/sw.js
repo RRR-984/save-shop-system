@@ -1,15 +1,16 @@
-const CACHE_NAME = 'fifo-bridge-v161';
+const CACHE_NAME = 'save-shop-v221';
 const APP_SHELL = [
   '/',
-  '/index.html',
   '/manifest.json',
 ];
 
 self.addEventListener('install', (event) => {
+  // Skip waiting immediately so new SW takes over without delay
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(APP_SHELL);
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -23,10 +24,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Allow page to force-activate a waiting SW immediately
+// Message handler: SKIP_WAITING and GET_VERSION
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  if (!event.data) return;
+  if (event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+  if (event.data.type === 'GET_VERSION') {
+    if (event.source) {
+      event.source.postMessage({ type: 'VERSION', version: CACHE_NAME });
+    }
   }
 });
 
@@ -34,21 +41,37 @@ self.addEventListener('fetch', (event) => {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // Network-first for index.html — always fetch fresh HTML
+  // Only fall back to cache if network fails
+  if (
+    event.request.mode === 'navigate' ||
+    url.pathname === '/index.html' ||
+    url.pathname === '/'
+  ) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        // SPA fallback: if navigation gets a 404, serve fresh /index.html
+        if (response.status === 404 || !response.ok) {
+          return fetch('/index.html');
+        }
+        return response;
+      }).catch(() => {
+        // Network failure — fall back to cached index.html for offline support
+        return caches.match('/index.html').then((fallback) => {
+          return fallback ?? new Response('Offline', { status: 503 });
+        });
+      })
+    );
+    return;
+  }
+
+  // Cache-first for all other same-origin requests (JS, CSS, images)
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).then((response) => {
-        // SPA fallback: if navigation request gets a 404, serve /index.html
-        if (
-          event.request.mode === 'navigate' &&
-          (response.status === 404 || !response.ok)
-        ) {
-          return caches.match('/index.html').then((fallback) => {
-            if (fallback) return fallback;
-            return fetch('/index.html');
-          });
-        }
-
         // Cache successful responses for same-origin requests
         if (
           response.ok &&
@@ -59,13 +82,7 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => {
-        // Network failure — for navigation requests serve cached index.html
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html').then((fallback) => {
-            return fallback ?? new Response('Offline', { status: 503 });
-          });
-        }
-        return cached ?? new Response('Offline', { status: 503 });
+        return new Response('Offline', { status: 503 });
       });
     })
   );

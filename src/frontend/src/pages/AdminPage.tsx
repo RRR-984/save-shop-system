@@ -1772,76 +1772,74 @@ function CategoriesManager() {
             No categories yet. Add one above.
           </p>
         )}
-        {[...categories]
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((c, idx) => (
-            <Card
-              key={c.id}
-              data-ocid={`admin.categories.item.${idx + 1}`}
-              className="shadow-card border-border"
-            >
-              <CardContent className="p-3 flex items-center justify-between">
-                {editingId === c.id ? (
-                  <div className="flex gap-2 flex-1">
-                    <Input
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      className="h-8"
-                      onKeyDown={(e) => e.key === "Enter" && handleUpdate(c.id)}
-                    />
+        {categories.map((c, idx) => (
+          <Card
+            key={c.id}
+            data-ocid={`admin.categories.item.${idx + 1}`}
+            className="shadow-card border-border"
+          >
+            <CardContent className="p-3 flex items-center justify-between">
+              {editingId === c.id ? (
+                <div className="flex gap-2 flex-1">
+                  <Input
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    className="h-8"
+                    onKeyDown={(e) => e.key === "Enter" && handleUpdate(c.id)}
+                  />
+                  <Button
+                    data-ocid={`admin.categories.save_button.${idx + 1}`}
+                    size="sm"
+                    onClick={() => handleUpdate(c.id)}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    data-ocid={`admin.categories.cancel_button.${idx + 1}`}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEditingId(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <span className="text-sm font-medium text-foreground">
+                    {c.name}
+                  </span>
+                  <div className="flex gap-1">
+                    <Badge variant="outline" className="text-xs mr-2">
+                      {products.filter((p) => p.categoryId === c.id).length}{" "}
+                      products
+                    </Badge>
                     <Button
-                      data-ocid={`admin.categories.save_button.${idx + 1}`}
+                      data-ocid={`admin.categories.edit_button.${idx + 1}`}
+                      variant="ghost"
                       size="sm"
-                      onClick={() => handleUpdate(c.id)}
+                      className="h-7 w-7 p-0"
+                      onClick={() => {
+                        setEditingId(c.id);
+                        setEditingName(c.name);
+                      }}
                     >
-                      Save
+                      <Pencil size={12} />
                     </Button>
                     <Button
-                      data-ocid={`admin.categories.cancel_button.${idx + 1}`}
+                      data-ocid={`admin.categories.delete_button.${idx + 1}`}
+                      variant="ghost"
                       size="sm"
-                      variant="outline"
-                      onClick={() => setEditingId(null)}
+                      className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDelete(c.id)}
                     >
-                      Cancel
+                      <Trash2 size={12} />
                     </Button>
                   </div>
-                ) : (
-                  <>
-                    <span className="text-sm font-medium text-foreground">
-                      {c.name}
-                    </span>
-                    <div className="flex gap-1">
-                      <Badge variant="outline" className="text-xs mr-2">
-                        {products.filter((p) => p.categoryId === c.id).length}{" "}
-                        products
-                      </Badge>
-                      <Button
-                        data-ocid={`admin.categories.edit_button.${idx + 1}`}
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={() => {
-                          setEditingId(c.id);
-                          setEditingName(c.name);
-                        }}
-                      >
-                        <Pencil size={12} />
-                      </Button>
-                      <Button
-                        data-ocid={`admin.categories.delete_button.${idx + 1}`}
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                        onClick={() => handleDelete(c.id)}
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   );
@@ -1853,14 +1851,14 @@ function UnitsManager() {
   const [newUnit, setNewUnit] = useState("");
 
   const COMMON_UNITS = [
-    "box",
-    "bundle",
-    "dozen",
-    "gram",
     "kg",
+    "gram",
     "litre",
     "ml",
     "pcs",
+    "box",
+    "dozen",
+    "bundle",
   ];
 
   const handleAdd = () => {
@@ -1935,38 +1933,36 @@ function UnitsManager() {
             </p>
           </div>
         ) : (
-          [...shopUnits]
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((u, idx) => (
-              <Card
-                key={u.id}
-                data-ocid={`admin.units.item.${idx + 1}`}
-                className="shadow-card border-border"
-              >
-                <CardContent className="p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-md bg-accent flex items-center justify-center">
-                      <Ruler size={13} className="text-accent-foreground" />
-                    </div>
-                    <span className="text-sm font-medium text-foreground">
-                      {u.name}
-                    </span>
+          shopUnits.map((u, idx) => (
+            <Card
+              key={u.id}
+              data-ocid={`admin.units.item.${idx + 1}`}
+              className="shadow-card border-border"
+            >
+              <CardContent className="p-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-md bg-accent flex items-center justify-center">
+                    <Ruler size={13} className="text-accent-foreground" />
                   </div>
-                  <Button
-                    data-ocid={`admin.units.delete_button.${idx + 1}`}
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                    onClick={() => {
-                      deleteShopUnit(u.id);
-                      toast.success("Unit deleted");
-                    }}
-                  >
-                    <Trash2 size={12} />
-                  </Button>
-                </CardContent>
-              </Card>
-            ))
+                  <span className="text-sm font-medium text-foreground">
+                    {u.name}
+                  </span>
+                </div>
+                <Button
+                  data-ocid={`admin.units.delete_button.${idx + 1}`}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    deleteShopUnit(u.id);
+                    toast.success("Unit deleted");
+                  }}
+                >
+                  <Trash2 size={12} />
+                </Button>
+              </CardContent>
+            </Card>
+          ))
         )}
       </div>
     </div>

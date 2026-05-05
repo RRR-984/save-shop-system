@@ -41,7 +41,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AttrsDisplay,
@@ -467,6 +467,7 @@ export function BillingPage({
 }) {
   const {
     products,
+    categories,
     getProductStock,
     calculateFIFOCost,
     createInvoice,
@@ -490,6 +491,20 @@ export function BillingPage({
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
   /** Shop category drives which cart item attrs are shown */
   const shopCategory = selectedShop?.category ?? "";
+
+  /** Filter products to only those belonging to the current shop category.
+   *  If no shopCategory is set, show all products (fallback). */
+  const categoryFilteredProducts = useMemo(() => {
+    if (!shopCategory.trim()) return products;
+    return products.filter((p) => {
+      if (!p.categoryId) return true; // uncategorized — always show
+      const catName = categories.find((c) => c.id === p.categoryId)?.name ?? "";
+      return (
+        catName.toLowerCase().includes(shopCategory.toLowerCase()) ||
+        shopCategory.toLowerCase().includes(catName.toLowerCase())
+      );
+    });
+  }, [products, categories, shopCategory]);
 
   // ── Pro Mode + Customer Tracking feature gate ─────────────────────────────
   const isProMode = autoMode === "pro";
@@ -2082,7 +2097,7 @@ export function BillingPage({
                   </Label>
                   <div
                     data-ocid="billing.customer_type.toggle"
-                    className="flex gap-1.5 flex-wrap"
+                    className="flex gap-1.5 flex-nowrap overflow-x-auto pb-0.5"
                   >
                     {(
                       [
@@ -2120,7 +2135,7 @@ export function BillingPage({
                           setCustomerType(key);
                           applyCustomerTypeToCart(key);
                         }}
-                        className={`px-3 py-1.5 rounded-full text-xs border transition-all ${cls} ${
+                        className={`flex-shrink-0 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs border transition-all ${cls} ${
                           customerType === key
                             ? activeCls
                             : "opacity-60 hover:opacity-90"
@@ -2158,8 +2173,10 @@ export function BillingPage({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 pt-3">
-                <div className="flex gap-2 items-center">
-                  <div className="flex-1 min-w-0 flex gap-2 items-center">
+                {/* Mobile: vertical stack | Desktop: single row */}
+                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                  {/* ROW 1 — Product Select (full width) */}
+                  <div className="w-full md:flex-1 md:min-w-0">
                     <Select
                       value={selectedProductId}
                       onValueChange={(v) => {
@@ -2169,63 +2186,83 @@ export function BillingPage({
                     >
                       <SelectTrigger
                         data-ocid="billing.product.select"
-                        className="flex-1"
+                        className="w-full"
                       >
                         <SelectValue placeholder="Search & select product..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {[...products]
-                          .sort((a, b) => a.name.localeCompare(b.name))
-                          .map((p) => {
-                            const stock = getProductStock(p.id);
-                            const isZero = stock <= 0;
-                            return (
-                              <SelectItem key={p.id} value={p.id}>
-                                <span
-                                  className={isZero ? "text-orange-500" : ""}
-                                >
-                                  {isZero ? "⚠️ " : ""}
-                                  {p.name}
-                                  {p.partNo ? ` (Part No: ${p.partNo})` : ""} —
-                                  Stock: {stock} {p.unit}
-                                </span>
-                              </SelectItem>
-                            );
-                          })}
+                        {categoryFilteredProducts.map((p) => {
+                          const stock = getProductStock(p.id);
+                          const isZero = stock <= 0;
+                          return (
+                            <SelectItem key={p.id} value={p.id}>
+                              <span className={isZero ? "text-orange-500" : ""}>
+                                {isZero ? "⚠️ " : ""}
+                                {p.name}
+                                {p.partNo ? ` (Part No: ${p.partNo})` : ""} —
+                                Stock: {stock} {p.unit}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
-                  <Input
-                    ref={qtyInputRef}
-                    data-ocid="billing.qty.input"
-                    type="number"
-                    placeholder="Qty"
-                    value={addQty}
-                    onChange={(e) =>
-                      setAddQty(clearLeadingZeros(e.target.value))
-                    }
-                    onFocus={(e) => {
-                      if (e.target.value === "0") e.target.select();
-                    }}
-                    className="w-28"
-                  />
-                  <VoiceInputButton
-                    compact
-                    onParsed={handleBillingVoiceParsed}
-                    lang={language === "hi" ? "hi-IN" : "en-IN"}
-                    data-ocid="billing.voice_input.button"
-                  />
-                  <QRScannerToggle
-                    products={products}
-                    onProductScanned={handleProductScanned}
-                    qtyInputRef={qtyInputRef}
-                  />
+
+                  {/* ROW 2 (mobile) — Mic + Barcode side by side */}
+                  <div className="flex items-center gap-2 md:contents">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <VoiceInputButton
+                        compact
+                        onParsed={handleBillingVoiceParsed}
+                        lang={language === "hi" ? "hi-IN" : "en-IN"}
+                        data-ocid="billing.voice_input.button"
+                      />
+                      <span className="text-[10px] text-muted-foreground md:hidden">
+                        Voice
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <QRScannerToggle
+                        products={products}
+                        onProductScanned={handleProductScanned}
+                        qtyInputRef={qtyInputRef}
+                      />
+                      <span className="text-[10px] text-muted-foreground md:hidden">
+                        Scan
+                      </span>
+                    </div>
+
+                    {/* ROW 3 (mobile) — Qty label + input */}
+                    <div className="flex items-center gap-1.5 flex-1 md:flex-none">
+                      <span className="text-sm font-medium text-muted-foreground whitespace-nowrap md:hidden">
+                        Qty:
+                      </span>
+                      <Input
+                        ref={qtyInputRef}
+                        data-ocid="billing.qty.input"
+                        type="number"
+                        placeholder="Qty"
+                        value={addQty}
+                        onChange={(e) =>
+                          setAddQty(clearLeadingZeros(e.target.value))
+                        }
+                        onFocus={(e) => {
+                          if (e.target.value === "0") e.target.select();
+                        }}
+                        className="w-24 md:w-28"
+                      />
+                    </div>
+                  </div>
+
+                  {/* ROW 4 (mobile) — Add to Cart button full width */}
                   <Button
                     data-ocid="billing.add_item.button"
                     onClick={handleAddToCart}
+                    className="w-full py-3 md:w-auto md:py-0"
                     size="sm"
                   >
-                    <Plus size={16} />
+                    <Plus size={16} className="mr-1" /> Add to Cart
                   </Button>
                 </div>
 

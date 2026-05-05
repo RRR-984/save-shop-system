@@ -142,6 +142,7 @@ export function ShopBoardPage({ onNavigate: _onNavigate }: ShopBoardPageProps) {
   const {
     products,
     batches,
+    categories,
     invoices,
     customers,
     vendors,
@@ -154,7 +155,7 @@ export function ShopBoardPage({ onNavigate: _onNavigate }: ShopBoardPageProps) {
     users,
   } = useStore();
 
-  const { currentShop, currentUser } = useAuth();
+  const { currentShop, currentUser, selectedShop } = useAuth();
 
   const [amountsVisible, setAmountsVisible] = useState<boolean>(
     () => localStorage.getItem("amountsVisible") === "true",
@@ -180,6 +181,19 @@ export function ShopBoardPage({ onNavigate: _onNavigate }: ShopBoardPageProps) {
 
   const deadStockThreshold = shopSettings.deadStockThresholdDays ?? 90;
 
+  // ── Category-filtered products (alerts must only show for current shop category) ──
+  const categoryFilteredProducts = useMemo(() => {
+    if (!selectedShop?.category) return products;
+    const shopCategoryName = selectedShop.category.toLowerCase();
+    const matchingCategory = categories.find(
+      (c) =>
+        c.name.toLowerCase() === shopCategoryName ||
+        c.id.toLowerCase() === shopCategoryName,
+    );
+    if (!matchingCategory) return products;
+    return products.filter((p) => p.categoryId === matchingCategory.id);
+  }, [products, selectedShop?.category, categories]);
+
   // ── SECTION 1: SHOP INFO ──────────────────────────────────────────────────
   const shopName = currentShop?.name ?? "My Shop";
   const ownerName = currentUser?.name || currentUser?.mobile || "Owner";
@@ -202,21 +216,23 @@ export function ShopBoardPage({ onNavigate: _onNavigate }: ShopBoardPageProps) {
 
   const lowStockCount = useMemo(
     () =>
-      products.filter((p) => {
+      categoryFilteredProducts.filter((p) => {
         const stock = getProductStock(p.id);
         return stock > 0 && stock <= p.minStockAlert;
       }).length,
-    [products, getProductStock],
+    [categoryFilteredProducts, getProductStock],
   );
 
   const outOfStockCount = useMemo(
-    () => products.filter((p) => getProductStock(p.id) === 0).length,
-    [products, getProductStock],
+    () =>
+      categoryFilteredProducts.filter((p) => getProductStock(p.id) === 0)
+        .length,
+    [categoryFilteredProducts, getProductStock],
   );
 
   const deadStockCount = useMemo(
     () =>
-      products.filter((p) => {
+      categoryFilteredProducts.filter((p) => {
         const totalQty = batches
           .filter((b) => b.productId === p.id)
           .reduce((s, b) => s + b.quantity, 0);
@@ -227,7 +243,13 @@ export function ShopBoardPage({ onNavigate: _onNavigate }: ShopBoardPageProps) {
           : 9999;
         return daysSince >= deadStockThreshold;
       }).length,
-    [products, batches, getLastSoldDate, todayMs, deadStockThreshold],
+    [
+      categoryFilteredProducts,
+      batches,
+      getLastSoldDate,
+      todayMs,
+      deadStockThreshold,
+    ],
   );
 
   const totalBatches = batches.length;

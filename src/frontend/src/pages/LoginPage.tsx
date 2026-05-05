@@ -121,9 +121,36 @@ function OtpLoginFlow({
 
   // ── Fallback category list — always shown if backend is unavailable ───────────
   const FALLBACK_CATEGORIES: GlobalCategory[] = [
+    { id: "cat_footwear", name: "Footwear", isDefault: true, isDeleted: false },
+    {
+      id: "cat_medical",
+      name: "Medical / Pharma",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_general",
+      name: "General Store",
+      isDefault: true,
+      isDeleted: false,
+    },
+    { id: "cat_hardware", name: "Hardware", isDefault: true, isDeleted: false },
+    {
+      id: "cat_building",
+      name: "Building Material",
+      isDefault: true,
+      isDeleted: false,
+    },
     {
       id: "cat_autoparts",
       name: "Auto Parts",
+      isDefault: true,
+      isDeleted: false,
+    },
+    { id: "cat_oil", name: "Oil & Grease", isDefault: true, isDeleted: false },
+    {
+      id: "cat_fruits",
+      name: "Fruits & Vegetables",
       isDefault: true,
       isDeleted: false,
     },
@@ -134,21 +161,8 @@ function OtpLoginFlow({
       isDeleted: false,
     },
     {
-      id: "cat_building",
-      name: "Building Material",
-      isDefault: true,
-      isDeleted: false,
-    },
-    {
-      id: "cat_building_suppliers",
-      name: "Building Material Suppliers",
-      isDefault: true,
-      isDeleted: false,
-    },
-    { id: "cat_clothing", name: "Clothing", isDefault: true, isDeleted: false },
-    {
-      id: "cat_dairy",
-      name: "Dairy & Daily Needs",
+      id: "cat_mobile",
+      name: "Mobile Shop",
       isDefault: true,
       isDeleted: false,
     },
@@ -164,47 +178,13 @@ function OtpLoginFlow({
       isDefault: true,
       isDeleted: false,
     },
-    { id: "cat_footwear", name: "Footwear", isDefault: true, isDeleted: false },
-    {
-      id: "cat_fruits",
-      name: "Fruits & Vegetables",
-      isDefault: true,
-      isDeleted: false,
-    },
-    {
-      id: "cat_furniture",
-      name: "Furniture",
-      isDefault: false,
-      isDeleted: false,
-    },
-    {
-      id: "cat_general",
-      name: "General Store",
-      isDefault: true,
-      isDeleted: false,
-    },
-    { id: "cat_grocery", name: "Grocery", isDefault: true, isDeleted: false },
-    { id: "cat_hardware", name: "Hardware", isDefault: true, isDeleted: false },
-    {
-      id: "cat_medical",
-      name: "Medical / Pharma",
-      isDefault: true,
-      isDeleted: false,
-    },
-    {
-      id: "cat_mobile",
-      name: "Mobile Shop",
-      isDefault: true,
-      isDeleted: false,
-    },
-    { id: "cat_oil", name: "Oil & Grease", isDefault: true, isDeleted: false },
-    { id: "cat_sanitary", name: "Sanitary", isDefault: true, isDeleted: false },
     {
       id: "cat_stationery",
       name: "Stationery",
       isDefault: true,
       isDeleted: false,
     },
+    { id: "cat_grocery", name: "Grocery", isDefault: true, isDeleted: false },
     {
       id: "cat_sweets",
       name: "Sweets & Bakery",
@@ -212,9 +192,29 @@ function OtpLoginFlow({
       isDeleted: false,
     },
     {
+      id: "cat_dairy",
+      name: "Dairy & Daily Needs",
+      isDefault: true,
+      isDeleted: false,
+    },
+    { id: "cat_clothing", name: "Clothing", isDefault: true, isDeleted: false },
+    {
       id: "cat_tiles",
       name: "Tiles & Marble",
       isDefault: true,
+      isDeleted: false,
+    },
+    { id: "cat_sanitary", name: "Sanitary", isDefault: true, isDeleted: false },
+    {
+      id: "cat_building_suppliers",
+      name: "Building Material Suppliers",
+      isDefault: true,
+      isDeleted: false,
+    },
+    {
+      id: "cat_furniture",
+      name: "Furniture",
+      isDefault: false,
       isDeleted: false,
     },
   ];
@@ -497,13 +497,11 @@ function OtpLoginFlow({
                       <option value="" disabled>
                         — Select your shop category —
                       </option>
-                      {[...globalCategories]
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((cat) => (
-                          <option key={cat.id} value={cat.name}>
-                            {cat.name}
-                          </option>
-                        ))}
+                      {globalCategories.map((cat) => (
+                        <option key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </option>
+                      ))}
                     </select>
                   )}
                   {categoryError && (

@@ -46,6 +46,7 @@ const FEEDBACK_TYPES: {
       "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/40",
   },
 ];
+
 const STATUS_CONFIG = {
   pending: {
     label: "Pending",

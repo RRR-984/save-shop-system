@@ -804,7 +804,7 @@ function RegisterVehicleForm({
             className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             data-ocid="service.register.vehicle_type.select"
           >
-            {["Auto", "Bike", "Car", "Other", "Scooter", "Truck"].map((t) => (
+            {["Car", "Bike", "Truck", "Scooter", "Auto", "Other"].map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
@@ -971,6 +971,168 @@ function VehicleHistoryTimeline({
   );
 }
 
+// ─── Quick New Job Card Modal ─────────────────────────────────────────────────
+// Opens from the header button — user enters vehicle number first, then
+// either existing vehicle is loaded or a new one is registered, then
+// JobCardModal opens normally.
+interface QuickJobCardModalProps {
+  shopId: string;
+  vehicleRecords: VehicleRecord[];
+  onClose: () => void;
+  onVehicleReady: (vehicle: VehicleRecord) => void;
+}
+
+function QuickJobCardModal({
+  shopId,
+  vehicleRecords,
+  onClose,
+  onVehicleReady,
+}: QuickJobCardModalProps) {
+  const [vehicleInput, setVehicleInput] = useState("");
+  const [step, setStep] = useState<"enter" | "register">("enter");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  function handleLookup() {
+    const q = vehicleInput.trim().toUpperCase();
+    if (!q) {
+      toast.error("Please enter a vehicle number");
+      return;
+    }
+    const found = vehicleRecords.find((v) => v.vehicleNumber === q);
+    if (found) {
+      onVehicleReady(found);
+    } else {
+      setStep("register");
+    }
+  }
+
+  return (
+    <dialog
+      open
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 m-0 w-full h-full max-w-none max-h-none border-0"
+      data-ocid="service.quick_job_card.dialog"
+      aria-label="Quick New Job Card"
+    >
+      <div className="w-full sm:max-w-md bg-card rounded-t-2xl sm:rounded-2xl shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Plus size={16} className="text-primary" />
+            </div>
+            <div>
+              <p className="font-bold text-foreground text-sm">New Job Card</p>
+              <p className="text-xs text-muted-foreground">
+                {step === "enter"
+                  ? "Enter vehicle number to continue"
+                  : "Register vehicle to continue"}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+            data-ocid="service.quick_job_card.close_button"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5">
+          {step === "enter" ? (
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="quick-vnum"
+                  className="text-xs font-semibold text-muted-foreground block mb-1.5"
+                >
+                  Vehicle Number *
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Car
+                      size={15}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                    />
+                    <Input
+                      id="quick-vnum"
+                      ref={inputRef}
+                      value={vehicleInput}
+                      onChange={(e) =>
+                        setVehicleInput(e.target.value.toUpperCase())
+                      }
+                      onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+                      placeholder="e.g. RJ14AB1234"
+                      className="pl-9 uppercase font-mono tracking-wider"
+                      data-ocid="service.quick_job_card.vehicle_number.input"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleLookup}
+                    data-ocid="service.quick_job_card.lookup_button"
+                    aria-label="Look up vehicle"
+                  >
+                    <Search size={15} />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  If the vehicle exists, its record will be loaded
+                  automatically. If new, you'll register it first.
+                </p>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  className="flex-1"
+                  data-ocid="service.quick_job_card.cancel_button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleLookup}
+                  className="flex-1"
+                  data-ocid="service.quick_job_card.continue_button"
+                >
+                  Continue
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl text-sm">
+                <AlertTriangle
+                  size={15}
+                  className="text-amber-500 flex-shrink-0"
+                />
+                <span className="text-muted-foreground">
+                  Vehicle{" "}
+                  <span className="font-bold text-foreground">
+                    {vehicleInput}
+                  </span>{" "}
+                  not found — register it first
+                </span>
+              </div>
+              <RegisterVehicleForm
+                prefillNumber={vehicleInput}
+                shopId={shopId}
+                onRegistered={(v) => onVehicleReady(v)}
+                onCancel={() => setStep("enter")}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function ServiceRepairPage() {
   const { session } = useAuth();
@@ -991,6 +1153,7 @@ export function ServiceRepairPage() {
   >(undefined);
   const [showRegister, setShowRegister] = useState(false);
   const [showJobModal, setShowJobModal] = useState(false);
+  const [showQuickModal, setShowQuickModal] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleRecord | null>(
     null,
   );
@@ -1051,22 +1214,36 @@ export function ServiceRepairPage() {
       {/* Header */}
       <div className="sticky top-0 bg-card border-b border-border px-4 py-3 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center flex-shrink-0">
             <Wrench size={17} className="text-amber-600 dark:text-amber-400" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="text-base font-bold text-foreground">
               Service &amp; Repair
             </h1>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground hidden sm:block">
               Vehicle job cards &amp; service history
             </p>
           </div>
           {dueReminders.length > 0 && (
-            <Badge variant="destructive" className="ml-auto">
+            <Badge
+              variant="destructive"
+              className="flex-shrink-0 hidden sm:flex"
+            >
               {dueReminders.length} Due
             </Badge>
           )}
+          {/* Prominent New Job Card button — always visible */}
+          <Button
+            size="sm"
+            onClick={() => setShowQuickModal(true)}
+            className="flex-shrink-0 gap-1.5 font-semibold shadow-sm"
+            data-ocid="service.header.new_job_card.primary_button"
+          >
+            <Plus size={15} />
+            <span className="hidden xs:inline">New Job Card</span>
+            <span className="xs:hidden">Job Card</span>
+          </Button>
         </div>
 
         {/* Tabs */}
@@ -1504,6 +1681,19 @@ export function ServiceRepairPage() {
               (v) => v.id === selectedVehicle.id,
             );
             if (updated) setSearchedVehicle(updated);
+          }}
+        />
+      )}
+
+      {/* Quick New Job Card Modal — opened from header button */}
+      {showQuickModal && (
+        <QuickJobCardModal
+          shopId={shopId}
+          vehicleRecords={vehicleRecords}
+          onClose={() => setShowQuickModal(false)}
+          onVehicleReady={(vehicle) => {
+            setShowQuickModal(false);
+            openNewJobCard(vehicle);
           }}
         />
       )}

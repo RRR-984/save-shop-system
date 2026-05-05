@@ -269,9 +269,18 @@ const SMART_PAGES = new Set<NavPage>([
 interface SidebarProps {
   currentPage: NavPage;
   onNavigate: (page: NavPage) => void;
+  /** Receives the open-sidebar callback so App.tsx can forward it to TopBar */
+  onMenuTriggerReady?: (openFn: () => void) => void;
+  /** Action callback forwarded to ChatBotPanel */
+  onAction?: (action: string, params?: Record<string, unknown>) => void;
 }
 
-export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+export function Sidebar({
+  currentPage,
+  onNavigate,
+  onMenuTriggerReady,
+  onAction,
+}: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const { currentUser, currentShop, logout, allShops } = useAuth();
@@ -283,6 +292,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const multiShopOwner = role === "owner" && allShops.length >= 2;
 
   const autoModeFromCtx = appConfig.autoMode ?? "simple";
+
+  const openMobileSidebar = React.useCallback(() => setMobileOpen(true), []);
+  const closeMobileSidebar = React.useCallback(() => setMobileOpen(false), []);
+
+  // Notify parent once so it can wire the open function to TopBar
+  React.useEffect(() => {
+    onMenuTriggerReady?.(openMobileSidebar);
+  }, [onMenuTriggerReady, openMobileSidebar]);
 
   const roleFiltered = NAV_ITEMS.filter((item) => {
     if (item.roles && !item.roles.includes(role)) return false;
@@ -311,11 +328,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
   const handleNav = (page: NavPage) => {
     onNavigate(page);
-    setMobileOpen(false);
+    closeMobileSidebar();
   };
 
   const handleLogout = () => {
-    setMobileOpen(false);
+    closeMobileSidebar();
     logout();
   };
 
@@ -552,26 +569,22 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       </aside>
 
       {/* ChatBot panel — anchored to sidebar right on desktop, bottom-center on mobile */}
-      <ChatBotPanel open={chatOpen} onClose={handleChatClose} />
+      <ChatBotPanel
+        open={chatOpen}
+        onClose={handleChatClose}
+        onNavigate={onNavigate}
+        onAction={onAction}
+        currentPage={currentPage}
+      />
 
-      {/* Mobile hamburger */}
-      <button
-        type="button"
-        data-ocid="nav.menu.button"
-        className="md:hidden fixed top-4 left-4 z-50 w-9 h-9 bg-sidebar rounded-lg flex items-center justify-center text-sidebar-foreground shadow-lg"
-        onClick={() => setMobileOpen(true)}
-      >
-        <Menu size={18} />
-      </button>
-
-      {/* Mobile chat FAB — bottom-left when sidebar is closed */}
+      {/* Mobile chat FAB — bottom-left, only when sidebar is closed */}
       {!mobileOpen && (
         <button
           type="button"
           aria-label="Open Shop Assistant"
           data-ocid="chatbot.mobile_open_button"
           onClick={handleChatToggle}
-          className="md:hidden fixed bottom-24 left-4 z-40 w-12 h-12 rounded-full overflow-hidden border-2 shadow-lg transition-all duration-150 active:scale-95"
+          className="md:hidden fixed bottom-20 left-4 z-30 w-12 h-12 rounded-full overflow-hidden border-2 shadow-lg transition-all duration-150 active:scale-95"
           style={{
             background: "linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)",
             borderColor: chatOpen ? "#a78bfa" : "rgba(124,58,237,0.4)",
@@ -595,15 +608,13 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         </button>
       )}
 
-      {/* Mobile chat panel — handled by ChatBotPanel's responsive CSS */}
-
-      {/* Mobile overlay */}
+      {/* Mobile overlay + slide-in sidebar */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40">
           <div
             className="absolute inset-0 bg-black/50"
-            onClick={() => setMobileOpen(false)}
-            onKeyDown={(e) => e.key === "Escape" && setMobileOpen(false)}
+            onClick={closeMobileSidebar}
+            onKeyDown={(e) => e.key === "Escape" && closeMobileSidebar()}
             role="button"
             tabIndex={-1}
             aria-label="Close sidebar"
@@ -612,7 +623,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             <button
               type="button"
               className="absolute top-4 right-4 text-sidebar-foreground/60 hover:text-sidebar-foreground z-10"
-              onClick={() => setMobileOpen(false)}
+              onClick={closeMobileSidebar}
             >
               <X size={18} />
             </button>

@@ -697,13 +697,11 @@ export function SettingsPage() {
                       — Select shop category —
                     </option>
                   )}
-                  {[...shopCategoryOptions]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((cat) => (
-                      <option key={cat.id} value={cat.name}>
-                        {cat.name}
-                      </option>
-                    ))}
+                  {shopCategoryOptions.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
                   {shopCategoryOptions.length === 0 && (
                     <option value={selectedCategory}>
                       {selectedCategory || "Loading..."}
@@ -1216,26 +1214,24 @@ export function SettingsPage() {
               </div>
             ) : (
               <div className="space-y-1.5">
-                {[...shopUnits]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((unit, idx) => (
-                    <div
-                      key={unit.id}
-                      data-ocid={`settings.unit.item.${idx + 1}`}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-muted/20"
+                {shopUnits.map((unit, idx) => (
+                  <div
+                    key={unit.id}
+                    data-ocid={`settings.unit.item.${idx + 1}`}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-muted/20"
+                  >
+                    <span className="text-sm font-medium">{unit.name}</span>
+                    <button
+                      type="button"
+                      data-ocid={`settings.unit.delete_button.${idx + 1}`}
+                      onClick={() => handleDeleteUnit(unit.id, unit.name)}
+                      className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      title={`Delete ${unit.name}`}
                     >
-                      <span className="text-sm font-medium">{unit.name}</span>
-                      <button
-                        type="button"
-                        data-ocid={`settings.unit.delete_button.${idx + 1}`}
-                        onClick={() => handleDeleteUnit(unit.id, unit.name)}
-                        className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title={`Delete ${unit.name}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
@@ -1261,9 +1257,8 @@ export function SettingsPage() {
                   Global Categories (managed by admin)
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {[...globalCategories]
+                  {globalCategories
                     .filter((c) => !c.isDeleted)
-                    .sort((a, b) => a.name.localeCompare(b.name))
                     .map((cat) => (
                       <span
                         key={cat.id}
@@ -1313,76 +1308,72 @@ export function SettingsPage() {
               </div>
             ) : (
               <div className="space-y-1.5">
-                {[...categories]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((cat, idx) => (
-                    <div
-                      key={cat.id}
-                      data-ocid={`settings.category.item.${idx + 1}`}
-                      className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border bg-muted/20"
-                    >
-                      {editingCatId === cat.id ? (
-                        <div className="flex items-center gap-2 flex-1">
-                          <Input
-                            data-ocid="settings.category.edit.input"
-                            value={editingCatName}
-                            onChange={(e) => setEditingCatName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleSaveEditCat(cat.id);
-                              if (e.key === "Escape") setEditingCatId(null);
-                            }}
-                            className="h-7 text-sm flex-1"
-                            autoFocus
-                          />
+                {categories.map((cat, idx) => (
+                  <div
+                    key={cat.id}
+                    data-ocid={`settings.category.item.${idx + 1}`}
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border bg-muted/20"
+                  >
+                    {editingCatId === cat.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          data-ocid="settings.category.edit.input"
+                          value={editingCatName}
+                          onChange={(e) => setEditingCatName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveEditCat(cat.id);
+                            if (e.key === "Escape") setEditingCatId(null);
+                          }}
+                          className="h-7 text-sm flex-1"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          data-ocid={`settings.category.save_button.${idx + 1}`}
+                          onClick={() => handleSaveEditCat(cat.id)}
+                          className="p-1 rounded-md text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCatId(null)}
+                          className="p-1 rounded-md text-muted-foreground hover:bg-muted transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium flex-1">
+                          {cat.name}
+                        </span>
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            data-ocid={`settings.category.save_button.${idx + 1}`}
-                            onClick={() => handleSaveEditCat(cat.id)}
-                            className="p-1 rounded-md text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+                            data-ocid={`settings.category.edit_button.${idx + 1}`}
+                            onClick={() => handleStartEditCat(cat.id, cat.name)}
+                            className="p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                            title="Edit category"
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => setEditingCatId(null)}
-                            className="p-1 rounded-md text-muted-foreground hover:bg-muted transition-colors"
+                            data-ocid={`settings.category.delete_button.${idx + 1}`}
+                            onClick={() =>
+                              handleDeleteCategory(cat.id, cat.name)
+                            }
+                            className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            title="Delete category"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                      ) : (
-                        <>
-                          <span className="text-sm font-medium flex-1">
-                            {cat.name}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              data-ocid={`settings.category.edit_button.${idx + 1}`}
-                              onClick={() =>
-                                handleStartEditCat(cat.id, cat.name)
-                              }
-                              className="p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                              title="Edit category"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              data-ocid={`settings.category.delete_button.${idx + 1}`}
-                              onClick={() =>
-                                handleDeleteCategory(cat.id, cat.name)
-                              }
-                              className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                              title="Delete category"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>

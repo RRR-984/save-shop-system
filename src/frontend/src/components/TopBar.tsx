@@ -12,6 +12,7 @@ import {
   CheckCircle,
   Home,
   Loader2,
+  Menu,
   Moon,
   Pencil,
   Plus,
@@ -59,6 +60,8 @@ interface TopBarProps {
   onSearchChange?: (v: string) => void;
   goHome?: () => void;
   isHome?: boolean;
+  /** Mobile sidebar toggle callback — wired from Sidebar */
+  onMenuToggle?: () => void;
 }
 
 // ─── Auto Mode Switcher ────────────────────────────────────────────────────────
@@ -435,7 +438,7 @@ function ShopChips({ className = "" }: ShopChipsProps) {
     }
   };
 
-  const truncName = (name: string, max = 11) =>
+  const truncName = (name: string, max = 14) =>
     name.length > max ? `${name.slice(0, max - 1)}…` : name;
 
   return (
@@ -445,7 +448,7 @@ function ShopChips({ className = "" }: ShopChipsProps) {
         data-ocid="topbar.shop_chips_row"
       >
         <div
-          className="flex items-center gap-1.5 overflow-x-auto flex-nowrap min-w-0 flex-1"
+          className="flex items-center gap-1.5 overflow-x-auto flex-nowrap min-w-0 flex-1 pb-0.5"
           style={
             {
               scrollbarWidth: "none",
@@ -487,11 +490,15 @@ function ShopChips({ className = "" }: ShopChipsProps) {
                   onTouchEnd={() => {
                     if (pressTimer.current) clearTimeout(pressTimer.current);
                   }}
-                  title={shop.name + (shop.city ? ` · ${shop.city}` : "")}
+                  title={
+                    shop.name +
+                    (shop.category ? ` • ${shop.category}` : "") +
+                    (shop.city ? ` (${shop.city})` : "")
+                  }
                   aria-pressed={isActive}
                   className={`
                     flex items-center gap-1 h-7 px-2.5 rounded-full text-xs font-semibold
-                    transition-all duration-150 whitespace-nowrap select-none
+                    transition-all duration-150 whitespace-nowrap select-none flex-shrink-0
                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
                     ${
                       isActive
@@ -505,7 +512,14 @@ function ShopChips({ className = "" }: ShopChipsProps) {
                     <Loader2 size={10} className="animate-spin flex-shrink-0" />
                   )}
                   <ShopStatusDot status={shop.status} />
-                  {truncName(shop.name)}
+                  <span className="truncate max-w-[6rem]">
+                    {truncName(shop.name)}
+                  </span>
+                  {shop.category && (
+                    <span className="opacity-70 text-[10px] font-normal whitespace-nowrap flex-shrink-0">
+                      •&nbsp;{shop.category}
+                    </span>
+                  )}
                 </button>
 
                 {isLongPressed && (
@@ -711,20 +725,45 @@ function TopBarInner({
   onSearchChange,
   goHome,
   isHome = false,
+  onMenuToggle,
 }: TopBarProps) {
   const {
     getLowStockProducts,
     getAllCustomerLedgers,
+    products,
+    categories,
     isSyncing,
     autoMode,
     setAutoMode,
   } = useStore();
-  const { currentUser, session, currentShop, allShops } = useAuth();
+  const { currentUser, session, currentShop, allShops, selectedShop } =
+    useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const { language, toggleLanguage } = useLanguage();
   const { isOnline, syncStatus } = useNetworkStatus();
 
-  const lowStockCount = getLowStockProducts().length;
+  // Filter products by current shop category before computing low-stock count
+  const categoryFilteredProducts = React.useMemo(() => {
+    if (!selectedShop?.category) return products;
+    const shopCategoryName = selectedShop.category.toLowerCase();
+    const matchingCategory = categories.find(
+      (c) =>
+        c.name.toLowerCase() === shopCategoryName ||
+        c.id.toLowerCase() === shopCategoryName,
+    );
+    if (!matchingCategory) return products;
+    return products.filter((p) => p.categoryId === matchingCategory.id);
+  }, [products, selectedShop?.category, categories]);
+
+  // Use getLowStockProducts for threshold logic, then intersect with category-filtered set
+  const _rawLowStock = getLowStockProducts();
+  const _categoryFilteredIds = new Set(
+    categoryFilteredProducts.map((p) => p.id),
+  );
+  const filteredLowStock = selectedShop?.category
+    ? _rawLowStock.filter((p) => _categoryFilteredIds.has(p.id))
+    : _rawLowStock;
+  const lowStockCount = filteredLowStock.length;
   const dueCount = getAllCustomerLedgers().filter((l) => l.totalDue > 0).length;
   const role = currentUser?.role ?? "staff";
   const isStaff = role === "staff";
@@ -757,7 +796,7 @@ function TopBarInner({
   const roleLabel =
     role === "owner" ? "Owner" : role === "manager" ? "Manager" : "Staff";
   const shopName = currentShop?.name ?? "Save Shop";
-  const lowStockItems = getLowStockProducts();
+  const lowStockItems = filteredLowStock;
 
   const showShopChips = role === "owner" && allShops.length > 0;
   const manyShops = allShops.length > 2;
@@ -871,7 +910,7 @@ function TopBarInner({
       <header className="md:hidden bg-card border-b border-border shadow-sm">
         {/* Row 1 */}
         <div className="flex items-center gap-2 px-3 py-2 min-w-0">
-          {/* Home / back button */}
+          {/* Hamburger (mobile sidebar open) — always shown; home/back takes priority when navigating */}
           {!isHome && goHome ? (
             <Button
               variant="ghost"
@@ -883,6 +922,16 @@ function TopBarInner({
             >
               <Home size={17} />
             </Button>
+          ) : onMenuToggle ? (
+            <button
+              type="button"
+              data-ocid="topbar.mobile_menu_button"
+              aria-label="Open menu"
+              onClick={onMenuToggle}
+              className="flex items-center justify-center text-muted-foreground hover:text-foreground h-8 w-8 -ml-1 flex-shrink-0 rounded-lg hover:bg-muted transition-colors"
+            >
+              <Menu size={18} />
+            </button>
           ) : (
             <div className="w-8 flex-shrink-0" />
           )}

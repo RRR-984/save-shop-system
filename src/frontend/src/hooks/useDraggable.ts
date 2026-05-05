@@ -50,9 +50,14 @@ export function useDraggable({
     (x: number, y: number): DragPos => {
       const vw = typeof window !== "undefined" ? window.innerWidth : 800;
       const vh = typeof window !== "undefined" ? window.innerHeight : 600;
+      // On mobile screens, leave 70px safe zone at bottom for browser chrome
+      // and keep at least 60px from top for sticky header
+      const isMobile = vw <= 768;
+      const topMin = isMobile ? 60 : 0;
+      const bottomSafe = isMobile ? 70 : 0;
       return {
         x: clamp(x, 0, Math.max(0, vw - elementSize.w)),
-        y: clamp(y, 0, Math.max(0, vh - elementSize.h)),
+        y: clamp(y, topMin, Math.max(topMin, vh - elementSize.h - bottomSafe)),
       };
     },
     [elementSize.w, elementSize.h],

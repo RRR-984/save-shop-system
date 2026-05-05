@@ -300,7 +300,7 @@ export function InventoryPage({
   void isPhase2Loading;
   void appConfig; // ensures re-render when featureMode changes
   void autoMode; // ensures re-render when mode switcher changes
-  const { currentUser } = useAuth();
+  const { currentUser, selectedShop } = useAuth();
   const userRole = currentUser?.role ?? "staff";
   const canViewCost = ROLE_PERMISSIONS.canViewCostPrice(userRole);
 
@@ -326,27 +326,56 @@ export function InventoryPage({
     return () => clearTimeout(timer);
   }, [initialSelectedProductId]);
 
-  const filtered = useMemo(
-    () =>
-      products.filter((p) => {
-        const q = search.toLowerCase();
-        const matchSearch =
-          p.name.toLowerCase().includes(q) ||
-          p.partNo?.toLowerCase().includes(q) ||
-          p.srNo?.toLowerCase().includes(q) ||
-          p.tnNo?.toLowerCase().includes(q);
-        const matchCat =
-          categoryFilter === "all" || p.categoryId === categoryFilter;
-        return matchSearch && matchCat;
-      }),
-    [products, search, categoryFilter],
-  );
+  const filtered = useMemo(() => {
+    const shopCategory = selectedShop?.category ?? "";
+    return products.filter((p) => {
+      // ── Outermost filter: shop category ───────────────────────────────
+      if (shopCategory.trim()) {
+        if (p.categoryId) {
+          const catName =
+            categories.find((c) => c.id === p.categoryId)?.name ?? "";
+          const matches =
+            catName.toLowerCase().includes(shopCategory.toLowerCase()) ||
+            shopCategory.toLowerCase().includes(catName.toLowerCase());
+          if (!matches) return false;
+        }
+        // uncategorized products always shown
+      }
+      // ── Search filter ─────────────────────────────────────────────────
+      const q = search.toLowerCase();
+      const matchSearch =
+        p.name.toLowerCase().includes(q) ||
+        p.partNo?.toLowerCase().includes(q) ||
+        p.srNo?.toLowerCase().includes(q) ||
+        p.tnNo?.toLowerCase().includes(q);
+      // ── Local category dropdown filter ────────────────────────────────
+      const matchCat =
+        categoryFilter === "all" || p.categoryId === categoryFilter;
+      return matchSearch && matchCat;
+    });
+  }, [products, categories, search, categoryFilter, selectedShop?.category]);
 
   const totalStockItems = products.length;
+
+  // Category-filtered products for accurate low-stock count
+  const categoryFilteredForCount = useMemo(() => {
+    if (!selectedShop?.category) return products;
+    const shopCategoryName = selectedShop.category.toLowerCase();
+    const matchingCategory = categories.find(
+      (c) =>
+        c.name.toLowerCase() === shopCategoryName ||
+        c.id.toLowerCase() === shopCategoryName,
+    );
+    if (!matchingCategory) return products;
+    return products.filter((p) => p.categoryId === matchingCategory.id);
+  }, [products, selectedShop?.category, categories]);
+
   const lowStockCount = useMemo(
     () =>
-      products.filter((p) => getProductStock(p.id) < p.minStockAlert).length,
-    [products, getProductStock],
+      categoryFilteredForCount.filter(
+        (p) => getProductStock(p.id) < p.minStockAlert,
+      ).length,
+    [categoryFilteredForCount, getProductStock],
   );
 
   return (
@@ -467,13 +496,11 @@ export function InventoryPage({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                {[...categories]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
