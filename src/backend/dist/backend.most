@@ -15,6 +15,14 @@ type BackupEntry__821971064 =
 type BillId__465598121 = Text;
 type Data__791452850<K, V> =
   {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type DiamondPricingConfig__772871542 =
+  {
+    proModeDiamonds : Nat;
+    proModePrice : Nat;
+    smartModeDiamonds : Nat;
+    smartModePrice : Nat;
+    updatedAt : Int
+  };
 type DiscountType__614762053 = {#Flat; #Percent};
 type GlobalCategory__202431902 =
   {id : Text; isDefault : Bool; isDeleted : Bool; name : Text};
@@ -188,6 +196,7 @@ actor {
       var root : Node__46230540<Text, List__415060402<BackupEntry__821971064>>;
       var size : Nat__490723111
     };
+  stable diamondPricingBox : {var value : ?DiamondPricingConfig__772871542};
   stable globalCategoriesStore :
     {
       var root : Node__46230540<Text, GlobalCategory__202431902>;

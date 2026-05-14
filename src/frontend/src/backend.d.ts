@@ -197,6 +197,13 @@ export interface ReportResult {
     }>;
     totalRevenue: number;
 }
+export interface DiamondPricingConfig {
+    proModeDiamonds: bigint;
+    smartModeDiamonds: bigint;
+    updatedAt: bigint;
+    proModePrice: bigint;
+    smartModePrice: bigint;
+}
 export type KotId = string;
 export interface MenuItem {
     id: MenuItemId;
@@ -386,6 +393,7 @@ export interface backendInterface {
     getCategories(shopId: string): Promise<string>;
     getCustomerOrders(shopId: string): Promise<string>;
     getCustomers(shopId: string): Promise<string>;
+    getDiamondPricing(): Promise<DiamondPricingConfig>;
     getDrafts(shopId: string): Promise<string>;
     getFeedback(shopId: string): Promise<string>;
     getGlobalCategories(): Promise<Array<GlobalCategory>>;
@@ -439,6 +447,7 @@ export interface backendInterface {
     saveCategories(shopId: string, data: string): Promise<void>;
     saveCustomerOrders(shopId: string, data: string): Promise<void>;
     saveCustomers(shopId: string, data: string): Promise<void>;
+    saveDiamondPricing(smartModePrice: bigint, proModePrice: bigint, smartModeDiamonds: bigint, proModeDiamonds: bigint): Promise<boolean>;
     saveDrafts(shopId: string, data: string): Promise<void>;
     saveFeedback(shopId: string, data: string): Promise<void>;
     saveInvoices(shopId: string, data: string): Promise<void>;

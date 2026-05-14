@@ -446,6 +446,15 @@ export interface LowPriceAlertLog {
 }
 
 // ─── Diamond Reward System ───────────────────────────────────────────────────
+// ─── Diamond Pricing Config (Super Admin controlled) ────────────────────────
+
+export interface DiamondPricingConfig {
+  smartModePrice: number;
+  proModePrice: number;
+  smartModeDiamonds: number;
+  proModeDiamonds: number;
+  updatedAt: bigint;
+}
 
 export type DiamondTier = "bronze" | "silver" | "gold" | "diamond";
 

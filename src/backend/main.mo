@@ -39,6 +39,8 @@ actor {
 
   // Permanent audit trail of every super-admin mobile change (never deleted)
   let superAdminChangeLog = List.empty<AdminDashboardTypes.SuperAdminChangeLog>();
+  // Diamond pricing config managed by the Super Admin (nullable, falls back to defaults)
+  let diamondPricingBox = { var value : ?AdminDashboardTypes.DiamondPricingConfig = null };
 
   // ── Concurrency State ───────────────────────────────────────────────────────
   // Lock table: lockKey (shopId:recordType:recordId) -> LockRecord
@@ -64,7 +66,7 @@ actor {
   let restaurantCounter : RestaurantLib.Counter = { var value = 0 };
 
   include MultiShopMixin(shopRegistry, shopData);
-  include AdminDashboardMixin(activityStore, adminSettingsBox, paidUsersStore, shopRegistry, shopData, mergeAuditLog, superAdminChangeLog);
+  include AdminDashboardMixin(activityStore, adminSettingsBox, paidUsersStore, shopRegistry, shopData, mergeAuditLog, superAdminChangeLog, diamondPricingBox);
   include ConcurrencyMixin(lockTable, idempotencyTable);
   include CategoryMixin(globalCategoriesStore);
   include RestaurantMixin(restaurantMenuStore, restaurantTableStore, restaurantOrderStore, restaurantKotStore, restaurantBillStore, restaurantConfigStore, restaurantCounter);

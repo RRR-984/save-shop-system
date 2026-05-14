@@ -16,15 +16,19 @@ import {
   ChevronRight,
   ClipboardCopy,
   Clock,
+  Diamond,
   FolderOpen,
+  Gem,
   GitMerge,
   Lock,
   Pencil,
   Plus,
   RefreshCw,
+  Save,
   Search,
   ShieldCheck,
   ShoppingBag,
+  Sparkles,
   Store,
   Tag,
   Trash2,
@@ -72,7 +76,8 @@ type AdminTab =
   | "staff-lookup"
   | "duplicates"
   | "change-log"
-  | "categories";
+  | "categories"
+  | "diamond-settings";
 
 interface TableRow extends UserStatsResult {
   _updatingPaid?: boolean;
@@ -2750,6 +2755,11 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
                 label: "Change Log",
                 icon: Clock,
               },
+              {
+                id: "diamond-settings" as AdminTab,
+                label: "💎 Diamond",
+                icon: Gem,
+              },
             ] as { id: AdminTab; label: string; icon: React.ElementType }[]
           ).map(({ id, label, icon: Icon }) => (
             <button
@@ -3441,6 +3451,9 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
 
         {/* ── Change Log Tab ───────────────────────────────────────────────── */}
         {activeTab === "change-log" && <ChangeLogTab />}
+
+        {/* ── Diamond Settings Tab ─────────────────────────────────────────── */}
+        {activeTab === "diamond-settings" && <DiamondSettingsTab />}
       </main>
 
       {/* ── Full System Reset Modal ──────────────────────────────────────────── */}
@@ -3451,6 +3464,477 @@ export function SuperAdminPage({ onBack }: { onBack?: () => void }) {
         />
       )}
     </div>
+  );
+}
+
+// ─── Diamond Settings Tab ────────────────────────────────────────────────────
+
+function DiamondSettingsTab() {
+  const [smartPrice, setSmartPrice] = useState("");
+  const [proPrice, setProPrice] = useState("");
+  const [smartDiamonds, setSmartDiamonds] = useState("100");
+  const [proDiamonds, setProDiamonds] = useState("200");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  const fetchPricing = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const actor = await createActorWithConfig();
+      const extActor = actor as unknown as Record<
+        string,
+        () => Promise<{
+          smartModePrice: bigint;
+          proModePrice: bigint;
+          smartModeDiamonds: bigint;
+          proModeDiamonds: bigint;
+          updatedAt: bigint;
+        }>
+      >;
+      const result = await retryWithDelay(
+        () => extActor.getDiamondPricing(),
+        3,
+        1500,
+      );
+      setSmartPrice(String(Number(result.smartModePrice)));
+      setProPrice(String(Number(result.proModePrice)));
+      setSmartDiamonds(String(Number(result.smartModeDiamonds)));
+      setProDiamonds(String(Number(result.proModeDiamonds)));
+      if (result.updatedAt > 0n) {
+        setSavedAt(
+          new Date(Number(result.updatedAt / 1_000_000n)).toLocaleString(),
+        );
+      }
+    } catch (err) {
+      // If backend method not yet available, use defaults silently
+      const msg = parseCanisterError(err);
+      if (msg.includes("temporarily unavailable")) {
+        setError(msg);
+      }
+      // else: method missing — keep defaults, no error
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPricing();
+  }, [fetchPricing]);
+
+  const handleSave = async () => {
+    const sp = Number(smartPrice);
+    const pp = Number(proPrice);
+    const sd = Number(smartDiamonds);
+    const pd = Number(proDiamonds);
+    if (!smartPrice || Number.isNaN(sp) || sp < 0) {
+      toast.error("Enter a valid Smart Mode price (₹0 or more).");
+      return;
+    }
+    if (!proPrice || Number.isNaN(pp) || pp < 0) {
+      toast.error("Enter a valid Pro Mode price (₹0 or more).");
+      return;
+    }
+    if (!smartDiamonds || Number.isNaN(sd) || sd < 1) {
+      toast.error("Smart Mode diamonds required must be at least 1.");
+      return;
+    }
+    if (!proDiamonds || Number.isNaN(pd) || pd < 1) {
+      toast.error("Pro Mode diamonds required must be at least 1.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const actor = await createActorWithConfig();
+      const extActor = actor as unknown as Record<
+        string,
+        (a: bigint, b: bigint, c: bigint, d: bigint) => Promise<boolean>
+      >;
+      await extActor.saveDiamondPricing(
+        BigInt(sp),
+        BigInt(pp),
+        BigInt(sd),
+        BigInt(pd),
+      );
+      const now = new Date().toLocaleString();
+      setSavedAt(now);
+      toast.success("Diamond pricing saved successfully!");
+    } catch (err) {
+      toast.error(parseCanisterError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const smartNum = Number(smartDiamonds) || 100;
+  const proNum = Number(proDiamonds) || 200;
+  const smartPriceNum = Number(smartPrice);
+  const proPriceNum = Number(proPrice);
+
+  return (
+    <section
+      className="space-y-5"
+      data-ocid="super_admin.diamond_settings_section"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-purple-500/15 flex items-center justify-center">
+              <Diamond
+                size={13}
+                className="text-purple-600 dark:text-purple-400"
+              />
+            </div>
+            Diamond Pricing Settings
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Configure how many diamonds unlock each mode and how much diamonds
+            cost. Only Super Admin can change these.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchPricing}
+          disabled={loading}
+          data-ocid="super_admin.diamond_settings.refresh_button"
+          className="gap-1.5 min-h-[44px] flex-shrink-0"
+        >
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Info banner */}
+      <div className="flex items-start gap-3 rounded-xl border border-purple-500/30 bg-purple-500/5 px-4 py-3">
+        <Sparkles
+          size={14}
+          className="text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5"
+        />
+        <div className="text-xs text-purple-700 dark:text-purple-300 space-y-1">
+          <p>
+            <strong>One-time unlock:</strong> Users earn diamonds through
+            transactions (1 💎 per 10 sales) or by watching ads. Once they have
+            enough diamonds, the mode unlocks permanently — no auto-debit, no
+            expiry.
+          </p>
+          <p>
+            You can also let users <strong>buy diamonds</strong> directly
+            (payment goes to Super Admin via Razorpay/Stripe).
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div
+          className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-xs"
+          data-ocid="super_admin.diamond_settings.error_state"
+        >
+          <AlertTriangle
+            size={13}
+            className="text-amber-600 dark:text-amber-400 flex-shrink-0"
+          />
+          <span className="text-amber-700 dark:text-amber-300">
+            {error} — Showing default values.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchPricing}
+            className="ml-auto text-xs h-7"
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {loading ? (
+        <div
+          className="space-y-3"
+          data-ocid="super_admin.diamond_settings.loading_state"
+        >
+          {[0, 1].map((i) => (
+            <Skeleton key={i} className="h-32 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Smart Mode Card */}
+          <Card
+            className="bg-card border-border"
+            data-ocid="super_admin.diamond_settings.smart_card"
+          >
+            <CardHeader className="pb-3 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+                  <Gem
+                    size={13}
+                    className="text-indigo-600 dark:text-indigo-400"
+                  />
+                </div>
+                Smart Mode
+                <Badge
+                  variant="outline"
+                  className="ml-auto text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+                >
+                  Mid Tier
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="smart-diamonds"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Diamonds Required to Unlock
+                </label>
+                <div className="relative">
+                  <Diamond
+                    size={12}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500"
+                  />
+                  <Input
+                    id="smart-diamonds"
+                    type="number"
+                    min="1"
+                    value={smartDiamonds}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setSmartDiamonds(e.target.value)
+                    }
+                    data-ocid="super_admin.diamond_settings.smart_diamonds_input"
+                    className="pl-8 font-mono"
+                    placeholder="100"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="smart-price"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Buy Price (₹ to purchase diamonds)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
+                    ₹
+                  </span>
+                  <Input
+                    id="smart-price"
+                    type="number"
+                    min="0"
+                    value={smartPrice}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setSmartPrice(e.target.value)
+                    }
+                    data-ocid="super_admin.diamond_settings.smart_price_input"
+                    className="pl-7 font-mono"
+                    placeholder="99"
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg bg-indigo-500/8 border border-indigo-500/20 px-3 py-2 text-xs text-indigo-700 dark:text-indigo-300">
+                💡 Smart Mode: users need <strong>{smartNum} 💎</strong> to
+                unlock
+                {smartPriceNum > 0 ? (
+                  <>
+                    {" "}
+                    (costs <strong>₹{smartPriceNum.toLocaleString()}</strong> to
+                    buy)
+                  </>
+                ) : (
+                  <> (earn for free via transactions)</>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pro Mode Card */}
+          <Card
+            className="bg-card border-border"
+            data-ocid="super_admin.diamond_settings.pro_card"
+          >
+            <CardHeader className="pb-3 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center">
+                  <Diamond
+                    size={13}
+                    className="text-purple-600 dark:text-purple-400"
+                  />
+                </div>
+                Pro Mode
+                <Badge
+                  variant="outline"
+                  className="ml-auto text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                >
+                  Top Tier
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="pro-diamonds"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Diamonds Required to Unlock
+                </label>
+                <div className="relative">
+                  <Diamond
+                    size={12}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-500"
+                  />
+                  <Input
+                    id="pro-diamonds"
+                    type="number"
+                    min="1"
+                    value={proDiamonds}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setProDiamonds(e.target.value)
+                    }
+                    data-ocid="super_admin.diamond_settings.pro_diamonds_input"
+                    className="pl-8 font-mono"
+                    placeholder="200"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="pro-price"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Buy Price (₹ to purchase diamonds)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">
+                    ₹
+                  </span>
+                  <Input
+                    id="pro-price"
+                    type="number"
+                    min="0"
+                    value={proPrice}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setProPrice(e.target.value)
+                    }
+                    data-ocid="super_admin.diamond_settings.pro_price_input"
+                    className="pl-7 font-mono"
+                    placeholder="199"
+                  />
+                </div>
+              </div>
+              <div className="rounded-lg bg-purple-500/8 border border-purple-500/20 px-3 py-2 text-xs text-purple-700 dark:text-purple-300">
+                💡 Pro Mode: users need <strong>{proNum} 💎</strong> to unlock
+                {proPriceNum > 0 ? (
+                  <>
+                    {" "}
+                    (costs <strong>₹{proPriceNum.toLocaleString()}</strong> to
+                    buy)
+                  </>
+                ) : (
+                  <> (earn for free via transactions)</>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Save Button + last saved */}
+      {!loading && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-card border border-border rounded-xl px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-foreground">
+              Save Diamond Settings
+            </p>
+            {savedAt ? (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Last saved: {savedAt}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Changes take effect immediately for all users.
+              </p>
+            )}
+          </div>
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            data-ocid="super_admin.diamond_settings.save_button"
+            className="gap-2 min-h-[44px] bg-purple-600 hover:bg-purple-700 text-white border-0 flex-shrink-0"
+          >
+            {saving ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={14} />
+                Save Diamond Settings
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Current values summary */}
+      {!loading && (
+        <Card
+          className="bg-muted/30 border-border"
+          data-ocid="super_admin.diamond_settings.summary_card"
+        >
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Current Active Configuration
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="text-center rounded-lg bg-indigo-500/8 border border-indigo-500/20 px-3 py-2.5">
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                  Smart Diamonds
+                </p>
+                <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">
+                  {smartNum} 💎
+                </p>
+              </div>
+              <div className="text-center rounded-lg bg-indigo-500/8 border border-indigo-500/20 px-3 py-2.5">
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                  Smart Buy Price
+                </p>
+                <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">
+                  {smartPriceNum > 0
+                    ? `₹${smartPriceNum.toLocaleString()}`
+                    : "Free"}
+                </p>
+              </div>
+              <div className="text-center rounded-lg bg-purple-500/8 border border-purple-500/20 px-3 py-2.5">
+                <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+                  Pro Diamonds
+                </p>
+                <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">
+                  {proNum} 💎
+                </p>
+              </div>
+              <div className="text-center rounded-lg bg-purple-500/8 border border-purple-500/20 px-3 py-2.5">
+                <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">
+                  Pro Buy Price
+                </p>
+                <p className="text-lg font-bold text-foreground tabular-nums mt-0.5">
+                  {proPriceNum > 0
+                    ? `₹${proPriceNum.toLocaleString()}`
+                    : "Free"}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </section>
   );
 }
 

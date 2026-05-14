@@ -277,6 +277,14 @@ type DiscountType =
    Flat;
    Percent;
  };
+type DiamondPricingConfig = 
+ record {
+   proModeDiamonds: nat;
+   proModePrice: nat;
+   smartModeDiamonds: nat;
+   smartModePrice: nat;
+   updatedAt: int;
+ };
 type DeleteShopResult = record {success: bool;};
 type CategoryResult = 
  variant {
@@ -397,6 +405,7 @@ service : {
   getCategories: (shopId: text) -> (text) query;
   getCustomerOrders: (shopId: text) -> (text) query;
   getCustomers: (shopId: text) -> (text) query;
+  getDiamondPricing: () -> (DiamondPricingConfig) query;
   getDrafts: (shopId: text) -> (text) query;
   getFeedback: (shopId: text) -> (text) query;
   getGlobalCategories: () -> (vec GlobalCategory) query;
@@ -459,6 +468,8 @@ service : {
   saveCategories: (shopId: text, data: text) -> ();
   saveCustomerOrders: (shopId: text, data: text) -> ();
   saveCustomers: (shopId: text, data: text) -> ();
+  saveDiamondPricing: (smartModePrice: nat, proModePrice: nat,
+   smartModeDiamonds: nat, proModeDiamonds: nat) -> (bool);
   saveDrafts: (shopId: text, data: text) -> ();
   saveFeedback: (shopId: text, data: text) -> ();
   saveInvoices: (shopId: text, data: text) -> ();

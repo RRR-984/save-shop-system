@@ -154,6 +154,13 @@ export const BackupSnapshotMeta = IDL.Record({
   'timestamp' : IDL.Int,
 });
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
+export const DiamondPricingConfig = IDL.Record({
+  'proModeDiamonds' : IDL.Nat,
+  'smartModeDiamonds' : IDL.Nat,
+  'updatedAt' : IDL.Int,
+  'proModePrice' : IDL.Nat,
+  'smartModePrice' : IDL.Nat,
+});
 export const LockRecord = IDL.Record({
   'userName' : IDL.Text,
   'expiresAt' : IDL.Int,
@@ -421,6 +428,7 @@ export const idlService = IDL.Service({
   'getCategories' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getCustomerOrders' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getCustomers' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+  'getDiamondPricing' : IDL.Func([], [DiamondPricingConfig], ['query']),
   'getDrafts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getFeedback' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
   'getGlobalCategories' : IDL.Func([], [IDL.Vec(GlobalCategory)], ['query']),
@@ -518,6 +526,11 @@ export const idlService = IDL.Service({
   'saveCategories' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveCustomerOrders' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveCustomers' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'saveDiamondPricing' : IDL.Func(
+      [IDL.Nat, IDL.Nat, IDL.Nat, IDL.Nat],
+      [IDL.Bool],
+      [],
+    ),
   'saveDrafts' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveFeedback' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveInvoices' : IDL.Func([IDL.Text, IDL.Text], [], []),
@@ -743,6 +756,13 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : IDL.Int,
   });
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
+  const DiamondPricingConfig = IDL.Record({
+    'proModeDiamonds' : IDL.Nat,
+    'smartModeDiamonds' : IDL.Nat,
+    'updatedAt' : IDL.Int,
+    'proModePrice' : IDL.Nat,
+    'smartModePrice' : IDL.Nat,
+  });
   const LockRecord = IDL.Record({
     'userName' : IDL.Text,
     'expiresAt' : IDL.Int,
@@ -1010,6 +1030,7 @@ export const idlFactory = ({ IDL }) => {
     'getCategories' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getCustomerOrders' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getCustomers' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getDiamondPricing' : IDL.Func([], [DiamondPricingConfig], ['query']),
     'getDrafts' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getFeedback' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getGlobalCategories' : IDL.Func([], [IDL.Vec(GlobalCategory)], ['query']),
@@ -1111,6 +1132,11 @@ export const idlFactory = ({ IDL }) => {
     'saveCategories' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveCustomerOrders' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveCustomers' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'saveDiamondPricing' : IDL.Func(
+        [IDL.Nat, IDL.Nat, IDL.Nat, IDL.Nat],
+        [IDL.Bool],
+        [],
+      ),
     'saveDrafts' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveFeedback' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveInvoices' : IDL.Func([IDL.Text, IDL.Text], [], []),

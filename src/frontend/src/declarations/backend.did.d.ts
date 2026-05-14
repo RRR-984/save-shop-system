@@ -42,6 +42,13 @@ export type BillId = string;
 export type CategoryResult = { 'ok' : GlobalCategory } |
   { 'err' : string };
 export interface DeleteShopResult { 'success' : boolean }
+export interface DiamondPricingConfig {
+  'proModeDiamonds' : bigint,
+  'smartModeDiamonds' : bigint,
+  'updatedAt' : bigint,
+  'proModePrice' : bigint,
+  'smartModePrice' : bigint,
+}
 export type DiscountType = { 'Flat' : null } |
   { 'Percent' : null };
 export interface GlobalCategory {
@@ -371,6 +378,7 @@ export interface _SERVICE {
   'getCategories' : ActorMethod<[string], string>,
   'getCustomerOrders' : ActorMethod<[string], string>,
   'getCustomers' : ActorMethod<[string], string>,
+  'getDiamondPricing' : ActorMethod<[], DiamondPricingConfig>,
   'getDrafts' : ActorMethod<[string], string>,
   'getFeedback' : ActorMethod<[string], string>,
   'getGlobalCategories' : ActorMethod<[], Array<GlobalCategory>>,
@@ -433,6 +441,7 @@ export interface _SERVICE {
   'saveCategories' : ActorMethod<[string, string], undefined>,
   'saveCustomerOrders' : ActorMethod<[string, string], undefined>,
   'saveCustomers' : ActorMethod<[string, string], undefined>,
+  'saveDiamondPricing' : ActorMethod<[bigint, bigint, bigint, bigint], boolean>,
   'saveDrafts' : ActorMethod<[string, string], undefined>,
   'saveFeedback' : ActorMethod<[string, string], undefined>,
   'saveInvoices' : ActorMethod<[string, string], undefined>,

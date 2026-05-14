@@ -352,4 +352,12 @@ export const mockBackend: backendInterface = {
     topItems: [],
     totalRevenue: 0,
   }),
+  getDiamondPricing: async () => ({
+    smartModePrice: BigInt(99),
+    proModePrice: BigInt(199),
+    smartModeDiamonds: BigInt(100),
+    proModeDiamonds: BigInt(200),
+    updatedAt: BigInt(0),
+  }),
+  saveDiamondPricing: async () => true,
 };

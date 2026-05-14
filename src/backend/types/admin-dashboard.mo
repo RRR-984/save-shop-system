@@ -54,4 +54,13 @@ module {
     lastActivity     : Int;
   };
 
+  /// Diamond pricing configuration managed by the Super Admin.
+  /// Stores the price (in rupees) and diamond cost for Smart and Pro modes.
+  public type DiamondPricingConfig = {
+    smartModePrice    : Nat;
+    proModePrice      : Nat;
+    smartModeDiamonds : Nat;
+    proModeDiamonds   : Nat;
+    updatedAt         : Int;
+  };
 };
